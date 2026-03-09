@@ -2105,6 +2105,109 @@ export function useEditorState() {
     setTimeout(() => setLastSaved(""), 3000);
   }, []);
 
+  const loadGameEnglishTexts = useCallback(async (gameId: string) => {
+    const fileMap: Record<string, string> = {
+      "xenoblade": "/bdat-english-source.txt",
+      "animal-crossing": "/ac-english-texts.json",
+      "fire-emblem": "/fe-english-texts.json",
+    };
+    const url = fileMap[gameId];
+    if (!url) {
+      toast({ title: "❌ لعبة غير معروفة", variant: "destructive" });
+      return;
+    }
+
+    setLastSaved("⏳ جارٍ تحميل النصوص الإنجليزية...");
+
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+      if (url.endsWith(".json")) {
+        const data = await res.json() as {
+          game: string;
+          title: string;
+          entries: { file: string; label: string; text: string }[];
+        };
+        const entries: ExtractedEntry[] = data.entries.map((e, i) => ({
+          msbtFile: e.file,
+          index: i,
+          label: e.label,
+          original: e.text,
+          maxBytes: 0,
+        }));
+        setState({ entries, translations: {}, protectedEntries: new Set(), technicalBypass: new Set() });
+        await idbSet("editorGame", gameId);
+        await idbSet("editorState", { entries, translations: {}, freshExtraction: true });
+        setLastSaved(`✅ تم تحميل ${entries.length} نص إنجليزي من ${data.title}`);
+      } else {
+        // Parse bdat-english-source.txt format
+        const text = await res.text();
+        const entries: ExtractedEntry[] = [];
+        const regex = /^\[(\d+)\]\s+\(([^)]+)\)\s*\nLabel:\s*(.+)\n\n([\s\S]*?)(?=\n▶|$)/gm;
+        let match: RegExpExecArray | null;
+        while ((match = regex.exec(text)) !== null) {
+          const key = match[2].trim();
+          const label = match[3].trim();
+          const original = match[4].trim();
+          if (original) {
+            entries.push({ msbtFile: key.split(':').slice(0, 2).join(':'), index: entries.length, label, original, maxBytes: 0 });
+          }
+        }
+        if (entries.length === 0) {
+          // Fallback: simpler line-by-line parse
+          const lines = text.split('\n');
+          let currentKey = '';
+          let currentLabel = '';
+          let textLines: string[] = [];
+          let inText = false;
+          for (const line of lines) {
+            const keyMatch = line.match(/^\[(\d+)\]\s+\(([^)]+)\)/);
+            if (keyMatch) {
+              if (currentKey && textLines.length > 0) {
+                const original = textLines.join('\n').trim();
+                if (original) {
+                  entries.push({ msbtFile: currentKey.split(':').slice(0, 2).join(':'), index: entries.length, label: currentLabel, original, maxBytes: 0 });
+                }
+              }
+              currentKey = keyMatch[2].trim();
+              textLines = [];
+              inText = false;
+              continue;
+            }
+            const labelMatch = line.match(/^Label:\s*(.+)/);
+            if (labelMatch) {
+              currentLabel = labelMatch[1].trim();
+              inText = true;
+              continue;
+            }
+            if (line.startsWith('▶')) {
+              inText = false;
+              continue;
+            }
+            if (line.startsWith('════') || line.startsWith('────')) continue;
+            if (inText) textLines.push(line);
+          }
+          if (currentKey && textLines.length > 0) {
+            const original = textLines.join('\n').trim();
+            if (original) {
+              entries.push({ msbtFile: currentKey.split(':').slice(0, 2).join(':'), index: entries.length, label: currentLabel, original, maxBytes: 0 });
+            }
+          }
+        }
+        setState({ entries, translations: {}, protectedEntries: new Set(), technicalBypass: new Set() });
+        await idbSet("editorGame", gameId);
+        await idbSet("editorState", { entries, translations: {}, freshExtraction: true });
+        setLastSaved(`✅ تم تحميل ${entries.length} نص إنجليزي من Xenoblade Chronicles 3`);
+      }
+      setTimeout(() => setLastSaved(""), 5000);
+    } catch (err) {
+      console.error("Failed to load game texts:", err);
+      toast({ title: "❌ فشل تحميل النصوص", description: String(err), variant: "destructive" });
+      setLastSaved("");
+    }
+  }, []);
+
   const handleBulkReplace = useCallback((replacements: Record<string, string>) => {
     if (!state) return;
     const prev: Record<string, string> = {};
@@ -3174,7 +3277,7 @@ export function useEditorState() {
     handleGlossaryCompliance, handleApplyGlossaryFix, handleApplyAllGlossaryFixes,
     handleAcceptFuzzy, handleRejectFuzzy, handleAcceptAllFuzzy, handleRejectAllFuzzy,
     handleCloudSave, handleCloudLoad,
-    handleApplyArabicProcessing, handleUndoArabicProcessing, handlePreBuild, handleBuild, handleBulkReplace, loadDemoBdatData, handleCheckIntegrity, handleRestoreOriginals, handleRemoveAllDiacritics,
+    handleApplyArabicProcessing, handleUndoArabicProcessing, handlePreBuild, handleBuild, handleBulkReplace, loadDemoBdatData, loadGameEnglishTexts, handleCheckIntegrity, handleRestoreOriginals, handleRemoveAllDiacritics,
     handleScanMergedSentences, handleApplySentenceSplit, handleRejectSentenceSplit, handleApplyAllSentenceSplits,
     handleScanNewlines, handleApplyNewlineClean, handleRejectNewlineClean, handleApplyAllNewlineCleans,
     handleScanDiacritics, handleApplyDiacriticsClean, handleRejectDiacriticsClean, handleApplyAllDiacriticsCleans,

@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { FileText, Download, Shield, Sparkles } from "lucide-react";
 import GameInfoSection from "@/components/GameInfoSection";
@@ -94,6 +94,14 @@ const filePaths = [
 ];
 
 export default function FireEmblem() {
+  const navigate = useNavigate();
+
+  const handleLoadEnglishTexts = async () => {
+    const { idbSet } = await import("@/lib/idb-storage");
+    await idbSet("editorGame", "fire-emblem");
+    navigate("/editor?autoload=fire-emblem");
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <header className="relative flex flex-col items-center justify-center min-h-[80vh] px-4 text-center overflow-hidden">
@@ -124,6 +132,10 @@ export default function FireEmblem() {
                 ابدأ التعريب ⚔️
               </Button>
             </Link>
+            <Button size="lg" variant="outline" className="font-display font-bold text-lg px-10 py-6" onClick={handleLoadEnglishTexts}>
+              <Download className="w-5 h-5 ml-2" />
+              تحميل النصوص الإنجليزية 📥
+            </Button>
             <Link to="/bundle-extractor">
               <Button size="lg" variant="outline" className="font-display font-bold text-lg px-10 py-6">
                 فاك ملفات Bundle 📦

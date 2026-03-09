@@ -147,13 +147,23 @@ const Editor = () => {
   const [showToolHelp, setShowToolHelp] = React.useState<ToolType>(null);
   const [detectedGame, setDetectedGame] = React.useState<GameId>("xenoblade");
 
-  // Detect game from IDB
+  // Detect game from IDB + handle autoload URL param
   React.useEffect(() => {
     (async () => {
       const { idbGet } = await import("@/lib/idb-storage");
       const game = await idbGet<string>("editorGame");
       if (game && game in GAME_CONFIGS) {
         setDetectedGame(game as GameId);
+      }
+      // Check for autoload param
+      const params = new URLSearchParams(window.location.search);
+      const autoload = params.get("autoload");
+      if (autoload && autoload in GAME_CONFIGS) {
+        setDetectedGame(autoload as GameId);
+        // Remove param from URL
+        window.history.replaceState({}, '', '/editor');
+        // Trigger load
+        setTimeout(() => editor.loadGameEnglishTexts(autoload), 300);
       }
     })();
   }, []);
@@ -301,6 +311,9 @@ const Editor = () => {
             <br />
             <div className="flex flex-wrap items-center gap-3 mt-4 justify-center">
               <Link to={processPath}><Button className="font-display">اذهب لصفحة المعالجة ({gameConfig.fileFormat})</Button></Link>
+              <Button variant="secondary" className="font-display" onClick={() => editor.loadGameEnglishTexts(gameType)}>
+                <Download className="w-4 h-4" /> تحميل النصوص الإنجليزية تلقائياً 📥
+              </Button>
               {gameType === "xenoblade" && (
                 <Button variant="outline" className="font-display" onClick={editor.loadDemoBdatData}>
                   تحميل بيانات BDAT تجريبية
