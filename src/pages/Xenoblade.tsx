@@ -29,6 +29,7 @@ const Xenoblade = forwardRef<HTMLDivElement>((_, ref) => {
           <div className="absolute inset-0 bg-gradient-to-b from-background/70 via-background/50 to-background" />
         </div>
 
+        <div className="relative z-10 max-w-2xl mx-auto">
           <Link to="/" className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground mb-4 font-body text-sm">
             ← العودة لقائمة الألعاب
           </Link>
