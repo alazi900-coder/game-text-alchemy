@@ -48,7 +48,7 @@ import DiffView from "@/components/editor/DiffView";
 import BuildStatsDialog from "@/components/editor/BuildStatsDialog";
 import BuildConfirmDialog from "@/components/editor/BuildConfirmDialog";
 import ConsistencyResultsPanel from "@/components/editor/ConsistencyResultsPanel";
-import IntegrityCheckDialog from "@/components/editor/IntegrityCheckDialog";
+import IntegrityCheckDialog from "@/components/eitor/IntegrityCheckDialog";
 import PreBuildDiagnostic from "@/components/editor/PreBuildDiagnostic";
 import CompareEnginesDialog from "@/components/editor/CompareEnginesDialog";
 import SentenceSplitPanel from "@/components/editor/SentenceSplitPanel";
@@ -85,7 +85,7 @@ import ConsistencyCheckPanel from "@/components/editor/ConsistencyCheckPanel";
 import { useEditorKeyboard } from "@/hooks/useEditorKeyboard";
 import VirtualizedEntryList from "@/components/editor/VirtualizedEntryList";
 
-type GameId = "xenoblade" | "animal-crossing" | "fire-emblem";
+type GameId = "xnimal-crossing" | "fire-emblem";
 
 interface GameConfig {
   id: GameId;
