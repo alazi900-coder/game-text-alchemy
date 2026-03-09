@@ -49,7 +49,7 @@ export default function BundleExtractor() {
   }, []);
 
   const downloadAsset = useCallback((asset: ExtractedAsset) => {
-    const blob = new Blob([asset.data]);
+    const blob = new Blob([new Uint8Array(asset.data)]);
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;

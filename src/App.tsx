@@ -55,6 +55,7 @@ const App = () => (
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/install" element={<Install />} />
                 <Route path="/mod-packager" element={<ModPackager />} />
+                <Route path="/bundle-extractor" element={<ErrorBoundary fallbackTitle="خطأ في فاك الحزم"><BundleExtractor /></ErrorBoundary>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>

@@ -397,7 +397,7 @@ function parseSerializedFile(data: Uint8Array): ExtractedAsset[] {
 
 /* ───────── Parse TextAsset ───────── */
 function parseTextAsset(data: Uint8Array): { name: string; data: Uint8Array } {
-  const r = new BinaryReader(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength), true);
+  const r = new BinaryReader((data.buffer as ArrayBuffer).slice(data.byteOffset, data.byteOffset + data.byteLength), true);
 
   // name (length-prefixed string)
   const nameLen = r.readU32();
