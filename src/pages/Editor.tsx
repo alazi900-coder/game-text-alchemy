@@ -657,6 +657,7 @@ const Editor = () => {
             onRedistributeTags={editor.handleRedistributeTags}
             tagsCount={editor.tagsCount}
             isBdat={editor.bdatTableNames.length > 0}
+            gameType={editor.currentGameType}
           />
 
           {/* Progress Bar */}
