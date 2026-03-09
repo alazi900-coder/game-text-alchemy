@@ -270,7 +270,7 @@ export default function BundleExtractor() {
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           {msbt ? (
-                            <FileText className="w-5 h-5 text-green-500 shrink-0" />
+                            <FileText className="w-5 h-5 text-primary shrink-0" />
                           ) : (
                             <Package className="w-5 h-5 text-muted-foreground shrink-0" />
                           )}
