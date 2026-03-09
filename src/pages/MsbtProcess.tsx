@@ -236,10 +236,10 @@ export default function MsbtProcess() {
         for (const entry of allEntries) {
           originalTextsMap[`${entry.msbtFile}:${entry.index}`] = entry.original;
         }
-        await idbClearExcept(["buildTranslations"]);
+        await idbClearExcept(["buildTranslations", "editorSarcArchives", "editorSarcArchive"]);
         await idbSet("originalTexts", originalTextsMap);
       } else {
-        await idbClearExcept(["originalTexts", "buildTranslations"]);
+        await idbClearExcept(["originalTexts", "buildTranslations", "editorSarcArchives", "editorSarcArchive"]);
       }
 
       await idbSet("editorState", {
