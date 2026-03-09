@@ -105,11 +105,6 @@ const filePaths = [
 const Xenoblade = forwardRef<HTMLDivElement>((_, ref) => {
   const navigate = useNavigate();
 
-  const handleLoadEnglishTexts = async () => {
-    const { idbSet } = await import("@/lib/idb-storage");
-    await idbSet("editorGame", "xenoblade");
-    navigate("/editor?autoload=xenoblade");
-  };
 
   return (
     <div ref={ref} className="min-h-screen flex flex-col">
