@@ -716,15 +716,70 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       const compressedSize = response.headers.get('X-Compressed-Size');
       
       console.log('[BUILD] Response headers - Modified:', response.headers.get('X-Modified-Count'), 'Expanded:', response.headers.get('X-Expanded-Count'));
+
+      // Check if we need to repack into SARC.ZS
+      const sarcMeta = await idbGet<{
+        originalFileName: string;
+        endian: "big" | "little";
+        nonMsbtEntries: { name: string; data: number[] }[];
+        msbtEntryNames: string[];
+      }>("editorSarcArchive");
+
+      if (sarcMeta && sarcMeta.msbtEntryNames.length > 0) {
+        setBuildProgress("إعادة بناء أرشيف SARC.ZS...");
+        const JSZip = (await import("jszip")).default;
+        const { buildSarcZs } = await import("@/lib/sarc-parser");
+        const zip = await JSZip.loadAsync(blob);
+
+        // Reconstruct SARC entries
+        const sarcEntries: { name: string; data: Uint8Array }[] = [];
+
+        // Add non-MSBT entries back
+        for (const entry of sarcMeta.nonMsbtEntries) {
+          sarcEntries.push({ name: entry.name, data: new Uint8Array(entry.data) });
+        }
+
+        // Add rebuilt MSBT files from the ZIP
+        const msbtFileNames = await idbGet<string[]>("editorMsbtFileNames") || [];
+        for (const msbtName of sarcMeta.msbtEntryNames) {
+          const shortName = msbtName.replace(/.*[/\\]/, '');
+          // Try to find the rebuilt file in the ZIP
+          const zipFile = zip.file(shortName) || zip.file(msbtName);
+          if (zipFile) {
+            const data = await zipFile.async("uint8array");
+            sarcEntries.push({ name: msbtName, data });
+          } else {
+            // Fallback: use original from IDB
+            const msbtFiles = await idbGet<Record<string, ArrayBuffer>>("editorMsbtFiles");
+            if (msbtFiles && msbtFiles[shortName]) {
+              sarcEntries.push({ name: msbtName, data: new Uint8Array(msbtFiles[shortName]) });
+            }
+          }
+        }
+
+        setBuildProgress(`تجميع ${sarcEntries.length} ملف في SARC وضغط ZS...`);
+        const compressed = await buildSarcZs(sarcEntries, sarcMeta.endian);
+        const sarcBlob = new Blob([compressed], { type: "application/octet-stream" });
+        const sarcUrl = URL.createObjectURL(sarcBlob);
+        const a = document.createElement("a");
+        a.href = sarcUrl;
+        a.download = sarcMeta.originalFileName.replace(/\.zs$/i, '_arabized.zs').replace(/\.sarc$/i, '_arabized.sarc.zs');
+        if (!a.download.includes('arabized')) a.download = `arabized_${sarcMeta.originalFileName}`;
+        a.click();
+        URL.revokeObjectURL(sarcUrl);
+        const expandedMsg = expandedCount > 0 ? ` (${expandedCount} تم توسيعها 📐)` : '';
+        setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص${expandedMsg} — ملف SARC.ZS جاهز للعبة 🎮`);
+      } else {
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = `arabized_${langFileName}`;
+        a.click();
+        const expandedMsg = expandedCount > 0 ? ` (${expandedCount} تم توسيعها 📐)` : '';
+        setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص${expandedMsg}`);
+      }
       
       let buildStatsData: BuildStats | null = null;
       try { buildStatsData = JSON.parse(decodeURIComponent(response.headers.get('X-Build-Stats') || '{}')); } catch {}
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      a.download = `arabized_${langFileName}`;
-      a.click();
-      const expandedMsg = expandedCount > 0 ? ` (${expandedCount} تم توسيعها 📐)` : '';
-      setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص${expandedMsg}`);
       setBuildStats({
         modifiedCount,
         expandedCount,
