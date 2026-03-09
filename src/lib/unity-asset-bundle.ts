@@ -213,8 +213,11 @@ export async function parseUnityBundle(buffer: ArrayBuffer): Promise<UnityBundle
 
   const dataOffset = r.position;
 
-  // Parse block info
-  const br = new BinaryReader(blockInfoData.buffer as ArrayBuffer);
+  // Parse block info — ensure we use the exact slice (blockInfoData might have byteOffset)
+  const blockInfoBuf = blockInfoData.buffer.byteLength === blockInfoData.byteLength
+    ? blockInfoData.buffer as ArrayBuffer
+    : blockInfoData.slice(0).buffer as ArrayBuffer;
+  const br = new BinaryReader(blockInfoBuf);
   br.skip(16); // uncompressed data hash
   const blockCount = br.readU32();
 
