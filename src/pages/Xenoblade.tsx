@@ -150,6 +150,10 @@ const Xenoblade = forwardRef<HTMLDivElement>((_, ref) => {
                 ابدأ التعريب 🔮
               </Button>
             </Link>
+            <Button size="lg" variant="outline" className="font-display font-bold text-lg px-10 py-6 border-primary/40 hover:bg-primary/10" onClick={handleLoadEnglishTexts}>
+              <Download className="w-5 h-5 ml-2" />
+              تحميل النصوص الإنجليزية 📥
+            </Button>
             <Link to="/mod-packager">
               <Button size="lg" variant="outline" className="font-display font-bold text-lg px-10 py-6 border-primary/40 hover:bg-primary/10">
                 بناء حزمة المود 📦
