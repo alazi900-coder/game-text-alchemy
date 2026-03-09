@@ -84,7 +84,28 @@ export default function MsbtProcess() {
       const end = Math.min(start + BATCH, total);
       for (let i = start; i < end; i++) {
         const f = files[i];
-        if (f.name.toLowerCase().endsWith('.msbt')) newMsbt.push(f);
+        const lower = f.name.toLowerCase();
+        if (lower.endsWith('.msbt')) {
+          newMsbt.push(f);
+        } else if (lower.endsWith('.sarc.zs') || lower.endsWith('.sarc')) {
+          // Extract MSBTs from SARC archive
+          try {
+            addLog(`📦 فك أرشيف ${f.name}...`);
+            const buf = await f.arrayBuffer();
+            const data = new Uint8Array(buf);
+            const { parseSarc, parseSarcZs, extractMsbtFromSarc } = await import("@/lib/sarc-parser");
+            const archive = lower.endsWith('.zs') ? await parseSarcZs(data) : parseSarc(data);
+            const msbtEntries = extractMsbtFromSarc(archive);
+            addLog(`✅ ${f.name}: ${archive.entries.length} ملف داخلي — ${msbtEntries.length} ملف MSBT`);
+            for (const entry of msbtEntries) {
+              const blob = new Blob([entry.data], { type: "application/octet-stream" });
+              const extracted = new File([blob], entry.name.replace(/.*[/\\]/, ''), { type: "application/octet-stream" });
+              newMsbt.push(extracted);
+            }
+          } catch (err) {
+            addLog(`⚠️ فشل فك ${f.name}: ${err instanceof Error ? err.message : 'خطأ'}`);
+          }
+        }
       }
       setFileLoadProgress({ current: end, total });
       await new Promise(r => setTimeout(r, 0));
