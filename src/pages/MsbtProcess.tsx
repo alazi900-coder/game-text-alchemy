@@ -52,7 +52,7 @@ export default function MsbtProcess() {
   const gameId = location.pathname.includes("fire-emblem") ? "fire-emblem" : "animal-crossing";
   const config = gameConfigs[gameId];
   
-  const [msbtFiles, setMsbtFiles] = useState<File[]>([]);
+  const [msbtFiles, setMsbtFiles] = useState<{ name: string; size: number; data: ArrayBuffer }[]>([]);
   const [stage, setStage] = useState<ProcessingStage>("idle");
   const [logs, setLogs] = useState<string[]>([]);
   const [extracting, setExtracting] = useState(false);
