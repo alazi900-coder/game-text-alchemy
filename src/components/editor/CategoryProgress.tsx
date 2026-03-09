@@ -34,6 +34,7 @@ interface CategoryProgressProps {
   onRedistributeTags?: () => void;
   tagsCount?: number;
   isBdat?: boolean;
+  gameType?: string;
 }
 
 const CategoryProgress: React.FC<CategoryProgressProps> = ({ categoryProgress, filterCategory, setFilterCategory, damagedTagsCount = 0, onFilterDamagedTags, isDamagedTagsActive, onFixDamagedTags, isFixing, onLocalFixDamagedTags, onRedistributeTags, tagsCount = 0, isBdat = false }) => {
