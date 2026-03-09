@@ -84,7 +84,28 @@ export default function MsbtProcess() {
       const end = Math.min(start + BATCH, total);
       for (let i = start; i < end; i++) {
         const f = files[i];
-        if (f.name.toLowerCase().endsWith('.msbt')) newMsbt.push(f);
+        const lower = f.name.toLowerCase();
+        if (lower.endsWith('.msbt')) {
+          newMsbt.push(f);
+        } else if (lower.endsWith('.sarc.zs') || lower.endsWith('.sarc')) {
+          // Extract MSBTs from SARC archive
+          try {
+            addLog(`📦 فك أرشيف ${f.name}...`);
+            const buf = await f.arrayBuffer();
+            const data = new Uint8Array(buf);
+            const { parseSarc, parseSarcZs, extractMsbtFromSarc } = await import("@/lib/sarc-parser");
+            const archive = lower.endsWith('.zs') ? await parseSarcZs(data) : parseSarc(data);
+            const msbtEntries = extractMsbtFromSarc(archive);
+            addLog(`✅ ${f.name}: ${archive.entries.length} ملف داخلي — ${msbtEntries.length} ملف MSBT`);
+            for (const entry of msbtEntries) {
+              const blob = new Blob([new Uint8Array(entry.data)], { type: "application/octet-stream" });
+              const extracted = new File([blob], entry.name.replace(/.*[/\\]/, ''), { type: "application/octet-stream" });
+              newMsbt.push(extracted);
+            }
+          } catch (err) {
+            addLog(`⚠️ فشل فك ${f.name}: ${err instanceof Error ? err.message : 'خطأ'}`);
+          }
+        }
       }
       setFileLoadProgress({ current: end, total });
       await new Promise(r => setTimeout(r, 0));
@@ -240,7 +261,7 @@ export default function MsbtProcess() {
           رفع ملفات {config.title} {config.emoji}
         </h1>
         <p className="text-muted-foreground font-body">
-          ارفع ملفات MSBT — يمكنك رفع عدة ملفات دفعة واحدة
+          ارفع ملفات MSBT أو SARC.ZS — يمكنك رفع عدة ملفات دفعة واحدة
         </p>
       </header>
 
@@ -255,13 +276,13 @@ export default function MsbtProcess() {
               ${isProcessing ? "opacity-50 pointer-events-none" : ""}`}
           >
             <FileText className="w-12 h-12 text-primary mb-3" />
-            <p className="font-display font-semibold mb-1">ملفات MSBT</p>
-            <p className="text-xs text-muted-foreground mb-4">اسحب الملفات هنا أو اختر من الجهاز</p>
+            <p className="font-display font-semibold mb-1">ملفات MSBT أو SARC.ZS</p>
+            <p className="text-xs text-muted-foreground mb-4">اسحب الملفات هنا أو اختر من الجهاز — يدعم .msbt و .sarc.zs</p>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10 border border-primary/30 text-sm font-display font-semibold cursor-pointer hover:bg-primary/20 transition-colors">
                 <Upload className="w-4 h-4" />
-                اختيار ملفات .msbt
-                <input type="file" accept=".msbt" multiple className="hidden" onChange={e => handleFileSelect(e.target.files)} disabled={isProcessing} />
+                اختيار ملفات
+                <input type="file" accept=".msbt,.sarc,.zs" multiple className="hidden" onChange={e => handleFileSelect(e.target.files)} disabled={isProcessing} />
               </label>
               <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary/10 border border-secondary/30 text-sm font-display font-semibold cursor-pointer hover:bg-secondary/20 transition-colors">
                 <FolderOpen className="w-4 h-4" />
