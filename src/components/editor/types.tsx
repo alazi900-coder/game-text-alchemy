@@ -162,6 +162,9 @@ export function categorizeACNHFile(filePath: string): string {
     "special npcs": "acnh-special-npcs",
     "events": "acnh-events",
     "species": "acnh-species",
+    "clothing": "acnh-clothing",
+    "art": "acnh-art",
+    "wallpaper": "acnh-wallpaper",
   };
   if (csvMap[lower]) return csvMap[lower];
 
