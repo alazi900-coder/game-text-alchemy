@@ -46,20 +46,20 @@ function writeU32(dv: DataView, offset: number, value: number, le: boolean) {
   dv.setUint32(offset, value, le);
 }
 
-/** Known MSBT control tag descriptions */
+/** Known MSBT control tag descriptions (English labels for consistency across all games) */
 const MSBT_TAG_NAMES: Record<string, string> = {
-  '0.0': 'روبي',
-  '0.1': 'حجم',
-  '0.2': 'لون',
-  '0.3': 'فاصل',
-  '0.4': 'تأخير',
-  '1.0': 'متغير',
-  '1.1': 'عدد',
-  '1.2': 'سلسلة',
-  '2.0': 'شرط',
-  '2.1': 'اختيار',
-  '3.0': 'صوت',
-  '4.0': 'رسوم',
+  '0.0': 'Ruby',
+  '0.1': 'Size',
+  '0.2': 'Color',
+  '0.3': 'PageBreak',
+  '0.4': 'Delay',
+  '1.0': 'Variable',
+  '1.1': 'Number',
+  '1.2': 'String',
+  '2.0': 'Condition',
+  '2.1': 'Choice',
+  '3.0': 'Sound',
+  '4.0': 'Animation',
 };
 
 function getMsbtTagLabel(group: number, type: number): string {
