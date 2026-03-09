@@ -98,15 +98,6 @@ interface GameConfig {
 }
 
 const GAME_CONFIGS: Record<GameId, GameConfig> = {
-  xenoblade: {
-    id: "xenoblade",
-    title: "Xenoblade Chronicles 3",
-    emoji: "⚔️",
-    heroBg: xc3HeroBg,
-    processPath: "/process",
-    fileLabel: "ملفات BDAT",
-    fileFormat: "BDAT",
-  },
   "animal-crossing": {
     id: "animal-crossing",
     title: "Animal Crossing: NH",
