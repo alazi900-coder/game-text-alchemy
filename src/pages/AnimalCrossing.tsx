@@ -86,11 +86,6 @@ const filePaths = [
 export default function AnimalCrossing() {
   const navigate = useNavigate();
 
-  const handleLoadEnglishTexts = async () => {
-    const { idbSet } = await import("@/lib/idb-storage");
-    await idbSet("editorGame", "animal-crossing");
-    navigate("/editor?autoload=animal-crossing");
-  };
 
   return (
     <div className="min-h-screen flex flex-col">
