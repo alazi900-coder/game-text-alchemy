@@ -19,7 +19,7 @@ import { useEditorSettings } from "@/hooks/useEditorSettings";
 import { useEditorScanResults } from "@/hooks/useEditorScanResults";
 import {
   ExtractedEntry, EditorState, AUTOSAVE_DELAY, AI_BATCH_SIZE, PAGE_SIZE,
-  categorizeFile, hasArabicChars, unReverseBidi, isTechnicalText, hasTechnicalTags,
+  categorizeFile, categorizeACNHFile, categorizeBdatTable, hasArabicChars, unReverseBidi, isTechnicalText, hasTechnicalTags,
   ReviewIssue, ReviewSummary, ReviewResults, ShortSuggestion, ImproveResult,
   restoreTagsLocally, FilterStatus, FilterTechnical,
 } from "@/components/editor/types";
