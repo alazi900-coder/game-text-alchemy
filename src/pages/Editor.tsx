@@ -155,16 +155,6 @@ const Editor = () => {
       if (game && game in GAME_CONFIGS) {
         setDetectedGame(game as GameId);
       }
-      // Check for autoload param
-      const params = new URLSearchParams(window.location.search);
-      const autoload = params.get("autoload");
-      if (autoload && autoload in GAME_CONFIGS) {
-        setDetectedGame(autoload as GameId);
-        // Remove param from URL
-        window.history.replaceState({}, '', '/editor');
-        // Trigger load
-        setTimeout(() => editor.loadGameEnglishTexts(autoload), 300);
-      }
     })();
   }, []);
 
