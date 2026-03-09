@@ -259,7 +259,6 @@ export async function decompressBundle(buffer: ArrayBuffer, info: UnityBundleInf
 
   return output;
 }
-}
 
 /* ───────── Extract assets from decompressed data ───────── */
 export function extractAssets(decompressedData: Uint8Array, info: UnityBundleInfo): ExtractedAsset[] {
