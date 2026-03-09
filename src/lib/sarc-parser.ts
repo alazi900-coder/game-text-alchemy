@@ -128,12 +128,24 @@ export function parseSarc(data: Uint8Array): SarcArchive {
   return { entries, endian: le ? "little" : "big" };
 }
 
+// Singleton WASM init to prevent race conditions
+let zstdReady: Promise<typeof import("@bokuweb/zstd-wasm")> | null = null;
+
+async function getZstd() {
+  if (!zstdReady) {
+    zstdReady = import("@bokuweb/zstd-wasm").then(async (mod) => {
+      await mod.init();
+      return mod;
+    });
+  }
+  return zstdReady;
+}
+
 /**
  * Decompress a .zs (Zstandard) buffer, then parse as SARC.
  */
 export async function parseSarcZs(compressedData: Uint8Array): Promise<SarcArchive> {
-  const { init, decompress } = await import("@bokuweb/zstd-wasm");
-  await init();
+  const { decompress } = await getZstd();
   const decompressed = decompress(compressedData);
   return parseSarc(new Uint8Array(decompressed));
 }
@@ -256,8 +268,7 @@ export function buildSarc(entries: SarcEntry[], endian: "big" | "little" = "litt
  */
 export async function buildSarcZs(entries: SarcEntry[], endian: "big" | "little" = "little"): Promise<Uint8Array> {
   const sarc = buildSarc(entries, endian);
-  const { init, compress } = await import("@bokuweb/zstd-wasm");
-  await init();
-  const compressed = compress(sarc, 3); // level 3 = good balance
+  const { compress } = await getZstd();
+  const compressed = compress(sarc, 3);
   return new Uint8Array(compressed);
 }
