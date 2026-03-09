@@ -472,6 +472,7 @@ export function categorizeByColumnName(columnName: string): string | null {
 export function hasTechnicalTags(text: string): boolean {
   return /[\uFFF9\uFFFA\uFFFB\uFFFC\uE000-\uE0FF]/.test(text)
     || /\[\s*\w+\s*:[^\]]*\]/.test(text)
+    || /\[\/\w+:[^\]]*\]/.test(text)
     || /\d+\s*\[[A-Z]{2,10}\]/.test(text)
     || /\[[A-Z]{2,10}\]\s*\d+/.test(text)
     || /\[\s*\w+\s*=\s*\w[^\]]*\]/.test(text)
