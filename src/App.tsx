@@ -47,9 +47,9 @@ const App = () => (
                 <Route path="/xenoblade" element={<Xenoblade />} />
                 <Route path="/process" element={<ErrorBoundary fallbackTitle="خطأ في المعالجة"><XenobladeProcess /></ErrorBoundary>} />
                 <Route path="/animal-crossing" element={<AnimalCrossing />} />
-                <Route path="/animal-crossing/process" element={<ErrorBoundary fallbackTitle="خطأ في المعالجة"><MsbtProcess /></ErrorBoundary>} />
+                <Route path="/animal-crossing/process" element={<ErrorBoundary fallbackTitle="خطأ في المعالجة"><MsbtProcess key="ac" /></ErrorBoundary>} />
                 <Route path="/fire-emblem" element={<FireEmblem />} />
-                <Route path="/fire-emblem/process" element={<ErrorBoundary fallbackTitle="خطأ في المعالجة"><MsbtProcess /></ErrorBoundary>} />
+                <Route path="/fire-emblem/process" element={<ErrorBoundary fallbackTitle="خطأ في المعالجة"><MsbtProcess key="fe" /></ErrorBoundary>} />
                 <Route path="/editor" element={<ErrorBoundary fallbackTitle="خطأ في المحرر"><Editor /></ErrorBoundary>} />
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/install" element={<Install />} />
