@@ -124,6 +124,11 @@ export default function FireEmblem() {
                 ابدأ التعريب ⚔️
               </Button>
             </Link>
+            <Link to="/bundle-extractor">
+              <Button size="lg" variant="outline" className="font-display font-bold text-lg px-10 py-6">
+                فاك ملفات Bundle 📦
+              </Button>
+            </Link>
           </div>
         </div>
       </header>

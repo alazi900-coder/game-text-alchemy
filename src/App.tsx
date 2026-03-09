@@ -21,6 +21,7 @@ const Auth = lazy(() => import("./pages/Auth"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Install = lazy(() => import("./pages/Install"));
 const ModPackager = lazy(() => import("./pages/ModPackager"));
+const BundleExtractor = lazy(() => import("./pages/BundleExtractor"));
 
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-background">
@@ -54,6 +55,7 @@ const App = () => (
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/install" element={<Install />} />
                 <Route path="/mod-packager" element={<ModPackager />} />
+                <Route path="/bundle-extractor" element={<ErrorBoundary fallbackTitle="خطأ في فاك الحزم"><BundleExtractor /></ErrorBoundary>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
