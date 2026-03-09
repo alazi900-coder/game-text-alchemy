@@ -3284,7 +3284,7 @@ export function useEditorState() {
     advancedAnalysisTab, literalResults, styleResults, consistencyCheckResult, alternativeResults, fullAnalysisResults, advancedAnalyzing, enhancedMemory,
     glossaryComplianceResults, checkingGlossaryCompliance,
     isSearchPinned, pinnedKeys,
-    categoryProgress, qualityStats, needsImproveCount, translatedCount, tagsCount, fuzzyCount, byteOverflowCount, multiLineCount, newlinesCount, npcAffectedCount, lineSyncAffectedCount,
+    categoryProgress, qualityStats, needsImproveCount, translatedCount, tagsCount, fuzzyCount, byteOverflowCount, multiLineCount, newlinesCount, npcAffectedCount, lineSyncAffectedCount, currentGameType,
     bdatTableNames, bdatColumnNames, bdatTableCounts, bdatColumnCounts,
     ...glossary,
     msbtFiles, filteredEntries, paginatedEntries, totalPages,
