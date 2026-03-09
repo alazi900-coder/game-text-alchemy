@@ -244,7 +244,7 @@ export function extractAssets(decompressedData: Uint8Array, info: UnityBundleInf
 /* ───────── Parse Unity Serialized File ───────── */
 function parseSerializedFile(data: Uint8Array): ExtractedAsset[] {
   const assets: ExtractedAsset[] = [];
-  const r = new BinaryReader(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
+  const r = new BinaryReader((data.buffer as ArrayBuffer).slice(data.byteOffset, data.byteOffset + data.byteLength));
 
   // Read serialized file header
   const metadataSize = r.readU32();
