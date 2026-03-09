@@ -93,7 +93,16 @@ const filePaths = [
   { path: "داخل Bundle: *.msbt", desc: "ملفات MSBT الفعلية داخل كل Bundle" },
 ];
 
+
 export default function FireEmblem() {
+  const navigate = useNavigate();
+
+  const handleLoadEnglishTexts = async () => {
+    const { idbSet } = await import("@/lib/idb-storage");
+    await idbSet("editorGame", "fire-emblem");
+    navigate("/editor?autoload=fire-emblem");
+  };
+
 
   return (
     <div className="min-h-screen flex flex-col">
