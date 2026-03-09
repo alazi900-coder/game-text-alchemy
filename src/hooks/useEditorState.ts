@@ -100,7 +100,7 @@ export function useEditorState() {
   });
   const { activeGlossary, parseGlossaryMap } = glossary;
 
-  const quality = useEditorQuality({ state });
+  const quality = useEditorQuality({ state, gameType: currentGameType });
   const { isTranslationTooShort, isTranslationTooLong, hasStuckChars, isMixedLanguage, needsImprovement, qualityStats, needsImproveCount, categoryProgress, translatedCount } = quality;
 
   const build = useEditorBuild({ state, setState, setLastSaved, arabicNumerals, mirrorPunctuation, gameType: "xenoblade", forceSaveRef });
