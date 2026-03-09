@@ -242,7 +242,7 @@ export async function parseUnityBundle(buffer: ArrayBuffer): Promise<UnityBundle
 }
 
 /* ───────── Decompress all blocks into a single data stream ───────── */
-export function decompressBundle(buffer: ArrayBuffer, info: UnityBundleInfo): Uint8Array {
+export async function decompressBundle(buffer: ArrayBuffer, info: UnityBundleInfo): Promise<Uint8Array> {
   const totalDecompressed = info.blocks.reduce((sum, b) => sum + b.decompressedSize, 0);
   const output = new Uint8Array(totalDecompressed);
   let outPos = 0;
@@ -251,13 +251,14 @@ export function decompressBundle(buffer: ArrayBuffer, info: UnityBundleInfo): Ui
   for (const block of info.blocks) {
     const compressed = new Uint8Array(buffer, readPos, block.compressedSize);
     const compressionType = block.flags & 0x3F;
-    const decompressed = decompressBlock(compressed, block.decompressedSize, compressionType);
+    const decompressed = await decompressBlock(compressed, block.decompressedSize, compressionType);
     output.set(decompressed, outPos);
     outPos += block.decompressedSize;
     readPos += block.compressedSize;
   }
 
   return output;
+}
 }
 
 /* ───────── Extract assets from decompressed data ───────── */
