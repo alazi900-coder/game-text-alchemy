@@ -150,7 +150,9 @@ const COMPRESSION_LZMA = 1;
 const COMPRESSION_LZ4 = 2;
 const COMPRESSION_LZ4HC = 3;
 
-function decompressBlock(compressed: Uint8Array, decompressedSize: number, compressionType: number): Uint8Array {
+const COMPRESSION_ZSTD = 4;
+
+async function decompressBlock(compressed: Uint8Array, decompressedSize: number, compressionType: number): Promise<Uint8Array> {
   switch (compressionType) {
     case COMPRESSION_NONE:
       return compressed;
@@ -159,6 +161,10 @@ function decompressBlock(compressed: Uint8Array, decompressedSize: number, compr
       const output = new Uint8Array(decompressedSize);
       lz4.decompressBlock(compressed, output, 0, compressed.length, 0);
       return output;
+    }
+    case COMPRESSION_ZSTD: {
+      await ensureZstd();
+      return zstdDecompress(compressed);
     }
     case COMPRESSION_LZMA:
       throw new Error("ضغط LZMA غير مدعوم حالياً — يُرجى استخدام أداة خارجية لفك الضغط أولاً");
