@@ -97,6 +97,7 @@ export default function GameHub() {
             <span className="mr-auto text-muted-foreground group-hover:text-primary transition-colors">←</span>
           </Link>
         </div>
+      </section>
 
       <footer className="mt-auto py-6 text-center text-sm text-muted-foreground border-t border-border">
         <div>أداة تعريب ألعاب نينتندو سويتش — مشروع مفتوح المصدر 🇸🇦</div>
