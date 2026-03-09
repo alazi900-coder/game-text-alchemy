@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { toast } from "@/hooks/use-toast";
 import {
   ExtractedEntry, EditorState, AI_BATCH_SIZE, PAGE_SIZE,
-  categorizeFile, isTechnicalText, hasTechnicalTags,
+  categorizeFile, categorizeACNHFile, categorizeBdatTable, isTechnicalText, hasTechnicalTags,
 } from "@/components/editor/types";
 import { restoreTagsLocally } from "@/lib/tag-restoration";
 import { protectTags, restoreTags } from "@/lib/tag-protection";
