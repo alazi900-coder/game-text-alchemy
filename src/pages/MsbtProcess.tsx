@@ -48,8 +48,9 @@ const gameConfigs: Record<string, GameConfig> = {
 };
 
 export default function MsbtProcess() {
-  const { gameId } = useParams<{ gameId: string }>();
-  const config = gameConfigs[gameId || ""] || gameConfigs["animal-crossing"];
+  const location = useLocation();
+  const gameId = location.pathname.includes("fire-emblem") ? "fire-emblem" : "animal-crossing";
+  const config = gameConfigs[gameId];
   
   const [msbtFiles, setMsbtFiles] = useState<File[]>([]);
   const [stage, setStage] = useState<ProcessingStage>("idle");
