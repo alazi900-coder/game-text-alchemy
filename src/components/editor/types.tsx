@@ -484,7 +484,7 @@ export { restoreTagsLocally, previewTagRestore } from "@/lib/xc3-tag-restoration
 // Sanitize original text: replace binary tag markers with color-coded, tooltipped badges
 export function displayOriginal(text: string): React.ReactNode {
   // Split on PUA, control chars, AND [Tag:...] patterns
-  const regex = /([\uFFF9\uFFFA\uFFFB\uFFFC\uE000-\uE0FF\u0000-\u0008\u000E-\u001F]+|\[\w+:[^\]]*\])/g;
+  const regex = /([\uFFF9\uFFFA\uFFFB\uFFFC\uE000-\uE0FF\u0000-\u0008\u000E-\u001F]+|\[\/?\w+:[^\]]*\])/g;
   const parts = text.split(regex);
   if (parts.length === 1 && !regex.test(text)) return text;
   const elements: React.ReactNode[] = [];
