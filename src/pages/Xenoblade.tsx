@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Shield, FileText, Download, Sparkles, FolderOpen } from "lucide-react";
 import GameInfoSection from "@/components/GameInfoSection";
+import ExtractionGuideSection from "@/components/ExtractionGuideSection";
 import heroBg from "@/assets/xc3-hero-bg.jpg";
 import { APP_VERSION } from "@/lib/version";
 
@@ -10,6 +11,95 @@ const steps = [
   { icon: FileText, title: "ارفع الملفات", desc: "ارفع ملف BDAT أو MSBT وملف القاموس الخاص باللعبة" },
   { icon: Shield, title: "معالجة تلقائية", desc: "استخراج النصوص ومعالجتها وربط الحروف العربية" },
   { icon: Download, title: "حمّل النتيجة", desc: "حمّل الملف المعرّب جاهزاً للعبة" },
+];
+
+const extractionSteps = [
+  {
+    title: "تثبيت nxdumptool على السويتش",
+    desc: "على جهاز سويتش مهكّر، ثبّت nxdumptool من Homebrew App Store",
+  },
+  {
+    title: "فك romFS",
+    desc: "افتح nxdumptool > Dump gamecard content > RomFS options > Dump RomFS section data",
+    warning: "اللعبة كبيرة جداً (~15GB) — تأكد من وجود مساحة كافية",
+  },
+  {
+    title: "باستخدام المحاكي (yuzu/Ryujinx)",
+    desc: "كليك يمين على اللعبة > Extract Data > RomFS",
+    code: "Right-click Xenoblade 3 > Extract Data > RomFS",
+  },
+  {
+    title: "الوصول لملفات BDAT",
+    desc: "ملفات BDAT موجودة في مجلد bdat — تحتوي على جميع البيانات النصية",
+    code: "romfs/bdat/gb/",
+  },
+  {
+    title: "الوصول لملفات MSBT",
+    desc: "ملفات الحوارات موجودة في مجلد Message",
+    code: "romfs/menu/message/{lang}/",
+  },
+];
+
+const packingSteps = [
+  {
+    title: "إنشاء بنية المجلدات",
+    desc: "أنشئ مجلد romfs بنفس بنية الملفات الأصلية",
+    code: "atmosphere/contents/010074F013262000/romfs/",
+  },
+  {
+    title: "نسخ ملفات BDAT المعرّبة",
+    desc: "ضع ملفات BDAT المعرّبة في مجلد bdat",
+    code: "romfs/bdat/gb/*.bdat",
+  },
+  {
+    title: "نسخ ملفات MSBT المعرّبة",
+    desc: "ضع ملفات MSBT في مجلد message",
+    code: "romfs/menu/message/gb/*.msbt",
+  },
+  {
+    title: "تثبيت مود تحميل الملفات الخارجية",
+    desc: "Xenoblade 3 تحتاج مود خاص لتحميل ملفات romfs المعدّلة",
+    warning: "بدون هذا المود، اللعبة لن تقرأ الملفات المعدّلة!",
+  },
+];
+
+const installSteps = [
+  {
+    title: "تثبيت File Replacement Mod",
+    desc: "حمّل وثبّت مود استبدال الملفات الخاص بـ Xenoblade 3",
+    code: "https://github.com/masagrator/XC3-file-replacement",
+  },
+  {
+    title: "على السويتش (Atmosphere)",
+    desc: "انسخ مجلدات atmosphere و romfs إلى بطاقة SD",
+    code: "SD:/atmosphere/contents/010074F013262000/",
+  },
+  {
+    title: "على المحاكي",
+    desc: "في yuzu/Ryujinx: كليك يمين على اللعبة > Open Mod Data Location",
+    code: "yuzu/load/010074F013262000/arabic-mod/",
+  },
+  {
+    title: "التحقق من عمل المود",
+    desc: "شغّل اللعبة وتحقق من ظهور النصوص العربية في القوائم",
+    warning: "إذا ظهرت مربعات بدل الحروف، تحتاج تثبيت خط عربي",
+  },
+];
+
+const requiredTools = [
+  { name: "nxdumptool", url: "https://github.com/DarkMatterCore/nxdumptool", desc: "لفك ملفات اللعبة من السويتش" },
+  { name: "bdat-toolset", url: "https://github.com/RoccoDev/bdat-rs", desc: "لتحويل BDAT إلى JSON والعكس (للمتقدمين)" },
+  { name: "XC3 File Replacement", url: "https://github.com/masagrator/XC3-file-replacement", desc: "مود ضروري لتحميل الملفات المعدّلة" },
+  { name: "Atmosphere", url: "https://github.com/Atmosphere-NX/Atmosphere", desc: "Custom Firmware للسويتش" },
+];
+
+const filePaths = [
+  { path: "romfs/bdat/gb/", desc: "ملفات BDAT — جداول البيانات (أسماء، أوصاف، إحصائيات)" },
+  { path: "romfs/menu/message/gb/", desc: "ملفات MSBT — الحوارات والقوائم" },
+  { path: "bdat/gb/btl_*.bdat", desc: "نصوص القتال والمهارات" },
+  { path: "bdat/gb/fld_*.bdat", desc: "نصوص الخريطة والمناطق" },
+  { path: "bdat/gb/menu_*.bdat", desc: "نصوص القوائم" },
+  { path: "bdat/gb/msg_*.bdat", desc: "الحوارات والمشاهد السينمائية" },
 ];
 
 const Xenoblade = forwardRef<HTMLDivElement>((_, ref) => {
@@ -85,6 +175,18 @@ const Xenoblade = forwardRef<HTMLDivElement>((_, ref) => {
           </div>
         </div>
       </section>
+
+      {/* Extraction Guide */}
+      <ExtractionGuideSection
+        accentColor="hsl(180, 60%, 40%)"
+        gameTitle="Xenoblade Chronicles 3"
+        titleId="010074F013262000"
+        extractionSteps={extractionSteps}
+        packingSteps={packingSteps}
+        installSteps={installSteps}
+        requiredTools={requiredTools}
+        filePaths={filePaths}
+      />
 
       {/* Game Info */}
       <GameInfoSection

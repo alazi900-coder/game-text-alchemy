@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { FileText, Download, Shield, Sparkles, FolderOpen } from "lucide-react";
+import { FileText, Download, Shield, Sparkles } from "lucide-react";
 import GameInfoSection from "@/components/GameInfoSection";
+import ExtractionGuideSection from "@/components/ExtractionGuideSection";
 import heroBg from "@/assets/acnh-hero-bg.jpg";
 import { APP_VERSION } from "@/lib/version";
 
@@ -9,6 +10,77 @@ const steps = [
   { icon: FileText, title: "ارفع الملفات", desc: "ارفع ملفات MSBT من مجلد Message داخل romFS" },
   { icon: Shield, title: "معالجة تلقائية", desc: "استخراج النصوص ومعالجتها وربط الحروف العربية" },
   { icon: Download, title: "حمّل النتيجة", desc: "حمّل الملف المعرّب جاهزاً للعبة" },
+];
+
+const extractionSteps = [
+  {
+    title: "تثبيت nxdumptool على السويتش",
+    desc: "على جهاز سويتش مهكّر، ثبّت nxdumptool من Homebrew App Store",
+  },
+  {
+    title: "فك romFS",
+    desc: "افتح nxdumptool > Dump gamecard content > RomFS options > Dump RomFS section data",
+    warning: "تأكد من وجود مساحة كافية على بطاقة SD (اللعبة ~7GB)",
+  },
+  {
+    title: "باستخدام المحاكي (yuzu/Ryujinx)",
+    desc: "كليك يمين على اللعبة > Extract Data > RomFS",
+    code: "Right-click ACNH > Extract Data > RomFS",
+  },
+  {
+    title: "الوصول لملفات النصوص",
+    desc: "بعد الفك، انتقل لمجلد Message للوصول لملفات MSBT",
+    code: "romfs/Message/String/USen/*.msbt",
+  },
+];
+
+const packingSteps = [
+  {
+    title: "إنشاء بنية المجلدات",
+    desc: "أنشئ مجلد romfs بنفس بنية الملفات الأصلية",
+    code: "atmosphere/contents/01006F8002326000/romfs/Message/",
+  },
+  {
+    title: "نسخ الملفات المعرّبة",
+    desc: "ضع ملفات MSBT المعرّبة في نفس المسار الأصلي داخل مجلد romfs",
+    code: "romfs/Message/String/USen/Item.msbt",
+  },
+  {
+    title: "الحفاظ على بنية المجلدات",
+    desc: "يجب أن تكون بنية المجلدات مطابقة تماماً للأصل",
+  },
+];
+
+const installSteps = [
+  {
+    title: "على السويتش (Atmosphere)",
+    desc: "انسخ مجلد atmosphere إلى جذر بطاقة SD",
+    code: "SD:/atmosphere/contents/01006F8002326000/romfs/",
+  },
+  {
+    title: "تفعيل LayeredFS",
+    desc: "Atmosphere يدعم LayeredFS تلقائياً — فقط ضع الملفات وشغّل اللعبة",
+    warning: "تأكد أن إصدار Atmosphere محدّث لآخر نسخة",
+  },
+  {
+    title: "على المحاكي",
+    desc: "في yuzu/Ryujinx: كليك يمين على اللعبة > Open Mod Data Location > ضع المجلد هناك",
+    code: "yuzu/load/01006F8002326000/arabic-mod/romfs/",
+  },
+];
+
+const requiredTools = [
+  { name: "nxdumptool", url: "https://github.com/DarkMatterCore/nxdumptool", desc: "لفك ملفات اللعبة من السويتش مباشرة" },
+  { name: "Switch Toolbox", url: "https://github.com/KillzXGaming/Switch-Toolbox", desc: "لفتح وتعديل ملفات SARC archives" },
+  { name: "Atmosphere", url: "https://github.com/Atmosphere-NX/Atmosphere", desc: "Custom Firmware للسويتش لتشغيل المودات" },
+  { name: "yuzu/Ryujinx", url: "https://yuzu-emu.org/", desc: "محاكي نينتندو سويتش للكمبيوتر" },
+];
+
+const filePaths = [
+  { path: "romfs/Message/String/{lang}/", desc: "أسماء العناصر والأثاث والحشرات والأسماك" },
+  { path: "romfs/Message/Mail/{lang}/", desc: "رسائل البريد والخطابات" },
+  { path: "romfs/Message/TalkNNpc/{lang}/", desc: "حوارات القرويين (حسب الشخصية)" },
+  { path: "romfs/Message/TalkSNpc/{lang}/", desc: "حوارات الشخصيات الخاصة (Tom Nook, Isabelle...)" },
 ];
 
 export default function AnimalCrossing() {
@@ -63,6 +135,17 @@ export default function AnimalCrossing() {
           </div>
         </div>
       </section>
+
+      <ExtractionGuideSection
+        accentColor="hsl(140, 60%, 40%)"
+        gameTitle="Animal Crossing: New Horizons"
+        titleId="01006F8002326000"
+        extractionSteps={extractionSteps}
+        packingSteps={packingSteps}
+        installSteps={installSteps}
+        requiredTools={requiredTools}
+        filePaths={filePaths}
+      />
 
       <GameInfoSection
         accentColor="hsl(140, 60%, 40%)"
