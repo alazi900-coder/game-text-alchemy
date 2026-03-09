@@ -85,7 +85,7 @@ export function useEditorState() {
   const [isSearchPinned, setIsSearchPinned] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [showFindReplace, setShowFindReplace] = useState(false);
-
+  const [currentGameType, setCurrentGameType] = useState<string>("xenoblade");
 
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
