@@ -336,6 +336,10 @@ export function useEditorState() {
 
   useEffect(() => {
     const loadState = async () => {
+      // Load game type from IDB
+      const savedGame = await idbGet<string>("editorGame");
+      if (savedGame) setCurrentGameType(savedGame);
+
       // Check if stored originals exist
       const savedOriginals = await idbGet<Record<string, string>>("originalTexts");
       if (savedOriginals && Object.keys(savedOriginals).length > 0) {
