@@ -155,6 +155,14 @@ const Editor = () => {
       if (game && game in GAME_CONFIGS) {
         setDetectedGame(game as GameId);
       }
+      // Check for autoload param
+      const params = new URLSearchParams(window.location.search);
+      const autoload = params.get("autoload");
+      if (autoload && autoload in GAME_CONFIGS) {
+        setDetectedGame(autoload as GameId);
+        window.history.replaceState({}, '', '/editor');
+        setTimeout(() => editor.loadGameEnglishTexts(autoload), 300);
+      }
     })();
   }, []);
 
@@ -301,6 +309,9 @@ const Editor = () => {
             <br />
             <div className="flex flex-wrap items-center gap-3 mt-4 justify-center">
               <Link to={processPath}><Button className="font-display">اذهب لصفحة المعالجة ({gameConfig.fileFormat})</Button></Link>
+              <Button variant="secondary" className="font-display" onClick={() => editor.loadGameEnglishTexts(gameType)}>
+                <Download className="w-4 h-4" /> تحميل النصوص الإنجليزية 📥
+              </Button>
               {gameType === "xenoblade" && (
                 <Button variant="outline" className="font-display" onClick={editor.loadDemoBdatData}>
                   تحميل بيانات BDAT تجريبية

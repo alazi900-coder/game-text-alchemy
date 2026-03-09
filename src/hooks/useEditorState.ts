@@ -2106,100 +2106,145 @@ export function useEditorState() {
   }, []);
 
   const loadGameEnglishTexts = useCallback(async (gameId: string) => {
-    const fileMap: Record<string, string> = {
-      "xenoblade": "/bdat-english-source.txt",
-      "animal-crossing": "/ac-english-texts.json",
-      "fire-emblem": "/fe-english-texts.json",
-    };
-    const url = fileMap[gameId];
-    if (!url) {
-      toast({ title: "❌ لعبة غير معروفة", variant: "destructive" });
-      return;
-    }
-
     setLastSaved("⏳ جارٍ تحميل النصوص الإنجليزية...");
 
     try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      let entries: ExtractedEntry[] = [];
 
-      if (url.endsWith(".json")) {
-        const data = await res.json() as {
-          game: string;
-          title: string;
-          entries: { file: string; label: string; text: string }[];
-        };
-        const entries: ExtractedEntry[] = data.entries.map((e, i) => ({
-          msbtFile: e.file,
-          index: i,
-          label: e.label,
-          original: e.text,
-          maxBytes: 0,
-        }));
-        setState({ entries, translations: {}, protectedEntries: new Set(), technicalBypass: new Set() });
-        await idbSet("editorGame", gameId);
-        await idbSet("editorState", { entries, translations: {}, freshExtraction: true });
-        setLastSaved(`✅ تم تحميل ${entries.length} نص إنجليزي من ${data.title}`);
-      } else {
-        // Parse bdat-english-source.txt format
+      if (gameId === "xenoblade") {
+        // Local bdat-english-source.txt
+        const res = await fetch("/bdat-english-source.txt");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const text = await res.text();
-        const entries: ExtractedEntry[] = [];
-        const regex = /^\[(\d+)\]\s+\(([^)]+)\)\s*\nLabel:\s*(.+)\n\n([\s\S]*?)(?=\n▶|$)/gm;
-        let match: RegExpExecArray | null;
-        while ((match = regex.exec(text)) !== null) {
-          const key = match[2].trim();
-          const label = match[3].trim();
-          const original = match[4].trim();
-          if (original) {
-            entries.push({ msbtFile: key.split(':').slice(0, 2).join(':'), index: entries.length, label, original, maxBytes: 0 });
-          }
-        }
-        if (entries.length === 0) {
-          // Fallback: simpler line-by-line parse
-          const lines = text.split('\n');
-          let currentKey = '';
-          let currentLabel = '';
-          let textLines: string[] = [];
-          let inText = false;
-          for (const line of lines) {
-            const keyMatch = line.match(/^\[(\d+)\]\s+\(([^)]+)\)/);
-            if (keyMatch) {
-              if (currentKey && textLines.length > 0) {
-                const original = textLines.join('\n').trim();
-                if (original) {
-                  entries.push({ msbtFile: currentKey.split(':').slice(0, 2).join(':'), index: entries.length, label: currentLabel, original, maxBytes: 0 });
-                }
+        const lines = text.split('\n');
+        let currentKey = '';
+        let currentLabel = '';
+        let textLines: string[] = [];
+        let inText = false;
+        for (const line of lines) {
+          const keyMatch = line.match(/^\[(\d+)\]\s+\(([^)]+)\)/);
+          if (keyMatch) {
+            if (currentKey && textLines.length > 0) {
+              const original = textLines.join('\n').trim();
+              if (original) {
+                entries.push({ msbtFile: currentKey.split(':').slice(0, 2).join(':'), index: entries.length, label: currentLabel, original, maxBytes: 0 });
               }
-              currentKey = keyMatch[2].trim();
-              textLines = [];
-              inText = false;
-              continue;
             }
-            const labelMatch = line.match(/^Label:\s*(.+)/);
-            if (labelMatch) {
-              currentLabel = labelMatch[1].trim();
-              inText = true;
-              continue;
-            }
-            if (line.startsWith('▶')) {
-              inText = false;
-              continue;
-            }
-            if (line.startsWith('════') || line.startsWith('────')) continue;
-            if (inText) textLines.push(line);
+            currentKey = keyMatch[2].trim();
+            textLines = [];
+            inText = false;
+            continue;
           }
-          if (currentKey && textLines.length > 0) {
-            const original = textLines.join('\n').trim();
-            if (original) {
-              entries.push({ msbtFile: currentKey.split(':').slice(0, 2).join(':'), index: entries.length, label: currentLabel, original, maxBytes: 0 });
+          const labelMatch = line.match(/^Label:\s*(.+)/);
+          if (labelMatch) {
+            currentLabel = labelMatch[1].trim();
+            inText = true;
+            continue;
+          }
+          if (line.startsWith('▶')) { inText = false; continue; }
+          if (line.startsWith('════') || line.startsWith('────')) continue;
+          if (inText) textLines.push(line);
+        }
+        if (currentKey && textLines.length > 0) {
+          const original = textLines.join('\n').trim();
+          if (original) {
+            entries.push({ msbtFile: currentKey.split(':').slice(0, 2).join(':'), index: entries.length, label: currentLabel, original, maxBytes: 0 });
+          }
+        }
+      } else if (gameId === "fire-emblem") {
+        // FE Engage: tab-separated key\tvalue with filename headers
+        const res = await fetch("/fe-english-source.txt");
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const text = await res.text();
+        const lines = text.split('\n');
+        let currentFile = "unknown";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          if (!line.includes('\t')) {
+            // Filename header
+            currentFile = line.trim();
+            continue;
+          }
+          const tabIdx = line.indexOf('\t');
+          const label = line.substring(0, tabIdx).trim();
+          const original = line.substring(tabIdx + 1).trim().replace(/\\n/g, '\n');
+          if (original) {
+            entries.push({ msbtFile: currentFile, index: entries.length, label, original, maxBytes: 0 });
+          }
+        }
+      } else if (gameId === "animal-crossing") {
+        // ACNH: fetch CSV files from GitHub
+        const baseUrl = "https://raw.githubusercontent.com/alexislours/acnh-strings/master";
+        const csvFiles = [
+          { url: `${baseUrl}/Item/STR_ItemName_00_Ftr.csv`, category: "Furniture" },
+          { url: `${baseUrl}/Item/STR_ItemName_20_Tool.csv`, category: "Tools" },
+          { url: `${baseUrl}/Item/STR_ItemName_30_Insect.csv`, category: "Insects" },
+          { url: `${baseUrl}/Item/STR_ItemName_31_Fish.csv`, category: "Fish" },
+          { url: `${baseUrl}/Item/STR_ItemName_32_DiveFish.csv`, category: "Sea Creatures" },
+          { url: `${baseUrl}/Item/STR_ItemName_33_Shell.csv`, category: "Shells" },
+          { url: `${baseUrl}/Item/STR_ItemName_34_Fossil.csv`, category: "Fossils" },
+          { url: `${baseUrl}/Item/STR_ItemName_40_Plant.csv`, category: "Plants" },
+          { url: `${baseUrl}/Item/STR_ItemName_70_Craft.csv`, category: "Crafting" },
+          { url: `${baseUrl}/Item/STR_ItemName_80_Etc.csv`, category: "Miscellaneous" },
+          { url: `${baseUrl}/Item/STR_ItemName_82_Music.csv`, category: "Music" },
+          { url: `${baseUrl}/Item/STR_ItemName_83_Fence.csv`, category: "Fences" },
+          { url: `${baseUrl}/Npc/STR_NNpcName.csv`, category: "Villagers" },
+          { url: `${baseUrl}/Npc/STR_SNpcName.csv`, category: "Special NPCs" },
+          { url: `${baseUrl}/STR_EventName.csv`, category: "Events" },
+          { url: `${baseUrl}/STR_Race.csv`, category: "Species" },
+        ];
+
+        const results = await Promise.allSettled(
+          csvFiles.map(async ({ url, category }) => {
+            const res = await fetch(url);
+            if (!res.ok) return [];
+            const text = await res.text();
+            const lines = text.split('\n').filter(l => l.trim());
+            // Skip header (first line)
+            return lines.slice(1).map(line => {
+              const parts = line.split(';');
+              const label = parts[0] || '';
+              const english = parts[1] || '';
+              const japanese = parts[12] || '';
+              return { category, label, english: english.trim(), japanese: japanese.trim() };
+            }).filter(e => e.english);
+          })
+        );
+
+        for (const result of results) {
+          if (result.status === 'fulfilled') {
+            for (const item of result.value) {
+              entries.push({
+                msbtFile: item.category,
+                index: entries.length,
+                label: item.label,
+                original: item.japanese ? `${item.english}\n(${item.japanese})` : item.english,
+                maxBytes: 0,
+              });
             }
           }
         }
-        setState({ entries, translations: {}, protectedEntries: new Set(), technicalBypass: new Set() });
-        await idbSet("editorGame", gameId);
-        await idbSet("editorState", { entries, translations: {}, freshExtraction: true });
-        setLastSaved(`✅ تم تحميل ${entries.length} نص إنجليزي من Xenoblade Chronicles 3`);
+      } else {
+        toast({ title: "❌ لعبة غير معروفة", variant: "destructive" });
+        return;
       }
+
+      if (entries.length === 0) {
+        toast({ title: "⚠️ لم يتم العثور على نصوص", variant: "destructive" });
+        setLastSaved("");
+        return;
+      }
+
+      setState({ entries, translations: {}, protectedEntries: new Set(), technicalBypass: new Set() });
+      await idbSet("editorGame", gameId);
+      await idbSet("editorState", { entries, translations: {}, freshExtraction: true });
+
+      const gameNames: Record<string, string> = {
+        "xenoblade": "Xenoblade Chronicles 3",
+        "fire-emblem": "Fire Emblem Engage",
+        "animal-crossing": "Animal Crossing: New Horizons",
+      };
+      setLastSaved(`✅ تم تحميل ${entries.length} نص إنجليزي من ${gameNames[gameId] || gameId}`);
       setTimeout(() => setLastSaved(""), 5000);
     } catch (err) {
       console.error("Failed to load game texts:", err);
