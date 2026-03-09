@@ -2249,35 +2249,53 @@ export function useEditorState() {
           { url: `${baseUrl}/STR_Race.csv`, category: "Species" },
         ];
 
-        const results = await Promise.allSettled(
-          csvFiles.map(async ({ url, category }) => {
-            const res = await fetch(url);
-            if (!res.ok) return [];
-            const text = await res.text();
-            const lines = text.split('\n').filter(l => l.trim());
-            // Skip header (first line)
-            return lines.slice(1).map(line => {
-              const parts = line.split(';');
-              const label = parts[0] || '';
-              const english = parts[1] || '';
-              const japanese = parts[12] || '';
-              return { category, label, english: english.trim(), japanese: japanese.trim() };
-            }).filter(e => e.english);
-          })
-        );
+        // Try loading from cache first (offline support)
+        const cachedData = await idbGet<Array<{ category: string; label: string; english: string; japanese: string }>>('acnh-csv-cache');
+        let allItems: Array<{ category: string; label: string; english: string; japanese: string }> = [];
 
-        for (const result of results) {
-          if (result.status === 'fulfilled') {
-            for (const item of result.value) {
-              entries.push({
-                msbtFile: item.category,
-                index: entries.length,
-                label: item.label,
-                original: item.japanese ? `${item.english}\n(${item.japanese})` : item.english,
-                maxBytes: 0,
-              });
+        if (cachedData && cachedData.length > 0) {
+          // Use cached data (works offline)
+          allItems = cachedData;
+          console.log(`[ACNH] Loaded ${cachedData.length} entries from offline cache`);
+        } else {
+          // Fetch from network
+          const results = await Promise.allSettled(
+            csvFiles.map(async ({ url, category }) => {
+              const res = await fetch(url);
+              if (!res.ok) return [];
+              const text = await res.text();
+              const lines = text.split('\n').filter(l => l.trim());
+              return lines.slice(1).map(line => {
+                const parts = line.split(';');
+                const label = parts[0] || '';
+                const english = parts[1] || '';
+                const japanese = parts[12] || '';
+                return { category, label, english: english.trim(), japanese: japanese.trim() };
+              }).filter(e => e.english);
+            })
+          );
+
+          for (const result of results) {
+            if (result.status === 'fulfilled') {
+              allItems.push(...result.value);
             }
           }
+
+          // Cache for offline use
+          if (allItems.length > 0) {
+            await idbSet('acnh-csv-cache', allItems);
+            console.log(`[ACNH] Cached ${allItems.length} entries for offline use`);
+          }
+        }
+
+        for (const item of allItems) {
+          entries.push({
+            msbtFile: item.category,
+            index: entries.length,
+            label: item.label,
+            original: item.japanese ? `${item.english}\n(${item.japanese})` : item.english,
+            maxBytes: 0,
+          });
         }
       } else {
         toast({ title: "❌ لعبة غير معروفة", variant: "destructive" });
