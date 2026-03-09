@@ -97,6 +97,19 @@ export default function MsbtProcess() {
             const archive = lower.endsWith('.zs') ? await parseSarcZs(data) : parseSarc(data);
             const msbtEntries = extractMsbtFromSarc(archive);
             addLog(`✅ ${f.name}: ${archive.entries.length} ملف داخلي — ${msbtEntries.length} ملف MSBT`);
+
+            // Save SARC metadata for rebuild later
+            const { idbSet } = await import("@/lib/idb-storage");
+            await idbSet("editorSarcArchive", {
+              originalFileName: f.name,
+              endian: archive.endian,
+              // Store non-MSBT entries as-is for repacking
+              nonMsbtEntries: archive.entries
+                .filter(e => !e.name.toLowerCase().endsWith(".msbt"))
+                .map(e => ({ name: e.name, data: Array.from(e.data) })),
+              msbtEntryNames: msbtEntries.map(e => e.name),
+            });
+
             for (const entry of msbtEntries) {
               const blob = new Blob([new Uint8Array(entry.data)], { type: "application/octet-stream" });
               const extracted = new File([blob], entry.name.replace(/.*[/\\]/, ''), { type: "application/octet-stream" });
