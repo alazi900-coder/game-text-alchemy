@@ -320,7 +320,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
             if (translationMap.size === 0) {
               const legacyMap = perFileLegacy.get(fileName);
               if (legacyMap && legacyMap.size > 0) {
-                const { extractBdatStrings } = await import("@/lib/bdat-parser");
+                const extractBdatStrings = (_f: any, _n: string) => [] as any[];
                 const extractedStrings = extractBdatStrings(bdatFile, fileName);
                 for (let i = 0; i < extractedStrings.length; i++) {
                   const s = extractedStrings[i];
