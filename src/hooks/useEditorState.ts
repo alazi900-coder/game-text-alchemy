@@ -19,7 +19,7 @@ import { useEditorSettings } from "@/hooks/useEditorSettings";
 import { useEditorScanResults } from "@/hooks/useEditorScanResults";
 import {
   ExtractedEntry, EditorState, AUTOSAVE_DELAY, AI_BATCH_SIZE, PAGE_SIZE,
-  categorizeFile, hasArabicChars, unReverseBidi, isTechnicalText, hasTechnicalTags,
+  categorizeFile, categorizeACNHFile, categorizeBdatTable, hasArabicChars, unReverseBidi, isTechnicalText, hasTechnicalTags,
   ReviewIssue, ReviewSummary, ReviewResults, ShortSuggestion, ImproveResult,
   restoreTagsLocally, FilterStatus, FilterTechnical,
 } from "@/components/editor/types";
@@ -193,8 +193,15 @@ export function useEditorState() {
     const autoTranslations: Record<string, string> = {};
     for (const entry of editorState.entries) {
       const key = `${entry.msbtFile}:${entry.index}`;
-      if (!editorState.translations[key]?.trim() && arabicRegex.test(entry.original)) {
-        autoTranslations[key] = entry.original;
+      if (!editorState.translations[key]?.trim()) {
+        // Strip bracket tags [Tag:Value] and {var} before checking for Arabic
+        // to avoid false positives from Arabic tag labels like [MSBT:فاصل]
+        const strippedText = entry.original
+          .replace(/\[[^\]]*\]/g, '')
+          .replace(/\{[^}]*\}/g, '');
+        if (arabicRegex.test(strippedText)) {
+          autoTranslations[key] = entry.original;
+        }
       }
     }
     return autoTranslations;
@@ -253,7 +260,8 @@ export function useEditorState() {
     const arabicRegex = /[\u0600-\u06FF\uFB50-\uFDFF\uFE70-\uFEFF\u0750-\u077F\u08A0-\u08FF]/;
     for (const entry of stored.entries) {
       const key = `${entry.msbtFile}:${entry.index}`;
-      if (arabicRegex.test(entry.original)) {
+      const strippedOrig = entry.original.replace(/\[[^\]]*\]/g, '').replace(/\{[^}]*\}/g, '');
+      if (arabicRegex.test(strippedOrig)) {
         if (hasArabicPresentationForms(entry.original)) continue;
         const existingTranslation = mergedTranslations[key]?.trim();
         if (existingTranslation && existingTranslation !== entry.original && existingTranslation !== entry.original.trim()) {
@@ -632,7 +640,9 @@ export function useEditorState() {
         translation.includes(search);
       const matchFile = filterFile === "all" || e.msbtFile === filterFile;
       const isBdat = /^.+?\[\d+\]\./.test(e.label);
-      const matchCategory = filterCategory.length === 0 || filterCategory.includes(categorizeFile(e.msbtFile));
+      const catSourceFile = e.msbtFile.startsWith('bdat-bin:') ? e.msbtFile.split(':')[1] : e.msbtFile.startsWith('bdat:') ? e.msbtFile.slice(5) : undefined;
+      const entryCat = isBdat ? categorizeBdatTable(e.label, catSourceFile) : currentGameType === 'animal-crossing' ? categorizeACNHFile(e.msbtFile) : categorizeFile(e.msbtFile);
+      const matchCategory = filterCategory.length === 0 || filterCategory.includes(entryCat);
       const matchStatus = 
         filterStatus === "all" || 
         (filterStatus === "translated" && isTranslated) ||
@@ -658,7 +668,7 @@ export function useEditorState() {
       const matchColumn = filterColumn === "all" || (labelMatch && labelMatch[3] === filterColumn);
       return matchSearch && matchFile && matchCategory && matchStatus && matchTechnical && matchTable && matchColumn;
     });
-  }, [state, search, filterFile, filterCategory, filterStatus, filterTechnical, filterTable, filterColumn, qualityStats.problemKeys, needsImprovement, isTranslationTooShort, isTranslationTooLong, hasStuckChars, isMixedLanguage, pinnedKeys]);
+  }, [state, search, filterFile, filterCategory, filterStatus, filterTechnical, filterTable, filterColumn, qualityStats.problemKeys, needsImprovement, isTranslationTooShort, isTranslationTooLong, hasStuckChars, isMixedLanguage, pinnedKeys, currentGameType]);
 
   useEffect(() => { setCurrentPage(0); }, [search, filterFile, filterCategory, filterStatus, filterTechnical, filterTable, filterColumn]);
 
@@ -2240,35 +2250,53 @@ export function useEditorState() {
           { url: `${baseUrl}/STR_Race.csv`, category: "Species" },
         ];
 
-        const results = await Promise.allSettled(
-          csvFiles.map(async ({ url, category }) => {
-            const res = await fetch(url);
-            if (!res.ok) return [];
-            const text = await res.text();
-            const lines = text.split('\n').filter(l => l.trim());
-            // Skip header (first line)
-            return lines.slice(1).map(line => {
-              const parts = line.split(';');
-              const label = parts[0] || '';
-              const english = parts[1] || '';
-              const japanese = parts[12] || '';
-              return { category, label, english: english.trim(), japanese: japanese.trim() };
-            }).filter(e => e.english);
-          })
-        );
+        // Try loading from cache first (offline support)
+        const cachedData = await idbGet<Array<{ category: string; label: string; english: string; japanese: string }>>('acnh-csv-cache');
+        let allItems: Array<{ category: string; label: string; english: string; japanese: string }> = [];
 
-        for (const result of results) {
-          if (result.status === 'fulfilled') {
-            for (const item of result.value) {
-              entries.push({
-                msbtFile: item.category,
-                index: entries.length,
-                label: item.label,
-                original: item.japanese ? `${item.english}\n(${item.japanese})` : item.english,
-                maxBytes: 0,
-              });
+        if (cachedData && cachedData.length > 0) {
+          // Use cached data (works offline)
+          allItems = cachedData;
+          console.log(`[ACNH] Loaded ${cachedData.length} entries from offline cache`);
+        } else {
+          // Fetch from network
+          const results = await Promise.allSettled(
+            csvFiles.map(async ({ url, category }) => {
+              const res = await fetch(url);
+              if (!res.ok) return [];
+              const text = await res.text();
+              const lines = text.split('\n').filter(l => l.trim());
+              return lines.slice(1).map(line => {
+                const parts = line.split(';');
+                const label = parts[0] || '';
+                const english = parts[1] || '';
+                const japanese = parts[12] || '';
+                return { category, label, english: english.trim(), japanese: japanese.trim() };
+              }).filter(e => e.english);
+            })
+          );
+
+          for (const result of results) {
+            if (result.status === 'fulfilled') {
+              allItems.push(...result.value);
             }
           }
+
+          // Cache for offline use
+          if (allItems.length > 0) {
+            await idbSet('acnh-csv-cache', allItems);
+            console.log(`[ACNH] Cached ${allItems.length} entries for offline use`);
+          }
+        }
+
+        for (const item of allItems) {
+          entries.push({
+            msbtFile: item.category,
+            index: entries.length,
+            label: item.label,
+            original: item.japanese ? `${item.english}\n(${item.japanese})` : item.english,
+            maxBytes: 0,
+          });
         }
       } else {
         toast({ title: "❌ لعبة غير معروفة", variant: "destructive" });
