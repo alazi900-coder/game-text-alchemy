@@ -57,6 +57,7 @@ function decodeUtf16(bytes: Uint8Array, le: boolean): string {
       // Control tag: group(2) + type(2) + paramSize(2) + params(paramSize)
       i += 2; // skip group
       i += 2; // skip type
+      i += 2; // advance to paramSize field
       if (i + 1 < bytes.length) {
         const paramSize = le ? (bytes[i] | (bytes[i + 1] << 8)) : ((bytes[i] << 8) | bytes[i + 1]);
         i += paramSize; // skip params (loop will add 2)
