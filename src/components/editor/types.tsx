@@ -227,16 +227,59 @@ export function displayOriginal(text: string): React.ReactNode {
       const tagType = inner.split(':')[0];
       const tagValue = inner.split(':').slice(1).join(':').trim();
       const isMsbt = tagType === 'MSBT';
+
+      // MSBT tag tooltip descriptions in Arabic
+      const msbtTooltips: Record<string, string> = {
+        'Ruby': 'نص فوقي (روبي) — لا تحذفه',
+        'Size': 'حجم الخط — لا تحذفه',
+        'Color': 'لون النص — لا تحذفه',
+        'PageBreak': 'فاصل صفحات — لا تحذفه',
+        'Delay': 'تأخير عرض النص — لا تحذفه',
+        'Variable': 'متغير (اسم اللاعب، عدد، عنصر) — لا تحذفه',
+        'Number': 'رقم متغير — لا تحذفه',
+        'String': 'نص متغير — لا تحذفه',
+        'Condition': 'شرط برمجي — لا تحذفه',
+        'Choice': 'خيار حوار — لا تحذفه',
+        'Sound': 'مؤثر صوتي — لا تحذفه',
+        'Animation': 'رسوم متحركة — لا تحذفه',
+      };
+
+      // Color based on tag type
+      const msbtTagColors: Record<string, string> = {
+        'Color': 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+        'Size': 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+        'Ruby': 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+        'PageBreak': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+        'Delay': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+        'Variable': 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+        'Number': 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+        'String': 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+        'Condition': 'bg-red-500/20 text-red-400 border-red-500/30',
+        'Choice': 'bg-red-500/20 text-red-400 border-red-500/30',
+        'Sound': 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+        'Animation': 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+      };
+
       const badgeColor = isEnd
         ? 'bg-orange-500/20 text-orange-400 border-orange-500/30'
-        : isMsbt
-          ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-          : 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+        : isMsbt && msbtTagColors[tagValue]
+          ? msbtTagColors[tagValue]
+          : isMsbt
+            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+            : 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+
       const badgeLabel = isEnd
         ? `/${tagValue || tagType}`
         : isMsbt
           ? tagValue || tagType
           : `[${tagType}]${mlCounter}`;
+
+      const tooltipText = isEnd
+        ? 'نهاية وسم — لا تحذفه'
+        : isMsbt && msbtTooltips[tagValue]
+          ? msbtTooltips[tagValue]
+          : 'وسم محرك اللعبة — لا تحذفه أو تعدّله';
+
       elements.push(
         <Tooltip key={keyIdx++}>
           <TooltipTrigger asChild>
@@ -246,7 +289,7 @@ export function displayOriginal(text: string): React.ReactNode {
           </TooltipTrigger>
           <TooltipContent side="top" className="max-w-xs text-xs">
             <div className="font-mono text-[10px] opacity-70">{part}</div>
-            <div>{isEnd ? '\u0646\u0647\u0627\u064A\u0629 \u0648\u0633\u0645 \u2014 \u0644\u0627 \u062A\u062D\u0630\u0641\u0647' : '\u0648\u0633\u0645 \u0645\u062D\u0631\u0643 \u0627\u0644\u0644\u0639\u0628\u0629 \u2014 \u0644\u0627 \u062A\u062D\u0630\u0641\u0647 \u0623\u0648 \u062A\u0639\u062F\u0651\u0644\u0647'}</div>
+            <div>{tooltipText}</div>
           </TooltipContent>
         </Tooltip>
       );
