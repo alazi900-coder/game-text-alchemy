@@ -1,5 +1,5 @@
 import { forwardRef } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Shield, FileText, Download, Sparkles, FolderOpen } from "lucide-react";
 import GameInfoSection from "@/components/GameInfoSection";
@@ -103,14 +103,6 @@ const filePaths = [
 ];
 
 const Xenoblade = forwardRef<HTMLDivElement>((_, ref) => {
-  const navigate = useNavigate();
-
-  const handleLoadEnglishTexts = async () => {
-    const { idbSet } = await import("@/lib/idb-storage");
-    await idbSet("editorGame", "xenoblade");
-    navigate("/editor?autoload=xenoblade");
-  };
-
   return (
     <div ref={ref} className="min-h-screen flex flex-col">
       {/* Hero with background */}
@@ -150,10 +142,6 @@ const Xenoblade = forwardRef<HTMLDivElement>((_, ref) => {
                 ابدأ التعريب 🔮
               </Button>
             </Link>
-            <Button size="lg" variant="outline" className="font-display font-bold text-lg px-10 py-6 border-primary/40 hover:bg-primary/10" onClick={handleLoadEnglishTexts}>
-              <Download className="w-5 h-5 ml-2" />
-              تحميل النصوص الإنجليزية 📥
-            </Button>
             <Link to="/mod-packager">
               <Button size="lg" variant="outline" className="font-display font-bold text-lg px-10 py-6 border-primary/40 hover:bg-primary/10">
                 بناء حزمة المود 📦
