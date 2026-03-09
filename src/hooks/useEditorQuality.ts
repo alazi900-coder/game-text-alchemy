@@ -23,6 +23,7 @@ export interface NeedsImproveCount {
 
 interface UseEditorQualityProps {
   state: EditorState | null;
+  gameType?: string;
 }
 
 export function useEditorQuality({ state }: UseEditorQualityProps) {
