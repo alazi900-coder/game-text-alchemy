@@ -495,20 +495,33 @@ export function displayOriginal(text: string): React.ReactNode {
     const firstCode = part.charCodeAt(0);
 
     // [Tag:Value] format tags (e.g. [ML:undisp ], [ML:Feeling ])
-    if (/^\[\w+:[^\]]*\]$/.test(part)) {
+    if (/^\[\/?\w+:[^\]]*\]$/.test(part)) {
       mlCounter++;
-      const tagContent = part.slice(1, -1); // Remove brackets
-      const tagType = tagContent.split(':')[0]; // e.g. "ML"
+      const isEnd = part.startsWith('[/');
+      const inner = isEnd ? part.slice(2, -1) : part.slice(1, -1);
+      const tagType = inner.split(':')[0]; // e.g. "MSBT" or "ML"
+      const tagValue = inner.split(':').slice(1).join(':').trim();
+      const isMsbt = tagType === 'MSBT';
+      const badgeColor = isEnd
+        ? 'bg-orange-500/20 text-orange-400 border-orange-500/30'
+        : isMsbt
+          ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+          : 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+      const badgeLabel = isEnd
+        ? `/${tagValue || tagType}`
+        : isMsbt
+          ? tagValue || tagType
+          : `[${tagType}]${mlCounter}`;
       elements.push(
         <Tooltip key={keyIdx++}>
           <TooltipTrigger asChild>
-            <span className="inline-block px-1 rounded border text-xs cursor-help mx-0.5 bg-purple-500/20 text-purple-400 border-purple-500/30">
-              [{tagType}]{mlCounter > 0 ? mlCounter : ''}
+            <span className={`inline-block px-1 rounded border text-xs cursor-help mx-0.5 ${badgeColor}`}>
+              {badgeLabel}
             </span>
           </TooltipTrigger>
           <TooltipContent side="top" className="max-w-xs text-xs">
             <div className="font-mono text-[10px] opacity-70">{part}</div>
-            <div>وسم محرك اللعبة — لا تحذفه أو تعدّله</div>
+            <div>{isEnd ? 'نهاية وسم — لا تحذفه' : 'وسم محرك اللعبة — لا تحذفه أو تعدّله'}</div>
           </TooltipContent>
         </Tooltip>
       );
