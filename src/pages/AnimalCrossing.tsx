@@ -1,4 +1,4 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { FileText, Download, Shield, Sparkles } from "lucide-react";
 import GameInfoSection from "@/components/GameInfoSection";
