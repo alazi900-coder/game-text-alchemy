@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { protectTags, restoreTags } from "@/lib/xc3-tag-protection";
+import { protectTags, restoreTags } from "@/lib/tag-protection";
 
 describe("Translation edge cases", () => {
   it("handles empty translation text", () => {

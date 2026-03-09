@@ -24,8 +24,7 @@ import {
   BarChart3, Menu, MoreVertical, Replace, Columns, Key, Type, Trash2, Package, Wand2,
   Lock, Unlock, Rows3, Languages, StopCircle,
 } from "lucide-react";
-import xc3HeroBg from "@/assets/xc3-hero-bg.jpg";
-import acHeroBg from "@/assets/acnh-hero-bg.jpg";
+import acnhHeroBg from "@/assets/acnh-hero-bg.jpg";
 import feHeroBg from "@/assets/fe-hero-bg.jpg";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -49,7 +48,6 @@ import DiffView from "@/components/editor/DiffView";
 import BuildStatsDialog from "@/components/editor/BuildStatsDialog";
 import BuildConfirmDialog from "@/components/editor/BuildConfirmDialog";
 import ConsistencyResultsPanel from "@/components/editor/ConsistencyResultsPanel";
-import BdatBuildReport from "@/components/editor/BdatBuildReport";
 import IntegrityCheckDialog from "@/components/editor/IntegrityCheckDialog";
 import PreBuildDiagnostic from "@/components/editor/PreBuildDiagnostic";
 import CompareEnginesDialog from "@/components/editor/CompareEnginesDialog";
@@ -87,7 +85,7 @@ import ConsistencyCheckPanel from "@/components/editor/ConsistencyCheckPanel";
 import { useEditorKeyboard } from "@/hooks/useEditorKeyboard";
 import VirtualizedEntryList from "@/components/editor/VirtualizedEntryList";
 
-type GameId = "xenoblade" | "animal-crossing" | "fire-emblem";
+type GameId = "animal-crossing" | "fire-emblem";
 
 interface GameConfig {
   id: GameId;
@@ -100,20 +98,11 @@ interface GameConfig {
 }
 
 const GAME_CONFIGS: Record<GameId, GameConfig> = {
-  xenoblade: {
-    id: "xenoblade",
-    title: "Xenoblade Chronicles 3",
-    emoji: "⚔️",
-    heroBg: xc3HeroBg,
-    processPath: "/process",
-    fileLabel: "ملفات BDAT",
-    fileFormat: "BDAT",
-  },
   "animal-crossing": {
     id: "animal-crossing",
     title: "Animal Crossing: NH",
     emoji: "🌿",
-    heroBg: acHeroBg,
+    heroBg: acnhHeroBg,
     processPath: "/animal-crossing/process",
     fileLabel: "ملفات MSBT",
     fileFormat: "MSBT",
@@ -145,7 +134,7 @@ const Editor = () => {
   const [fontTestWord, setFontTestWord] = React.useState("");
   const [pageLocked, setPageLocked] = React.useState(false);
   const [showToolHelp, setShowToolHelp] = React.useState<ToolType>(null);
-  const [detectedGame, setDetectedGame] = React.useState<GameId>("xenoblade");
+  const [detectedGame, setDetectedGame] = React.useState<GameId>("animal-crossing");
 
   // Detect game from IDB + handle autoload URL param
   React.useEffect(() => {
@@ -312,11 +301,6 @@ const Editor = () => {
               <Button variant="secondary" className="font-display" onClick={() => editor.loadGameEnglishTexts(gameType)}>
                 <Download className="w-4 h-4" /> تحميل النصوص الإنجليزية 📥
               </Button>
-              {gameType === "xenoblade" && (
-                <Button variant="outline" className="font-display" onClick={editor.loadDemoBdatData}>
-                  تحميل بيانات BDAT تجريبية
-                </Button>
-              )}
               <Link to="/"><Button variant="ghost" className="font-display">🏠 العودة للرئيسية</Button></Link>
             </div>
           </div>
@@ -738,9 +722,6 @@ const Editor = () => {
                 <div className="text-center">{editor.buildProgress}
                   {editor.buildStats && <span className="text-xs text-muted-foreground mr-2"> (اضغط للتفاصيل)</span>}
                 </div>
-                {editor.bdatFileStats && editor.bdatFileStats.length > 0 && (
-                  <BdatBuildReport stats={editor.bdatFileStats} />
-                )}
                 {!editor.building && (
                   <div className="flex justify-center mt-3">
                     <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); editor.dismissBuildProgress(); }} className="font-display">
@@ -1467,14 +1448,6 @@ const Editor = () => {
                 <DropdownMenuContent align="end" className="bg-card border-border z-[100] min-w-[200px]">
                   <DropdownMenuLabel className="text-xs">📖 تحميل قاموس</DropdownMenuLabel>
                   <DropdownMenuItem onClick={editor.handleImportGlossary}><BookOpen className="w-4 h-4" /> قاموس مخصص (.txt)</DropdownMenuItem>
-                  {gameType === "xenoblade" && (
-                    <>
-                      <DropdownMenuItem onClick={editor.handleLoadXC3Glossary}>🎮 قاموس Xenoblade المدمج</DropdownMenuItem>
-                      <DropdownMenuItem onClick={editor.handleLoadUIMenusGlossary}>📋 قاموس القوائم والواجهة</DropdownMenuItem>
-                      <DropdownMenuItem onClick={editor.handleLoadFullGlossary}>📚 القاموس الشامل (شخصيات + مواقع + مصطلحات)</DropdownMenuItem>
-                      <DropdownMenuItem onClick={editor.handleLoadCombatGlossary}>⚔️ قاموس القتال والتأثيرات</DropdownMenuItem>
-                    </>
-                  )}
                   {gameType === "animal-crossing" && (
                     <DropdownMenuItem onClick={editor.handleImportGlossary}>🌿 قاموس Animal Crossing (.txt)</DropdownMenuItem>
                   )}
@@ -1485,17 +1458,6 @@ const Editor = () => {
                   <DropdownMenuLabel className="text-xs">🔄 إنشاء تلقائي</DropdownMenuLabel>
                   <DropdownMenuItem onClick={editor.handleGenerateGlossaryFromTranslations}>✨ إنشاء قاموس من الترجمات</DropdownMenuItem>
                   <DropdownMenuItem onClick={editor.handleFixGlossaryIssues}>🔧 إصلاح مشاكل القاموس</DropdownMenuItem>
-                  <DropdownMenuItem onClick={editor.handleScanGlossaryDuplicates}>🔍 فحص التكرارات المتعارضة</DropdownMenuItem>
-                  {gameType === "xenoblade" && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuLabel className="text-xs">📤 تصدير أقسام</DropdownMenuLabel>
-                      <DropdownMenuItem onClick={editor.handleExportSkillsGlossary}>⚔️ تصدير المهارات والفنون فقط</DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuLabel className="text-xs">🔀 دمج ذكي</DropdownMenuLabel>
-                      <DropdownMenuItem onClick={editor.handleSmartMergeGlossaries}>🔍 مقارنة قاموس القتال مع الشامل</DropdownMenuItem>
-                    </>
-                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuLabel className="text-xs">☁️ مزامنة سحابية</DropdownMenuLabel>
                   <DropdownMenuItem onClick={editor.handleSaveGlossaryToCloud} disabled={!editor.user || editor.cloudSyncing}><CloudUpload className="w-4 h-4" /> حفظ القاموس</DropdownMenuItem>
@@ -1728,14 +1690,6 @@ const Editor = () => {
                 <DropdownMenuContent align="start" className="bg-card border-border z-50 min-w-[220px]">
                   <DropdownMenuLabel className="text-xs">📖 تحميل قاموس</DropdownMenuLabel>
                   <DropdownMenuItem onClick={editor.handleImportGlossary}><BookOpen className="w-4 h-4" /> تحميل قاموس مخصص (.txt)</DropdownMenuItem>
-                  {gameType === "xenoblade" && (
-                    <>
-                      <DropdownMenuItem onClick={editor.handleLoadXC3Glossary}>🎮 قاموس Xenoblade المدمج</DropdownMenuItem>
-                      <DropdownMenuItem onClick={editor.handleLoadUIMenusGlossary}>📋 قاموس القوائم والواجهة</DropdownMenuItem>
-                      <DropdownMenuItem onClick={editor.handleLoadFullGlossary}>📚 القاموس الشامل (شخصيات + مواقع + مصطلحات)</DropdownMenuItem>
-                      <DropdownMenuItem onClick={editor.handleLoadCombatGlossary}>⚔️ قاموس القتال والتأثيرات</DropdownMenuItem>
-                    </>
-                  )}
                   {gameType === "animal-crossing" && (
                     <DropdownMenuItem onClick={editor.handleImportGlossary}>🌿 قاموس Animal Crossing (.txt)</DropdownMenuItem>
                   )}
