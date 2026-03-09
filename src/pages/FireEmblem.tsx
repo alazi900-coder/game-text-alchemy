@@ -94,8 +94,6 @@ const filePaths = [
 ];
 
 export default function FireEmblem() {
-  const navigate = useNavigate();
-
 
   return (
     <div className="min-h-screen flex flex-col">

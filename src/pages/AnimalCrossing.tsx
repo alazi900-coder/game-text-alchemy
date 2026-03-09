@@ -84,8 +84,6 @@ const filePaths = [
 ];
 
 export default function AnimalCrossing() {
-  const navigate = useNavigate();
-
 
   return (
     <div className="min-h-screen flex flex-col">
