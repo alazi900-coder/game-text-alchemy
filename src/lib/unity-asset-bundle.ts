@@ -1,10 +1,17 @@
 /**
  * Unity AssetBundle (UnityFS) parser for browser.
- * Supports UnityFS format version 6/7 with LZ4 and uncompressed blocks.
+ * Supports UnityFS format version 6/7 with LZ4, Zstd, and uncompressed blocks.
  * Designed to extract and REPACK TextAsset (.bytes) entries — e.g., MSBT files inside Fire Emblem Engage bundles.
  */
 
 import lz4 from "lz4js";
+import { init as initZstd, ZstdStream } from "@bokuweb/zstd-wasm";
+
+let zstdReady: Promise<void> | null = null;
+function ensureZstd() {
+  if (!zstdReady) zstdReady = initZstd();
+  return zstdReady;
+}
 
 /* ───────── Binary Reader ───────── */
 class BinaryReader {
