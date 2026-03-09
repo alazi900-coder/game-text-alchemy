@@ -24,7 +24,7 @@ import {
   BarChart3, Menu, MoreVertical, Replace, Columns, Key, Type, Trash2, Package, Wand2,
   Lock, Unlock, Rows3, Languages, StopCircle,
 } from "lucide-react";
-;
+import acnhHeroBg from "@/assets/acnh-hero-bg.jpg";
 import feHeroBg from "@/assets/fe-hero-bg.jpg";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
