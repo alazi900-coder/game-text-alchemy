@@ -1,7 +1,7 @@
 /**
  * Unity AssetBundle (UnityFS) parser for browser.
  * Supports UnityFS format version 6/7 with LZ4 and uncompressed blocks.
- * Designed to extract TextAsset (.bytes) entries — e.g., MSBT files inside Fire Emblem Engage bundles.
+ * Designed to extract and REPACK TextAsset (.bytes) entries — e.g., MSBT files inside Fire Emblem Engage bundles.
  */
 
 import lz4 from "lz4js";
@@ -49,6 +49,49 @@ class BinaryReader {
   }
 }
 
+/* ───────── Binary Writer ───────── */
+class BinaryWriter {
+  private buf: Uint8Array;
+  private view: DataView;
+  private pos = 0;
+  private le: boolean;
+
+  constructor(initialSize = 65536, littleEndian = false) {
+    this.buf = new Uint8Array(initialSize);
+    this.view = new DataView(this.buf.buffer);
+    this.le = littleEndian;
+  }
+
+  private ensure(n: number) {
+    while (this.pos + n > this.buf.length) {
+      const next = new Uint8Array(this.buf.length * 2);
+      next.set(this.buf);
+      this.buf = next;
+      this.view = new DataView(this.buf.buffer);
+    }
+  }
+
+  get position() { return this.pos; }
+  set position(v: number) { this.pos = v; }
+
+  writeU8(v: number) { this.ensure(1); this.view.setUint8(this.pos, v); this.pos += 1; }
+  writeU16(v: number) { this.ensure(2); this.view.setUint16(this.pos, v, this.le); this.pos += 2; }
+  writeU32(v: number) { this.ensure(4); this.view.setUint32(this.pos, v, this.le); this.pos += 4; }
+  writeI32(v: number) { this.ensure(4); this.view.setInt32(this.pos, v, this.le); this.pos += 4; }
+  writeU64(v: bigint) { this.ensure(8); this.view.setBigUint64(this.pos, v, this.le); this.pos += 8; }
+
+  writeBytes(data: Uint8Array) { this.ensure(data.length); this.buf.set(data, this.pos); this.pos += data.length; }
+  writeNullTermString(s: string) { const b = new TextEncoder().encode(s); this.writeBytes(b); this.writeU8(0); }
+  
+  align(n: number) { const m = this.pos % n; if (m) { const pad = n - m; this.ensure(pad); this.pos += pad; } }
+
+  // Patch a U32 at a specific position without advancing pos
+  patchU32(offset: number, value: number) { this.view.setUint32(offset, value, this.le); }
+  patchU64(offset: number, value: bigint) { this.view.setBigUint64(offset, value, this.le); }
+
+  toUint8Array(): Uint8Array { return new Uint8Array(this.buf.buffer, 0, this.pos); }
+}
+
 /* ───────── Types ───────── */
 export interface UnityBundleInfo {
   signature: string;
@@ -58,6 +101,10 @@ export interface UnityBundleInfo {
   totalSize: bigint;
   blocks: BlockInfo[];
   entries: DirectoryEntry[];
+  /** Offset where data blocks start in the original file */
+  dataOffset: number;
+  /** Original header flags */
+  flags: number;
 }
 
 interface BlockInfo {
@@ -76,8 +123,18 @@ export interface DirectoryEntry {
 export interface ExtractedAsset {
   name: string;
   data: Uint8Array;
-  type: string; // "TextAsset", "unknown", etc.
+  type: string;
   pathId: bigint;
+  /** Index of the directory entry this asset belongs to */
+  entryIndex: number;
+  /** Absolute byte offset of this asset's DATA (not header) within the decompressed stream */
+  absoluteDataOffset: number;
+  /** Total byte size of this object in the serialized file */
+  objectByteSize: number;
+  /** For TextAssets: offset of the data length prefix within the entry's serialized file */
+  textAssetDataLenOffset: number;
+  /** For TextAssets: offset of the actual data bytes within the entry's serialized file */
+  textAssetDataBytesOffset: number;
 }
 
 /* ───────── Compression helpers ───────── */
@@ -107,7 +164,6 @@ function decompressBlock(compressed: Uint8Array, decompressedSize: number, compr
 export function parseUnityBundle(buffer: ArrayBuffer): UnityBundleInfo {
   const r = new BinaryReader(buffer);
 
-  // Signature
   const signature = r.readNullTermString();
   if (signature !== "UnityFS") {
     throw new Error(`تنسيق غير مدعوم: "${signature}" — المتوقع "UnityFS"`);
@@ -121,14 +177,12 @@ export function parseUnityBundle(buffer: ArrayBuffer): UnityBundleInfo {
   const decompressedBlockInfoSize = r.readU32();
   const flags = r.readU32();
 
-  // Block info location
   const blockInfoAtEnd = (flags & 0x80) !== 0;
   const compressionType = flags & 0x3F;
 
   let blockInfoData: Uint8Array;
 
   if (blockInfoAtEnd) {
-    // Block info is at the end of the file
     const savedPos = r.position;
     r.position = r.length - compressedBlockInfoSize;
     const compressed = r.readBytes(compressedBlockInfoSize);
@@ -139,9 +193,16 @@ export function parseUnityBundle(buffer: ArrayBuffer): UnityBundleInfo {
     blockInfoData = decompressBlock(compressed, decompressedBlockInfoSize, compressionType);
   }
 
+  // Align to 16 bytes if flag is set
+  if ((flags & 0x100) !== 0) {
+    r.align(16);
+  }
+
+  const dataOffset = r.position;
+
   // Parse block info
   const br = new BinaryReader(blockInfoData.buffer as ArrayBuffer);
-  br.skip(16); // uncompressed data hash (16 bytes)
+  br.skip(16); // uncompressed data hash
   const blockCount = br.readU32();
 
   const blocks: BlockInfo[] = [];
@@ -153,7 +214,6 @@ export function parseUnityBundle(buffer: ArrayBuffer): UnityBundleInfo {
     });
   }
 
-  // Parse directory entries
   const entryCount = br.readU32();
   const entries: DirectoryEntry[] = [];
   for (let i = 0; i < entryCount; i++) {
@@ -165,42 +225,15 @@ export function parseUnityBundle(buffer: ArrayBuffer): UnityBundleInfo {
     });
   }
 
-  return { signature, formatVersion, unityVersion, generatorVersion, totalSize, blocks, entries };
+  return { signature, formatVersion, unityVersion, generatorVersion, totalSize, blocks, entries, dataOffset, flags };
 }
 
 /* ───────── Decompress all blocks into a single data stream ───────── */
 export function decompressBundle(buffer: ArrayBuffer, info: UnityBundleInfo): Uint8Array {
-  const r = new BinaryReader(buffer);
-
-  // Find where data blocks start
-  // Re-read header to find data offset
-  r.position = 0;
-  r.readNullTermString(); // signature
-  r.readU32(); // format version
-  r.readNullTermString(); // unity version
-  r.readNullTermString(); // generator version
-  r.readU64(); // total size
-  const compressedBlockInfoSize = r.readU32();
-  r.readU32(); // decompressed size
-  const flags = r.readU32();
-
-  const blockInfoAtEnd = (flags & 0x80) !== 0;
-  if (!blockInfoAtEnd) {
-    r.skip(compressedBlockInfoSize);
-  }
-
-  // Align to 16 bytes if flag is set
-  if ((flags & 0x100) !== 0) {
-    r.align(16);
-  }
-
-  const dataOffset = r.position;
-
-  // Calculate total decompressed size
   const totalDecompressed = info.blocks.reduce((sum, b) => sum + b.decompressedSize, 0);
   const output = new Uint8Array(totalDecompressed);
   let outPos = 0;
-  let readPos = dataOffset;
+  let readPos = info.dataOffset;
 
   for (const block of info.blocks) {
     const compressed = new Uint8Array(buffer, readPos, block.compressedSize);
@@ -218,22 +251,20 @@ export function decompressBundle(buffer: ArrayBuffer, info: UnityBundleInfo): Ui
 export function extractAssets(decompressedData: Uint8Array, info: UnityBundleInfo): ExtractedAsset[] {
   const assets: ExtractedAsset[] = [];
 
-  for (const entry of info.entries) {
-    const offset = Number(entry.offset);
+  for (let ei = 0; ei < info.entries.length; ei++) {
+    const entry = info.entries[ei];
+    const entryOffset = Number(entry.offset);
     const size = Number(entry.decompressedSize);
-    const entryData = decompressedData.slice(offset, offset + size);
+    const entryData = decompressedData.slice(entryOffset, entryOffset + size);
 
-    // Try to parse as a serialized file to extract TextAssets
     try {
-      const parsed = parseSerializedFile(entryData);
+      const parsed = parseSerializedFile(entryData, ei, entryOffset);
       assets.push(...parsed);
     } catch {
-      // If parsing fails, just add as raw entry
       assets.push({
-        name: entry.name,
-        data: entryData,
-        type: "raw",
-        pathId: BigInt(0),
+        name: entry.name, data: entryData, type: "raw", pathId: BigInt(0),
+        entryIndex: ei, absoluteDataOffset: entryOffset, objectByteSize: size,
+        textAssetDataLenOffset: -1, textAssetDataBytesOffset: -1,
       });
     }
   }
@@ -242,82 +273,65 @@ export function extractAssets(decompressedData: Uint8Array, info: UnityBundleInf
 }
 
 /* ───────── Parse Unity Serialized File ───────── */
-function parseSerializedFile(data: Uint8Array): ExtractedAsset[] {
+function parseSerializedFile(data: Uint8Array, entryIndex: number, entryAbsoluteOffset: number): ExtractedAsset[] {
   const assets: ExtractedAsset[] = [];
   const r = new BinaryReader((data.buffer as ArrayBuffer).slice(data.byteOffset, data.byteOffset + data.byteLength));
 
-  // Read serialized file header
   const metadataSize = r.readU32();
   const fileSize = r.readU32();
   const version = r.readU32();
   const dataOffset = r.readU32();
 
   if (version < 9 || version > 50) {
-    // Not a recognized serialized file, return as raw
-    return [{ name: "unknown", data, type: "raw", pathId: BigInt(0) }];
+    return [{
+      name: "unknown", data, type: "raw", pathId: BigInt(0),
+      entryIndex, absoluteDataOffset: entryAbsoluteOffset, objectByteSize: data.length,
+      textAssetDataLenOffset: -1, textAssetDataBytesOffset: -1,
+    }];
   }
 
-  // Version >= 9: endianness byte
-  let bigEndian = true;
   if (version >= 9) {
-    bigEndian = r.readU8() !== 0;
-    r.skip(3); // reserved
+    r.readU8(); // bigEndian
+    r.skip(3);
   }
 
-  // For version >= 14, there's additional data
   if (version >= 14) {
-    r.readU32(); // metadata size (again, 64-bit)
-    r.readU32(); // file size low
-    r.readU32(); // file size high  
-    r.readU32(); // data offset
-    r.readU32(); // unknown
+    r.readU32(); r.readU32(); r.readU32(); r.readU32(); r.readU32();
   }
 
-  // Read unity version string
-  if (version >= 7) {
-    const unityVer = r.readNullTermString();
-  }
+  if (version >= 7) { r.readNullTermString(); }
 
-  // Platform
-  if (version >= 8) {
-    // Switch endianness based on reading
-  }
   const platform = r.readU32();
 
-  // Type tree
   if (version >= 13) {
     const hasTypeTree = r.readU8() !== 0;
     const typeCount = r.readU32();
 
     for (let i = 0; i < typeCount; i++) {
       const classId = r.readI32();
-      if (version >= 16) r.readU8(); // isStrippedType
-      if (version >= 17) r.readU16(); // scriptTypeIndex
-      
+      if (version >= 16) r.readU8();
+      if (version >= 17) r.readU16();
+
       if (version >= 13) {
         if ((version < 16 && classId < 0) || (version >= 16 && classId === 114)) {
-          r.skip(16); // scriptID hash
+          r.skip(16);
         }
-        r.skip(16); // old type hash
+        r.skip(16);
       }
 
       if (hasTypeTree) {
-        // Skip type tree nodes
         const nodeCount = r.readU32();
         const stringBufferSize = r.readU32();
-        r.skip(nodeCount * 24); // nodes
+        r.skip(nodeCount * 24);
         r.skip(stringBufferSize);
       }
 
-      if (version >= 21) {
-        r.skip(4); // type dependencies
-      }
+      if (version >= 21) { r.skip(4); }
     }
   }
 
-  // Object info
   const objectCount = r.readU32();
-  
+
   interface ObjectInfo {
     pathId: bigint;
     byteStart: number;
@@ -330,193 +344,351 @@ function parseSerializedFile(data: Uint8Array): ExtractedAsset[] {
 
   for (let i = 0; i < objectCount; i++) {
     if (version >= 14) r.align(4);
-
     let pathId: bigint;
-    if (version >= 14) {
-      pathId = r.readU64();
-    } else {
-      pathId = BigInt(r.readU32());
-    }
-
+    if (version >= 14) { pathId = r.readU64(); } else { pathId = BigInt(r.readU32()); }
     let byteStart: number;
-    if (version >= 22) {
-      byteStart = Number(r.readU64());
-    } else {
-      byteStart = r.readU32();
-    }
-
+    if (version >= 22) { byteStart = Number(r.readU64()); } else { byteStart = r.readU32(); }
     const byteSize = r.readU32();
     const typeId = r.readU32();
-
     let classId = typeId;
-    if (version < 16) {
-      classId = r.readU16();
-      r.skip(2); // isDestroyed
-    }
-    if (version >= 15 && version < 17) {
-      r.readU8(); // stripped
-    }
-
+    if (version < 16) { classId = r.readU16(); r.skip(2); }
+    if (version >= 15 && version < 17) { r.readU8(); }
     objects.push({ pathId, byteStart: byteStart + dataOffset, byteSize, typeId, classId });
   }
 
-  // Extract TextAssets (classId 49) and raw bytes
   for (const obj of objects) {
     if (obj.byteStart + obj.byteSize > data.length) continue;
-    
-    const objData = data.slice(obj.byteStart, obj.byteStart + obj.byteSize);
 
-    // TextAsset classId = 49
+    const objData = data.slice(obj.byteStart, obj.byteStart + obj.byteSize);
+    const absObjOffset = entryAbsoluteOffset + obj.byteStart;
+
     if (obj.typeId === 49 || obj.classId === 49) {
       try {
-        const textAsset = parseTextAsset(objData);
+        const textAsset = parseTextAssetWithOffsets(objData);
         assets.push({
           name: textAsset.name,
           data: textAsset.data,
           type: "TextAsset",
           pathId: obj.pathId,
+          entryIndex,
+          absoluteDataOffset: absObjOffset,
+          objectByteSize: obj.byteSize,
+          textAssetDataLenOffset: obj.byteStart + textAsset.dataLenOffset,
+          textAssetDataBytesOffset: obj.byteStart + textAsset.dataBytesOffset,
         });
       } catch {
-        assets.push({ name: `object_${obj.pathId}`, data: objData, type: "TextAsset", pathId: obj.pathId });
+        assets.push({
+          name: `object_${obj.pathId}`, data: objData, type: "TextAsset", pathId: obj.pathId,
+          entryIndex, absoluteDataOffset: absObjOffset, objectByteSize: obj.byteSize,
+          textAssetDataLenOffset: -1, textAssetDataBytesOffset: -1,
+        });
       }
     } else {
-      // Check if it looks like MSBT
       if (objData.length >= 8) {
         const magic = new TextDecoder().decode(objData.slice(0, 8));
         if (magic === "MsgStdBn") {
-          assets.push({ name: `msbt_${obj.pathId}`, data: objData, type: "TextAsset", pathId: obj.pathId });
+          assets.push({
+            name: `msbt_${obj.pathId}`, data: objData, type: "TextAsset", pathId: obj.pathId,
+            entryIndex, absoluteDataOffset: absObjOffset, objectByteSize: obj.byteSize,
+            textAssetDataLenOffset: -1, textAssetDataBytesOffset: -1,
+          });
           continue;
         }
       }
-      assets.push({ name: `object_${obj.pathId}`, data: objData, type: `class_${obj.classId}`, pathId: obj.pathId });
+      assets.push({
+        name: `object_${obj.pathId}`, data: objData, type: `class_${obj.classId}`, pathId: obj.pathId,
+        entryIndex, absoluteDataOffset: absObjOffset, objectByteSize: obj.byteSize,
+        textAssetDataLenOffset: -1, textAssetDataBytesOffset: -1,
+      });
     }
   }
 
   return assets;
 }
 
-/* ───────── Parse TextAsset ───────── */
-function parseTextAsset(data: Uint8Array): { name: string; data: Uint8Array } {
+/* ───────── Parse TextAsset with offset tracking ───────── */
+function parseTextAssetWithOffsets(data: Uint8Array): {
+  name: string; data: Uint8Array; dataLenOffset: number; dataBytesOffset: number;
+} {
   const r = new BinaryReader((data.buffer as ArrayBuffer).slice(data.byteOffset, data.byteOffset + data.byteLength), true);
 
-  // name (length-prefixed string)
   const nameLen = r.readU32();
   const nameBytes = r.readBytes(nameLen);
   const name = new TextDecoder("utf-8").decode(nameBytes);
   r.align(4);
 
-  // data (length-prefixed byte array)
+  const dataLenOffset = r.position;
   const dataLen = r.readU32();
+  const dataBytesOffset = r.position;
   const assetData = r.readBytes(dataLen);
 
-  return { name: name || "unnamed", data: assetData };
+  return { name: name || "unnamed", data: assetData, dataLenOffset, dataBytesOffset };
 }
 
-/* ───────── Rebuild bundle with modified assets ───────── */
-export function rebuildBundle(
+/* ─────────────────────────────────────────────────────────────────────
+   REPACK: Replace TextAssets in the decompressed stream and rebuild
+   the entire UnityFS bundle.
+   
+   Strategy:
+   For each entry (serialized file) in the bundle:
+   1. Find all TextAsset objects whose data was replaced
+   2. Rebuild the serialized file by copying byte-by-byte, but when we
+      hit a TextAsset data region, substitute the new data
+   3. Update the object table sizes and the serialized file header sizes
+   4. Reassemble entries into a decompressed stream
+   5. Write new UnityFS header + uncompressed block
+   ───────────────────────────────────────────────────────────────────── */
+
+export interface RepackResult {
+  buffer: ArrayBuffer;
+  replacedCount: number;
+  newSize: number;
+  originalSize: number;
+}
+
+/**
+ * Repack a bundle with modified assets.
+ * `replacements` maps asset name → new Uint8Array data.
+ * Only TextAssets with valid offset tracking can be replaced.
+ */
+export function repackBundle(
   originalBuffer: ArrayBuffer,
   info: UnityBundleInfo,
   decompressedData: Uint8Array,
-  modifiedAssets: Map<string, Uint8Array>
-): ArrayBuffer {
-  // For simplicity, we rebuild with no compression (NONE)
-  // This ensures maximum compatibility
-  
-  // Re-extract and modify the decompressed data stream
-  const newDecompressed = new Uint8Array(decompressedData);
-  
-  // For each entry, try to find and replace TextAssets
-  for (const entry of info.entries) {
-    const offset = Number(entry.offset);
-    const size = Number(entry.decompressedSize);
-    const entryData = newDecompressed.slice(offset, offset + size);
-    
-    // Parse the serialized file and look for modified assets
-    // This is a simplified approach - in practice you'd need full serialized file rebuilding
+  assets: ExtractedAsset[],
+  replacements: Map<string, Uint8Array>,
+): RepackResult {
+  let replacedCount = 0;
+
+  // Group assets by entry index
+  const assetsByEntry = new Map<number, ExtractedAsset[]>();
+  for (const a of assets) {
+    const list = assetsByEntry.get(a.entryIndex) ?? [];
+    list.push(a);
+    assetsByEntry.set(a.entryIndex, list);
   }
 
-  // Rebuild with uncompressed blocks
-  const r = new BinaryReader(originalBuffer);
-  r.readNullTermString(); // signature
-  r.readU32();
-  r.readNullTermString();
-  r.readNullTermString();
-  r.readU64();
-  const compressedBlockInfoSize = r.readU32();
-  const decompressedBlockInfoSize = r.readU32();
-  const flags = r.readU32();
+  // Build new entries data
+  const newEntryBuffers: Uint8Array[] = [];
+  const newEntryOffsets: number[] = [];
+  let currentOffset = 0;
 
-  const headerEnd = r.position;
+  for (let ei = 0; ei < info.entries.length; ei++) {
+    const entry = info.entries[ei];
+    const entryOffset = Number(entry.offset);
+    const entrySize = Number(entry.decompressedSize);
+    const entryData = decompressedData.slice(entryOffset, entryOffset + entrySize);
+
+    const entryAssets = assetsByEntry.get(ei) ?? [];
+    
+    // Check if any assets in this entry need replacement
+    const entryReplacements: { asset: ExtractedAsset; newData: Uint8Array }[] = [];
+    for (const a of entryAssets) {
+      const newData = replacements.get(a.name);
+      if (newData && a.textAssetDataLenOffset >= 0 && a.textAssetDataBytesOffset >= 0) {
+        entryReplacements.push({ asset: a, newData });
+      }
+    }
+
+    if (entryReplacements.length === 0) {
+      // No changes — copy as-is
+      newEntryBuffers.push(entryData);
+      newEntryOffsets.push(currentOffset);
+      currentOffset += entryData.length;
+      continue;
+    }
+
+    // Rebuild this serialized file with replacements
+    const rebuilt = rebuildSerializedFile(entryData, entryReplacements);
+    replacedCount += entryReplacements.length;
+    newEntryBuffers.push(rebuilt);
+    newEntryOffsets.push(currentOffset);
+    currentOffset += rebuilt.length;
+  }
+
+  // Assemble new decompressed data
+  const totalDecompressedSize = newEntryBuffers.reduce((s, b) => s + b.length, 0);
+  const newDecompressed = new Uint8Array(totalDecompressedSize);
+  let writePos = 0;
+  for (const buf of newEntryBuffers) {
+    newDecompressed.set(buf, writePos);
+    writePos += buf.length;
+  }
+
+  // Build new directory entries
+  const newEntries: DirectoryEntry[] = info.entries.map((e, i) => ({
+    ...e,
+    offset: BigInt(newEntryOffsets[i]),
+    decompressedSize: BigInt(newEntryBuffers[i].length),
+  }));
+
+  // Write new UnityFS file (uncompressed)
+  const w = new BinaryWriter(totalDecompressedSize + 4096);
   
-  // Build new block info with no compression
-  const newBlockInfo = buildBlockInfo(newDecompressed.length, info.entries);
-  
-  // Calculate sizes
-  const signatureBytes = new TextEncoder().encode("UnityFS\0");
-  const unityVerBytes = new TextEncoder().encode(info.unityVersion + "\0");
-  const genVerBytes = new TextEncoder().encode(info.generatorVersion + "\0");
-  
-  const headerSize = signatureBytes.length + 4 + unityVerBytes.length + genVerBytes.length + 8 + 4 + 4 + 4;
-  const totalSize = headerSize + newBlockInfo.length + newDecompressed.length;
-  
-  const output = new ArrayBuffer(totalSize);
-  const view = new DataView(output);
-  const bytes = new Uint8Array(output);
-  let pos = 0;
-  
-  // Write header
-  bytes.set(signatureBytes, pos); pos += signatureBytes.length;
-  view.setUint32(pos, info.formatVersion); pos += 4;
-  bytes.set(unityVerBytes, pos); pos += unityVerBytes.length;
-  bytes.set(genVerBytes, pos); pos += genVerBytes.length;
-  
-  // Total size as BigInt
-  view.setBigUint64(pos, BigInt(totalSize)); pos += 8;
-  view.setUint32(pos, newBlockInfo.length); pos += 4; // compressed = decompressed (no compression)
-  view.setUint32(pos, newBlockInfo.length); pos += 4;
-  view.setUint32(pos, 0); pos += 4; // flags: no compression, inline block info
-  
+  // Header (big-endian)
+  w.writeNullTermString("UnityFS");
+  w.writeU32(info.formatVersion);
+  w.writeNullTermString(info.unityVersion);
+  w.writeNullTermString(info.generatorVersion);
+
+  // Placeholder for total size
+  const totalSizePos = w.position;
+  w.writeU64(BigInt(0));
+
+  // Build block info
+  const blockInfoBuf = buildBlockInfoBuffer(totalDecompressedSize, newEntries);
+
+  // Compressed = decompressed (no compression)
+  w.writeU32(blockInfoBuf.length);
+  w.writeU32(blockInfoBuf.length);
+  w.writeU32(0); // flags: no compression, inline
+
   // Block info
-  bytes.set(newBlockInfo, pos); pos += newBlockInfo.length;
-  
+  w.writeBytes(blockInfoBuf);
+
   // Data
-  bytes.set(newDecompressed, pos);
-  
-  return output;
+  w.writeBytes(newDecompressed);
+
+  // Patch total size
+  const totalFileSize = w.position;
+  w.patchU64(totalSizePos, BigInt(totalFileSize));
+
+  const result = w.toUint8Array();
+
+  return {
+    buffer: result.buffer as ArrayBuffer,
+    replacedCount,
+    newSize: totalFileSize,
+    originalSize: originalBuffer.byteLength,
+  };
 }
 
-function buildBlockInfo(dataSize: number, entries: DirectoryEntry[]): Uint8Array {
-  // Calculate size: 16 (hash) + 4 (block count) + blocks + 4 (entry count) + entries
-  const blockCount = 1; // single uncompressed block
-  const size = 16 + 4 + (blockCount * 10) + 4 + entries.length * (8 + 8 + 4 + 256); // rough estimate
+/** Rebuild a serialized file with TextAsset data replacements */
+function rebuildSerializedFile(
+  originalData: Uint8Array,
+  replacements: { asset: ExtractedAsset; newData: Uint8Array }[],
+): Uint8Array {
+  // Sort replacements by their data position (ascending) to process in order
+  const sorted = [...replacements].sort(
+    (a, b) => a.asset.textAssetDataBytesOffset - b.asset.textAssetDataBytesOffset
+  );
+
+  // We need to parse the serialized file header to know the data offset and object table
+  const r = new BinaryReader((originalData.buffer as ArrayBuffer).slice(
+    originalData.byteOffset, originalData.byteOffset + originalData.byteLength
+  ));
+
+  const metadataSize = r.readU32();
+  const fileSize = r.readU32();
+  const version = r.readU32();
+  const dataOffset = r.readU32();
+
+  // Simple approach: rebuild by segments
+  // Copy everything, but replace data regions and update sizes
   
-  const buf = new ArrayBuffer(4096);
-  const view = new DataView(buf);
-  const bytes = new Uint8Array(buf);
-  let pos = 0;
-  
-  // Hash (16 zero bytes)
-  pos += 16;
-  
-  // Block count
-  view.setUint32(pos, 1); pos += 4;
-  
-  // Single block: decompressed = compressed = total data
-  view.setUint32(pos, dataSize); pos += 4;
-  view.setUint32(pos, dataSize); pos += 4;
-  view.setUint16(pos, 0); pos += 2; // no compression
-  
-  // Directory entries
-  view.setUint32(pos, entries.length); pos += 4;
-  for (const e of entries) {
-    view.setBigUint64(pos, e.offset); pos += 8;
-    view.setBigUint64(pos, e.decompressedSize); pos += 8;
-    view.setUint32(pos, e.flags); pos += 4;
-    const nameBytes = new TextEncoder().encode(e.name + "\0");
-    bytes.set(nameBytes, pos); pos += nameBytes.length;
+  // Build a list of "patches": regions to replace
+  interface Patch {
+    /** Offset of the data-length U32 (LE) in the serialized file */
+    lenOffset: number;
+    /** Offset of the data bytes in the serialized file */
+    dataOffset: number;
+    /** Original data length */
+    originalLen: number;
+    /** New data bytes */
+    newData: Uint8Array;
   }
-  
-  return new Uint8Array(buf, 0, pos);
+
+  const patches: Patch[] = sorted.map(({ asset, newData }) => {
+    // Read original data length from the serialized file
+    const lenView = new DataView(
+      (originalData.buffer as ArrayBuffer).slice(originalData.byteOffset, originalData.byteOffset + originalData.byteLength)
+    );
+    const originalLen = lenView.getUint32(asset.textAssetDataLenOffset, true);
+    const alignedOriginalLen = originalLen + ((4 - (originalLen % 4)) % 4);
+
+    return {
+      lenOffset: asset.textAssetDataLenOffset,
+      dataOffset: asset.textAssetDataBytesOffset,
+      originalLen: alignedOriginalLen, // include alignment padding
+      newData,
+    };
+  });
+
+  // Calculate new size
+  let sizeDelta = 0;
+  for (const p of patches) {
+    const alignedNewLen = p.newData.length + ((4 - (p.newData.length % 4)) % 4);
+    sizeDelta += alignedNewLen - p.originalLen;
+  }
+
+  const newSize = originalData.length + sizeDelta;
+  const output = new Uint8Array(newSize);
+  let srcPos = 0;
+  let dstPos = 0;
+
+  for (const p of patches) {
+    // Copy everything before this patch's data-length field
+    const beforeLen = p.lenOffset - srcPos;
+    if (beforeLen > 0) {
+      output.set(originalData.slice(srcPos, srcPos + beforeLen), dstPos);
+      dstPos += beforeLen;
+      srcPos += beforeLen;
+    }
+
+    // Write new data length (LE)
+    const lenView = new DataView(output.buffer);
+    lenView.setUint32(dstPos, p.newData.length, true);
+    dstPos += 4;
+    srcPos += 4; // skip original len field
+
+    // Write new data + alignment padding
+    output.set(p.newData, dstPos);
+    dstPos += p.newData.length;
+    const alignPad = (4 - (p.newData.length % 4)) % 4;
+    dstPos += alignPad; // zero-padded (Uint8Array is zeroed)
+
+    // Skip original data + original alignment
+    srcPos += p.originalLen;
+  }
+
+  // Copy remainder
+  if (srcPos < originalData.length) {
+    output.set(originalData.slice(srcPos), dstPos);
+    dstPos += originalData.length - srcPos;
+  }
+
+  // Update serialized file header: fileSize and metadataSize
+  // The header is big-endian
+  const headerView = new DataView(output.buffer);
+  // metadataSize stays the same (metadata/type tree didn't change)
+  headerView.setUint32(4, dstPos); // fileSize
+
+  return output.slice(0, dstPos);
+}
+
+/** Build block info buffer for the new bundle */
+function buildBlockInfoBuffer(dataSize: number, entries: DirectoryEntry[]): Uint8Array {
+  const w = new BinaryWriter(4096);
+
+  // Hash (16 zero bytes)
+  for (let i = 0; i < 16; i++) w.writeU8(0);
+
+  // Block count = 1 (single uncompressed block)
+  w.writeU32(1);
+  w.writeU32(dataSize); // decompressed size
+  w.writeU32(dataSize); // compressed size (same, no compression)
+  w.writeU16(0); // flags: no compression
+
+  // Directory entries
+  w.writeU32(entries.length);
+  for (const e of entries) {
+    w.writeU64(e.offset);
+    w.writeU64(e.decompressedSize);
+    w.writeU32(e.flags);
+    w.writeNullTermString(e.name);
+  }
+
+  return w.toUint8Array();
 }
 
 /* ───────── High-level API ───────── */
@@ -542,7 +714,7 @@ export function isMsbt(data: Uint8Array): boolean {
 export function getBundleSummary(info: UnityBundleInfo): string {
   const totalCompressed = info.blocks.reduce((s, b) => s + b.compressedSize, 0);
   const totalDecompressed = info.blocks.reduce((s, b) => s + b.decompressedSize, 0);
-  
+
   return [
     `التنسيق: ${info.signature} v${info.formatVersion}`,
     `إصدار Unity: ${info.generatorVersion}`,
