@@ -358,8 +358,8 @@ const Editor = () => {
                 </Button>
               </div>
             </div>
-            <h1 className="text-2xl md:text-3xl font-display font-black mb-1 drop-shadow-lg">محرر الترجمة ✍️</h1>
-            <p className="text-sm text-muted-foreground font-body">عدّل النصوص العربية يدوياً أو استخدم الترجمة التلقائية</p>
+            <h1 className="text-2xl md:text-3xl font-display font-black mb-1 drop-shadow-lg">{gameConfig.emoji} محرر الترجمة — {gameConfig.title} ✍️</h1>
+            <p className="text-sm text-muted-foreground font-body">عدّل النصوص العربية يدوياً أو استخدم الترجمة التلقائية • {gameConfig.fileFormat}</p>
           </div>
         </header>
 
