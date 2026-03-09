@@ -45,7 +45,7 @@ class BinaryReader {
   align(n: number) { const m = this.pos % n; if (m) this.pos += n - m; }
 
   slice(offset: number, length: number): ArrayBuffer {
-    return this.view.buffer.slice(this.view.byteOffset + offset, this.view.byteOffset + offset + length);
+    return (this.view.buffer as ArrayBuffer).slice(this.view.byteOffset + offset, this.view.byteOffset + offset + length);
   }
 }
 
