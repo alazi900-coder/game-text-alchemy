@@ -98,7 +98,7 @@ export default function MsbtProcess() {
             const msbtEntries = extractMsbtFromSarc(archive);
             addLog(`✅ ${f.name}: ${archive.entries.length} ملف داخلي — ${msbtEntries.length} ملف MSBT`);
             for (const entry of msbtEntries) {
-              const blob = new Blob([entry.data], { type: "application/octet-stream" });
+              const blob = new Blob([entry.data.buffer.slice(entry.data.byteOffset, entry.data.byteOffset + entry.data.byteLength)], { type: "application/octet-stream" });
               const extracted = new File([blob], entry.name.replace(/.*[/\\]/, ''), { type: "application/octet-stream" });
               newMsbt.push(extracted);
             }
