@@ -117,10 +117,6 @@ export default function AnimalCrossing() {
                 ابدأ التعريب 🌿
               </Button>
             </Link>
-            <Button size="lg" variant="outline" className="font-display font-bold text-lg px-10 py-6" onClick={handleLoadEnglishTexts}>
-              <Download className="w-5 h-5 ml-2" />
-              تحميل النصوص الإنجليزية 📥
-            </Button>
           </div>
         </div>
       </header>
