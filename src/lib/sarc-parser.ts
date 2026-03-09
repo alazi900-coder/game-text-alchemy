@@ -268,8 +268,7 @@ export function buildSarc(entries: SarcEntry[], endian: "big" | "little" = "litt
  */
 export async function buildSarcZs(entries: SarcEntry[], endian: "big" | "little" = "little"): Promise<Uint8Array> {
   const sarc = buildSarc(entries, endian);
-  const { init, compress } = await import("@bokuweb/zstd-wasm");
-  await init();
-  const compressed = compress(sarc, 3); // level 3 = good balance
+  const { compress } = await getZstd();
+  const compressed = compress(sarc, 3);
   return new Uint8Array(compressed);
 }
