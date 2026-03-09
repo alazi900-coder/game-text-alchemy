@@ -2,10 +2,10 @@ import { useState, useRef } from "react";
 import { toast } from "@/hooks/use-toast";
 import {
   ExtractedEntry, EditorState, AI_BATCH_SIZE, PAGE_SIZE,
-  categorizeFile, categorizeBdatTable, isTechnicalText, hasTechnicalTags,
+  categorizeFile, isTechnicalText, hasTechnicalTags,
 } from "@/components/editor/types";
-import { restoreTagsLocally } from "@/lib/xc3-tag-restoration";
-import { protectTags, restoreTags } from "@/lib/xc3-tag-protection";
+import { restoreTagsLocally } from "@/lib/tag-restoration";
+import { protectTags, restoreTags } from "@/lib/tag-protection";
 import { fixTagBracketsStrict } from "@/lib/tag-bracket-fix";
 import { splitEvenlyByLines } from "@/lib/balance-lines";
 
