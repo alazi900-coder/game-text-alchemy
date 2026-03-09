@@ -140,7 +140,7 @@ export function parseUnityBundle(buffer: ArrayBuffer): UnityBundleInfo {
   }
 
   // Parse block info
-  const br = new BinaryReader(blockInfoData.buffer);
+  const br = new BinaryReader(blockInfoData.buffer as ArrayBuffer);
   br.skip(16); // uncompressed data hash (16 bytes)
   const blockCount = br.readU32();
 
