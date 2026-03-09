@@ -559,58 +559,87 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       
       console.log('[BUILD] Response headers - Modified:', response.headers.get('X-Modified-Count'), 'Expanded:', response.headers.get('X-Expanded-Count'));
 
-      // Check if we need to repack into SARC.ZS
-      const sarcMeta = await idbGet<{
+      // Check if we need to repack into SARC.ZS (multiple archives supported)
+      type SarcMeta = {
         originalFileName: string;
         endian: "big" | "little";
         nonMsbtEntries: { name: string; data: number[] }[];
         msbtEntryNames: string[];
-      }>("editorSarcArchive");
+      };
+      const sarcArchives = await idbGet<SarcMeta[]>("editorSarcArchives");
+      // Fallback to legacy single archive
+      const legacySingle = await idbGet<SarcMeta>("editorSarcArchive");
+      const allArchives: SarcMeta[] = sarcArchives && sarcArchives.length > 0 
+        ? sarcArchives 
+        : (legacySingle && legacySingle.msbtEntryNames.length > 0 ? [legacySingle] : []);
 
-      if (sarcMeta && sarcMeta.msbtEntryNames.length > 0) {
-        setBuildProgress("إعادة بناء أرشيف SARC.ZS...");
+      if (allArchives.length > 0) {
         const JSZip = (await import("jszip")).default;
         const { buildSarcZs } = await import("@/lib/sarc-parser");
-        const zip = await JSZip.loadAsync(blob);
+        const serverZip = await JSZip.loadAsync(blob);
+        const msbtFilesFromIdb = await idbGet<Record<string, ArrayBuffer>>("editorMsbtFiles");
 
-        // Reconstruct SARC entries
-        const sarcEntries: { name: string; data: Uint8Array }[] = [];
-
-        // Add non-MSBT entries back
-        for (const entry of sarcMeta.nonMsbtEntries) {
-          sarcEntries.push({ name: entry.name, data: new Uint8Array(entry.data) });
-        }
-
-        // Add rebuilt MSBT files from the ZIP
-        const msbtFileNames = await idbGet<string[]>("editorMsbtFileNames") || [];
-        for (const msbtName of sarcMeta.msbtEntryNames) {
-          const shortName = msbtName.replace(/.*[/\\]/, '');
-          // Try to find the rebuilt file in the ZIP
-          const zipFile = zip.file(shortName) || zip.file(msbtName);
-          if (zipFile) {
-            const data = await zipFile.async("uint8array");
-            sarcEntries.push({ name: msbtName, data });
-          } else {
-            // Fallback: use original from IDB
-            const msbtFiles = await idbGet<Record<string, ArrayBuffer>>("editorMsbtFiles");
-            if (msbtFiles && msbtFiles[shortName]) {
-              sarcEntries.push({ name: msbtName, data: new Uint8Array(msbtFiles[shortName]) });
+        if (allArchives.length === 1) {
+          // Single SARC — download directly as .zs file
+          const sarcMeta = allArchives[0];
+          setBuildProgress("إعادة بناء أرشيف SARC.ZS...");
+          const sarcEntries: { name: string; data: Uint8Array }[] = [];
+          for (const entry of sarcMeta.nonMsbtEntries) {
+            sarcEntries.push({ name: entry.name, data: new Uint8Array(entry.data) });
+          }
+          for (const msbtName of sarcMeta.msbtEntryNames) {
+            const shortName = msbtName.replace(/.*[/\\]/, '');
+            const zipFile = serverZip.file(shortName) || serverZip.file(msbtName);
+            if (zipFile) {
+              sarcEntries.push({ name: msbtName, data: await zipFile.async("uint8array") });
+            } else if (msbtFilesFromIdb && msbtFilesFromIdb[shortName]) {
+              sarcEntries.push({ name: msbtName, data: new Uint8Array(msbtFilesFromIdb[shortName]) });
             }
           }
+          setBuildProgress(`تجميع ${sarcEntries.length} ملف في SARC وضغط ZS...`);
+          const compressed = await buildSarcZs(sarcEntries, sarcMeta.endian);
+          const sarcBlob = new Blob([compressed], { type: "application/octet-stream" });
+          const sarcUrl = URL.createObjectURL(sarcBlob);
+          const a = document.createElement("a");
+          a.href = sarcUrl;
+          a.download = sarcMeta.originalFileName.replace(/\.zs$/i, '_arabized.zs').replace(/\.sarc$/i, '_arabized.sarc.zs');
+          if (!a.download.includes('arabized')) a.download = `arabized_${sarcMeta.originalFileName}`;
+          a.click();
+          URL.revokeObjectURL(sarcUrl);
+        } else {
+          // Multiple SARC files — rebuild each and pack into a ZIP
+          const outputZip = new JSZip();
+          for (let ai = 0; ai < allArchives.length; ai++) {
+            const sarcMeta = allArchives[ai];
+            setBuildProgress(`إعادة بناء ${ai + 1}/${allArchives.length}: ${sarcMeta.originalFileName}...`);
+            const sarcEntries: { name: string; data: Uint8Array }[] = [];
+            for (const entry of sarcMeta.nonMsbtEntries) {
+              sarcEntries.push({ name: entry.name, data: new Uint8Array(entry.data) });
+            }
+            for (const msbtName of sarcMeta.msbtEntryNames) {
+              const shortName = msbtName.replace(/.*[/\\]/, '');
+              const zipFile = serverZip.file(shortName) || serverZip.file(msbtName);
+              if (zipFile) {
+                sarcEntries.push({ name: msbtName, data: await zipFile.async("uint8array") });
+              } else if (msbtFilesFromIdb && msbtFilesFromIdb[shortName]) {
+                sarcEntries.push({ name: msbtName, data: new Uint8Array(msbtFilesFromIdb[shortName]) });
+              }
+            }
+            const compressed = await buildSarcZs(sarcEntries, sarcMeta.endian);
+            const outName = sarcMeta.originalFileName;
+            outputZip.file(outName, compressed);
+          }
+          setBuildProgress("ضغط جميع ملفات SARC.ZS في ZIP...");
+          const finalBlob = await outputZip.generateAsync({ type: "blob" });
+          const finalUrl = URL.createObjectURL(finalBlob);
+          const a = document.createElement("a");
+          a.href = finalUrl;
+          a.download = "arabized_sarc_files.zip";
+          a.click();
+          URL.revokeObjectURL(finalUrl);
         }
-
-        setBuildProgress(`تجميع ${sarcEntries.length} ملف في SARC وضغط ZS...`);
-        const compressed = await buildSarcZs(sarcEntries, sarcMeta.endian);
-        const sarcBlob = new Blob([new Uint8Array(compressed)], { type: "application/octet-stream" });
-        const sarcUrl = URL.createObjectURL(sarcBlob);
-        const a = document.createElement("a");
-        a.href = sarcUrl;
-        a.download = sarcMeta.originalFileName.replace(/\.zs$/i, '_arabized.zs').replace(/\.sarc$/i, '_arabized.sarc.zs');
-        if (!a.download.includes('arabized')) a.download = `arabized_${sarcMeta.originalFileName}`;
-        a.click();
-        URL.revokeObjectURL(sarcUrl);
         const expandedMsg = expandedCount > 0 ? ` (${expandedCount} تم توسيعها 📐)` : '';
-        setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص${expandedMsg} — ملف SARC.ZS جاهز للعبة 🎮`);
+        setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص${expandedMsg} — ${allArchives.length} ملف SARC.ZS جاهز للعبة 🎮`);
       } else {
         const a = document.createElement("a");
         a.href = blobUrl;
