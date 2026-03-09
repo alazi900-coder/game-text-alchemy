@@ -260,7 +260,8 @@ export function useEditorState() {
     const arabicRegex = /[\u0600-\u06FF\uFB50-\uFDFF\uFE70-\uFEFF\u0750-\u077F\u08A0-\u08FF]/;
     for (const entry of stored.entries) {
       const key = `${entry.msbtFile}:${entry.index}`;
-      if (arabicRegex.test(entry.original)) {
+      const strippedOrig = entry.original.replace(/\[[^\]]*\]/g, '').replace(/\{[^}]*\}/g, '');
+      if (arabicRegex.test(strippedOrig)) {
         if (hasArabicPresentationForms(entry.original)) continue;
         const existingTranslation = mergedTranslations[key]?.trim();
         if (existingTranslation && existingTranslation !== entry.original && existingTranslation !== entry.original.trim()) {
