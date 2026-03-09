@@ -759,7 +759,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
 
         setBuildProgress(`تجميع ${sarcEntries.length} ملف في SARC وضغط ZS...`);
         const compressed = await buildSarcZs(sarcEntries, sarcMeta.endian);
-        const sarcBlob = new Blob([compressed.buffer.slice(compressed.byteOffset, compressed.byteOffset + compressed.byteLength)], { type: "application/octet-stream" });
+        const sarcBlob = new Blob([new Uint8Array(compressed)], { type: "application/octet-stream" });
         const sarcUrl = URL.createObjectURL(sarcBlob);
         const a = document.createElement("a");
         a.href = sarcUrl;
