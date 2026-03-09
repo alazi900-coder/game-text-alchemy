@@ -78,7 +78,7 @@ export default function MsbtProcess() {
     const total = files.length;
     setFileLoadProgress({ current: 0, total });
 
-    const newMsbt: File[] = [];
+    const newMsbt: { name: string; size: number; data: ArrayBuffer }[] = [];
     const BATCH = 200;
     for (let start = 0; start < total; start += BATCH) {
       const end = Math.min(start + BATCH, total);
@@ -86,9 +86,13 @@ export default function MsbtProcess() {
         const f = files[i];
         const lower = f.name.toLowerCase();
         if (lower.endsWith('.msbt')) {
-          newMsbt.push(f);
+          try {
+            const buf = await f.arrayBuffer();
+            newMsbt.push({ name: f.name, size: buf.byteLength, data: buf });
+          } catch (err) {
+            addLog(`⚠️ فشل قراءة ${f.name}: ${err instanceof Error ? err.message : 'خطأ'}`);
+          }
         } else if (lower.endsWith('.sarc.zs') || lower.endsWith('.sarc')) {
-          // Extract MSBTs from SARC archive
           try {
             addLog(`📦 فك أرشيف ${f.name}...`);
             const buf = await f.arrayBuffer();
@@ -98,12 +102,10 @@ export default function MsbtProcess() {
             const msbtEntries = extractMsbtFromSarc(archive);
             addLog(`✅ ${f.name}: ${archive.entries.length} ملف داخلي — ${msbtEntries.length} ملف MSBT`);
 
-            // Save SARC metadata for rebuild later
             const { idbSet } = await import("@/lib/idb-storage");
             await idbSet("editorSarcArchive", {
               originalFileName: f.name,
               endian: archive.endian,
-              // Store non-MSBT entries as-is for repacking
               nonMsbtEntries: archive.entries
                 .filter(e => !e.name.toLowerCase().endsWith(".msbt"))
                 .map(e => ({ name: e.name, data: Array.from(e.data) })),
@@ -111,9 +113,8 @@ export default function MsbtProcess() {
             });
 
             for (const entry of msbtEntries) {
-              const blob = new Blob([new Uint8Array(entry.data)], { type: "application/octet-stream" });
-              const extracted = new File([blob], entry.name.replace(/.*[/\\]/, ''), { type: "application/octet-stream" });
-              newMsbt.push(extracted);
+              const entryBuf = new Uint8Array(entry.data).buffer;
+              newMsbt.push({ name: entry.name.replace(/.*[/\\]/, ''), size: entry.data.length, data: entryBuf });
             }
           } catch (err) {
             addLog(`⚠️ فشل فك ${f.name}: ${err instanceof Error ? err.message : 'خطأ'}`);
