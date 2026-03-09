@@ -378,7 +378,7 @@ function AssetPreview({ asset }: { asset: ExtractedAsset }) {
       {isMsbtFile && msbtStrings.length > 0 && (
         <div>
           <p className="text-sm font-medium mb-2 flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-green-500" />
+            <CheckCircle2 className="w-4 h-4 text-primary" />
             نصوص مستخرجة ({msbtStrings.length})
           </p>
           <div className="bg-muted/50 rounded-lg p-3 max-h-48 overflow-y-auto space-y-1">
