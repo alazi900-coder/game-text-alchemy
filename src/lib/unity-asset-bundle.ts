@@ -705,13 +705,13 @@ function buildBlockInfoBuffer(dataSize: number, entries: DirectoryEntry[]): Uint
 }
 
 /* ───────── High-level API ───────── */
-export function extractBundleAssets(buffer: ArrayBuffer): {
+export async function extractBundleAssets(buffer: ArrayBuffer): Promise<{
   info: UnityBundleInfo;
   assets: ExtractedAsset[];
   decompressedData: Uint8Array;
-} {
-  const info = parseUnityBundle(buffer);
-  const decompressedData = decompressBundle(buffer, info);
+}> {
+  const info = await parseUnityBundle(buffer);
+  const decompressedData = await decompressBundle(buffer, info);
   const assets = extractAssets(decompressedData, info);
   return { info, assets, decompressedData };
 }
