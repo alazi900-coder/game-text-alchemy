@@ -174,7 +174,7 @@ async function decompressBlock(compressed: Uint8Array, decompressedSize: number,
 }
 
 /* ───────── Parse UnityFS Header & Directory ───────── */
-export function parseUnityBundle(buffer: ArrayBuffer): UnityBundleInfo {
+export async function parseUnityBundle(buffer: ArrayBuffer): Promise<UnityBundleInfo> {
   const r = new BinaryReader(buffer);
 
   const signature = r.readNullTermString();
@@ -199,11 +199,11 @@ export function parseUnityBundle(buffer: ArrayBuffer): UnityBundleInfo {
     const savedPos = r.position;
     r.position = r.length - compressedBlockInfoSize;
     const compressed = r.readBytes(compressedBlockInfoSize);
-    blockInfoData = decompressBlock(compressed, decompressedBlockInfoSize, compressionType);
+    blockInfoData = await decompressBlock(compressed, decompressedBlockInfoSize, compressionType);
     r.position = savedPos;
   } else {
     const compressed = r.readBytes(compressedBlockInfoSize);
-    blockInfoData = decompressBlock(compressed, decompressedBlockInfoSize, compressionType);
+    blockInfoData = await decompressBlock(compressed, decompressedBlockInfoSize, compressionType);
   }
 
   // Align to 16 bytes if flag is set
