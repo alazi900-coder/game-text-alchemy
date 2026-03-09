@@ -296,13 +296,17 @@ const Editor = () => {
             <div className="absolute inset-0 bg-gradient-to-b from-background/80 via-background/60 to-background" />
           </div>
           <div className="relative z-10">
+            <h2 className="text-xl font-display font-bold mb-2 drop-shadow-lg">{gameConfig.emoji} {gameConfig.title}</h2>
             <p className="text-muted-foreground mb-4 bg-background/40 backdrop-blur-sm rounded-lg px-4 py-2 inline-block">لا توجد بيانات للتحرير. يرجى استخراج النصوص أولاً.</p>
             <br />
             <div className="flex flex-wrap items-center gap-3 mt-4 justify-center">
-              <Link to={processPath}><Button className="font-display">اذهب لصفحة المعالجة</Button></Link>
-              <Button variant="outline" className="font-display" onClick={editor.loadDemoBdatData}>
-                تحميل بيانات BDAT تجريبية
-              </Button>
+              <Link to={processPath}><Button className="font-display">اذهب لصفحة المعالجة ({gameConfig.fileFormat})</Button></Link>
+              {gameType === "xenoblade" && (
+                <Button variant="outline" className="font-display" onClick={editor.loadDemoBdatData}>
+                  تحميل بيانات BDAT تجريبية
+                </Button>
+              )}
+              <Link to="/"><Button variant="ghost" className="font-display">🏠 العودة للرئيسية</Button></Link>
             </div>
           </div>
         </div>
