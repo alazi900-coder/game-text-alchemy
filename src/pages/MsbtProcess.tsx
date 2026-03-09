@@ -102,8 +102,15 @@ export default function MsbtProcess() {
             const msbtEntries = extractMsbtFromSarc(archive);
             addLog(`✅ ${f.name}: ${archive.entries.length} ملف داخلي — ${msbtEntries.length} ملف MSBT`);
 
-            const { idbSet } = await import("@/lib/idb-storage");
-            await idbSet("editorSarcArchive", {
+            const { idbSet, idbGet } = await import("@/lib/idb-storage");
+            // Store multiple SARC archives (append, don't overwrite)
+            const existingArchives = (await idbGet<Array<{
+              originalFileName: string;
+              endian: "big" | "little";
+              nonMsbtEntries: { name: string; data: number[] }[];
+              msbtEntryNames: string[];
+            }>>("editorSarcArchives")) || [];
+            existingArchives.push({
               originalFileName: f.name,
               endian: archive.endian,
               nonMsbtEntries: archive.entries
@@ -111,6 +118,9 @@ export default function MsbtProcess() {
                 .map(e => ({ name: e.name, data: Array.from(e.data) })),
               msbtEntryNames: msbtEntries.map(e => e.name),
             });
+            await idbSet("editorSarcArchives", existingArchives);
+            // Also keep legacy key for backward compat
+            await idbSet("editorSarcArchive", existingArchives[existingArchives.length - 1]);
 
             for (const entry of msbtEntries) {
               const entryBuf = new Uint8Array(entry.data).buffer;
@@ -226,10 +236,10 @@ export default function MsbtProcess() {
         for (const entry of allEntries) {
           originalTextsMap[`${entry.msbtFile}:${entry.index}`] = entry.original;
         }
-        await idbClearExcept(["buildTranslations"]);
+        await idbClearExcept(["buildTranslations", "editorSarcArchives", "editorSarcArchive"]);
         await idbSet("originalTexts", originalTextsMap);
       } else {
-        await idbClearExcept(["originalTexts", "buildTranslations"]);
+        await idbClearExcept(["originalTexts", "buildTranslations", "editorSarcArchives", "editorSarcArchive"]);
       }
 
       await idbSet("editorState", {
