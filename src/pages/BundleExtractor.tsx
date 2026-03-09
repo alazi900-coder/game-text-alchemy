@@ -5,11 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Progress } from "@/components/ui/progress";
 import {
   Upload, Download, FileText, Package, ArrowLeft, Info,
-  CheckCircle2, AlertTriangle, Loader2, Search, Archive, Eye
+  CheckCircle2, AlertTriangle, Loader2, Search, Archive, Eye,
+  RefreshCw, Replace, PackagePlus
 } from "lucide-react";
 import {
-  extractBundleAssets, isMsbt, getBundleSummary,
-  type UnityBundleInfo, type ExtractedAsset
+  extractBundleAssets, isMsbt, getBundleSummary, repackBundle,
+  type UnityBundleInfo, type ExtractedAsset, type RepackResult
 } from "@/lib/unity-asset-bundle";
 
 interface LoadedBundle {
@@ -26,7 +27,13 @@ export default function BundleExtractor() {
   const [error, setError] = useState("");
   const [selectedAsset, setSelectedAsset] = useState<number | null>(null);
   const [filter, setFilter] = useState("");
+  const [replacements, setReplacements] = useState<Map<string, Uint8Array>>(new Map());
+  const [repackResult, setRepackResult] = useState<RepackResult | null>(null);
+  const [repacking, setRepacking] = useState(false);
+  const [repackError, setRepackError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const replaceRef = useRef<HTMLInputElement>(null);
+  const batchReplaceRef = useRef<HTMLInputElement>(null);
 
   const handleFileLoad = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -36,6 +43,8 @@ export default function BundleExtractor() {
     setError("");
     setBundle(null);
     setSelectedAsset(null);
+    setReplacements(new Map());
+    setRepackResult(null);
 
     try {
       const buffer = await file.arrayBuffer();
@@ -53,7 +62,6 @@ export default function BundleExtractor() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    // Add .msbt extension if it looks like MSBT
     const ext = isMsbt(asset.data) ? ".msbt" : ".bytes";
     a.download = asset.name.endsWith(ext) ? asset.name : `${asset.name}${ext}`;
     a.click();
@@ -63,17 +71,105 @@ export default function BundleExtractor() {
   const downloadAllMsbt = useCallback(() => {
     if (!bundle) return;
     const msbtAssets = bundle.assets.filter(a => isMsbt(a.data));
-    if (msbtAssets.length === 0) return;
-
-    // If only one, download directly
-    if (msbtAssets.length === 1) {
-      downloadAsset(msbtAssets[0]);
-      return;
-    }
-
-    // Multiple: download as individual files (or could use JSZip)
     msbtAssets.forEach(a => downloadAsset(a));
   }, [bundle, downloadAsset]);
+
+  /** Replace a single asset with an uploaded file */
+  const handleReplaceAsset = useCallback((assetName: string) => {
+    // Store which asset to replace, then trigger file picker
+    replaceRef.current?.setAttribute("data-asset-name", assetName);
+    replaceRef.current?.click();
+  }, []);
+
+  const onReplaceFileSelected = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    const assetName = replaceRef.current?.getAttribute("data-asset-name");
+    if (!file || !assetName) return;
+
+    const data = new Uint8Array(await file.arrayBuffer());
+    setReplacements(prev => {
+      const next = new Map(prev);
+      next.set(assetName, data);
+      return next;
+    });
+    setRepackResult(null);
+    e.target.value = "";
+  }, []);
+
+  /** Batch replace: upload multiple MSBT files matched by name */
+  const handleBatchReplace = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || !bundle) return;
+
+    const newReplacements = new Map(replacements);
+    let matched = 0;
+
+    for (const file of Array.from(files)) {
+      const data = new Uint8Array(await file.arrayBuffer());
+      // Try to match by filename
+      const baseName = file.name.replace(/\.msbt$/i, "").replace(/\.bytes$/i, "");
+      const matchedAsset = bundle.assets.find(a => {
+        const aBase = a.name.replace(/\.msbt$/i, "").replace(/\.bytes$/i, "");
+        return aBase === baseName || a.name === file.name || a.name === baseName;
+      });
+      if (matchedAsset) {
+        newReplacements.set(matchedAsset.name, data);
+        matched++;
+      }
+    }
+
+    setReplacements(newReplacements);
+    setRepackResult(null);
+    e.target.value = "";
+  }, [bundle, replacements]);
+
+  /** Remove a replacement */
+  const removeReplacement = useCallback((assetName: string) => {
+    setReplacements(prev => {
+      const next = new Map(prev);
+      next.delete(assetName);
+      return next;
+    });
+    setRepackResult(null);
+  }, []);
+
+  /** Execute repack */
+  const handleRepack = useCallback(async () => {
+    if (!bundle || replacements.size === 0) return;
+
+    setRepacking(true);
+    setRepackError("");
+    setRepackResult(null);
+
+    try {
+      // Use setTimeout to allow UI to update
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const result = repackBundle(
+        bundle.originalBuffer,
+        bundle.info,
+        bundle.decompressedData,
+        bundle.assets,
+        replacements,
+      );
+      setRepackResult(result);
+    } catch (err: any) {
+      setRepackError(err.message || "فشل في إعادة الحزم");
+    } finally {
+      setRepacking(false);
+    }
+  }, [bundle, replacements]);
+
+  /** Download repacked bundle */
+  const downloadRepackedBundle = useCallback(() => {
+    if (!repackResult || !bundle) return;
+    const blob = new Blob([repackResult.buffer]);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = bundle.fileName.replace(/\.bundle$/i, "_arabic.bundle");
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [repackResult, bundle]);
 
   const filteredAssets = bundle?.assets.filter(a => {
     if (!filter) return true;
@@ -81,11 +177,15 @@ export default function BundleExtractor() {
   }) ?? [];
 
   const msbtCount = bundle?.assets.filter(a => isMsbt(a.data)).length ?? 0;
-
+  const replaceableCount = bundle?.assets.filter(a => a.textAssetDataLenOffset >= 0).length ?? 0;
   const previewAsset = selectedAsset !== null ? bundle?.assets[selectedAsset] : null;
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">
+      {/* Hidden file inputs */}
+      <input ref={replaceRef} type="file" className="hidden" accept=".msbt,.bytes" onChange={onReplaceFileSelected} />
+      <input ref={batchReplaceRef} type="file" className="hidden" accept=".msbt,.bytes" multiple onChange={handleBatchReplace} />
+
       {/* Header */}
       <div className="border-b border-border bg-card/80 backdrop-blur sticky top-0 z-30">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
@@ -95,7 +195,7 @@ export default function BundleExtractor() {
           <Archive className="w-6 h-6 text-primary" />
           <div>
             <h1 className="text-lg font-bold">فاك ملفات Unity Asset Bundle</h1>
-            <p className="text-xs text-muted-foreground">استخراج ملفات MSBT و TextAsset من ملفات .bundle</p>
+            <p className="text-xs text-muted-foreground">استخراج وإعادة حزم ملفات MSBT و TextAsset</p>
           </div>
         </div>
       </div>
@@ -170,14 +270,9 @@ export default function BundleExtractor() {
                   <li>ارفع ملف <code dir="ltr">.bundle</code> من مجلد اللعبة</li>
                   <li>الأداة تفك الضغط (LZ4) وتحلل البنية الداخلية</li>
                   <li>استخرج ملفات MSBT للترجمة في المحرر</li>
-                  <li>بعد الترجمة، أعد حزم الملفات</li>
+                  <li>ارفع الملفات المترجمة وأعد حزم الـ Bundle</li>
+                  <li>حمّل الـ Bundle الجديد وضعه في مجلد اللعبة</li>
                 </ol>
-              </div>
-              <div className="bg-muted/50 rounded-lg p-3">
-                <p className="font-medium text-foreground mb-1">المسار في Fire Emblem Engage:</p>
-                <code dir="ltr" className="text-xs block">
-                  romfs/StreamingAssets/aa/Switch/fe_assets_message/
-                </code>
               </div>
             </CardContent>
           </Card>
@@ -187,7 +282,7 @@ export default function BundleExtractor() {
         {bundle && (
           <>
             {/* Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <Card>
                 <CardContent className="p-4 text-center">
                   <Package className="w-8 h-8 mx-auto mb-2 text-primary" />
@@ -200,6 +295,13 @@ export default function BundleExtractor() {
                   <FileText className="w-8 h-8 mx-auto mb-2 text-primary" />
                   <p className="text-2xl font-bold">{msbtCount}</p>
                   <p className="text-sm text-muted-foreground">ملف MSBT</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-4 text-center">
+                  <Replace className="w-8 h-8 mx-auto mb-2 text-accent-foreground" />
+                  <p className="text-2xl font-bold">{replacements.size}</p>
+                  <p className="text-sm text-muted-foreground">ملف مستبدل</p>
                 </CardContent>
               </Card>
               <Card>
@@ -225,19 +327,135 @@ export default function BundleExtractor() {
             </Card>
 
             {/* Actions */}
-            {msbtCount > 0 && (
-              <div className="flex gap-3 flex-wrap">
-                <Button onClick={downloadAllMsbt} className="gap-2">
-                  <Download className="w-4 h-4" />
-                  تحميل جميع ملفات MSBT ({msbtCount})
-                </Button>
-                <Link to="/fire-emblem/process">
-                  <Button variant="outline" className="gap-2">
-                    <FileText className="w-4 h-4" />
-                    الانتقال لمعالجة MSBT
+            <div className="flex gap-3 flex-wrap">
+              {msbtCount > 0 && (
+                <>
+                  <Button onClick={downloadAllMsbt} className="gap-2">
+                    <Download className="w-4 h-4" />
+                    تحميل جميع ملفات MSBT ({msbtCount})
                   </Button>
-                </Link>
-              </div>
+                  <Link to="/fire-emblem/process">
+                    <Button variant="outline" className="gap-2">
+                      <FileText className="w-4 h-4" />
+                      معالجة MSBT
+                    </Button>
+                  </Link>
+                </>
+              )}
+              {replaceableCount > 0 && (
+                <Button variant="outline" className="gap-2" onClick={() => batchReplaceRef.current?.click()}>
+                  <PackagePlus className="w-4 h-4" />
+                  رفع ملفات مترجمة (دفعة)
+                </Button>
+              )}
+            </div>
+
+            {/* ─── Repack Section ─── */}
+            {replacements.size > 0 && (
+              <Card className="border-primary/30 bg-primary/5">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <PackagePlus className="w-5 h-5 text-primary" />
+                    إعادة حزم الملفات ({replacements.size} ملف مستبدل)
+                  </CardTitle>
+                  <CardDescription>
+                    الملفات التالية سيتم استبدالها داخل الـ Bundle الأصلي
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Replacement list */}
+                  <div className="divide-y divide-border rounded-lg border border-border overflow-hidden">
+                    {Array.from(replacements.entries()).map(([name, data]) => {
+                      const originalAsset = bundle.assets.find(a => a.name === name);
+                      const originalSize = originalAsset?.data.length ?? 0;
+                      const sizeDiff = data.length - originalSize;
+                      return (
+                        <div key={name} className="flex items-center justify-between p-3 bg-card">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <FileText className="w-4 h-4 text-primary shrink-0" />
+                            <div className="min-w-0">
+                              <p className="font-mono text-sm truncate" dir="ltr">{name}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {(originalSize / 1024).toFixed(1)} KB → {(data.length / 1024).toFixed(1)} KB
+                                <span className={sizeDiff > 0 ? "text-destructive mr-1" : sizeDiff < 0 ? "text-primary mr-1" : "mr-1"}>
+                                  {" "}({sizeDiff > 0 ? "+" : ""}{(sizeDiff / 1024).toFixed(1)} KB)
+                                </span>
+                              </p>
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeReplacement(name)}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            إزالة
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Repack button */}
+                  <div className="flex gap-3 items-center">
+                    <Button
+                      onClick={handleRepack}
+                      disabled={repacking}
+                      className="gap-2"
+                    >
+                      {repacking ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <RefreshCw className="w-4 h-4" />
+                      )}
+                      {repacking ? "جاري إعادة الحزم..." : "إعادة حزم الـ Bundle"}
+                    </Button>
+                    <Button variant="outline" className="gap-2" onClick={() => batchReplaceRef.current?.click()}>
+                      <Upload className="w-4 h-4" />
+                      إضافة ملفات أخرى
+                    </Button>
+                  </div>
+
+                  {/* Repack error */}
+                  {repackError && (
+                    <div className="flex items-center gap-2 text-destructive text-sm">
+                      <AlertTriangle className="w-4 h-4 shrink-0" />
+                      {repackError}
+                    </div>
+                  )}
+
+                  {/* Repack result */}
+                  {repackResult && (
+                    <div className="bg-card rounded-lg border border-primary/30 p-4 space-y-3">
+                      <div className="flex items-center gap-2 text-primary">
+                        <CheckCircle2 className="w-5 h-5" />
+                        <p className="font-medium">تم إعادة الحزم بنجاح!</p>
+                      </div>
+                      <div className="grid grid-cols-3 gap-4 text-center text-sm">
+                        <div>
+                          <p className="text-2xl font-bold">{repackResult.replacedCount}</p>
+                          <p className="text-muted-foreground">ملف مستبدل</p>
+                        </div>
+                        <div>
+                          <p className="text-2xl font-bold">{(repackResult.originalSize / 1024).toFixed(0)} KB</p>
+                          <p className="text-muted-foreground">الحجم الأصلي</p>
+                        </div>
+                        <div>
+                          <p className="text-2xl font-bold">{(repackResult.newSize / 1024).toFixed(0)} KB</p>
+                          <p className="text-muted-foreground">الحجم الجديد</p>
+                        </div>
+                      </div>
+                      <Button onClick={downloadRepackedBundle} className="w-full gap-2">
+                        <Download className="w-4 h-4" />
+                        تحميل الـ Bundle المعدّل
+                      </Button>
+                      <p className="text-xs text-muted-foreground text-center">
+                        ضع الملف في المسار الأصلي: <code dir="ltr">romfs/StreamingAssets/aa/Switch/fe_assets_message/</code>
+                      </p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             )}
 
             {/* Assets List */}
@@ -262,10 +480,14 @@ export default function BundleExtractor() {
                   {filteredAssets.map((asset, idx) => {
                     const msbt = isMsbt(asset.data);
                     const originalIdx = bundle.assets.indexOf(asset);
+                    const isReplaced = replacements.has(asset.name);
+                    const canReplace = asset.textAssetDataLenOffset >= 0;
                     return (
                       <div
                         key={idx}
-                        className={`flex items-center justify-between p-3 hover:bg-muted/50 cursor-pointer transition-colors ${selectedAsset === originalIdx ? "bg-primary/10" : ""}`}
+                        className={`flex items-center justify-between p-3 hover:bg-muted/50 cursor-pointer transition-colors ${
+                          selectedAsset === originalIdx ? "bg-primary/10" : ""
+                        } ${isReplaced ? "bg-primary/5 border-r-2 border-r-primary" : ""}`}
                         onClick={() => setSelectedAsset(selectedAsset === originalIdx ? null : originalIdx)}
                       >
                         <div className="flex items-center gap-3 min-w-0">
@@ -279,10 +501,21 @@ export default function BundleExtractor() {
                             <p className="text-xs text-muted-foreground">
                               {asset.type} · {(asset.data.length / 1024).toFixed(1)} KB
                               {msbt && <span className="text-primary font-medium mr-2"> · MSBT ✓</span>}
+                              {isReplaced && <span className="text-accent-foreground font-medium mr-2"> · مستبدل ✓</span>}
                             </p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-1 shrink-0">
+                          {canReplace && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="استبدال هذا الملف"
+                              onClick={(e) => { e.stopPropagation(); handleReplaceAsset(asset.name); }}
+                            >
+                              <Replace className="w-4 h-4" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"
@@ -333,7 +566,6 @@ export default function BundleExtractor() {
 function AssetPreview({ asset }: { asset: ExtractedAsset }) {
   const isMsbtFile = isMsbt(asset.data);
 
-  // Show hex dump for first 512 bytes
   const hexLines: string[] = [];
   const previewLen = Math.min(asset.data.length, 512);
   for (let i = 0; i < previewLen; i += 16) {
@@ -349,12 +581,12 @@ function AssetPreview({ asset }: { asset: ExtractedAsset }) {
     );
   }
 
-  // Try to extract strings if MSBT
   let msbtStrings: string[] = [];
   if (isMsbtFile) {
     try {
-      // Simple extraction: look for readable UTF-16LE strings
-      const view = new DataView(asset.data.buffer, asset.data.byteOffset, asset.data.byteLength);
+      const view = new DataView(
+        (asset.data.buffer as ArrayBuffer).slice(asset.data.byteOffset, asset.data.byteOffset + asset.data.byteLength)
+      );
       let current = "";
       for (let i = 0; i < asset.data.length - 1; i += 2) {
         const code = view.getUint16(i, true);
@@ -368,7 +600,6 @@ function AssetPreview({ asset }: { asset: ExtractedAsset }) {
         }
       }
       if (current.length > 2) msbtStrings.push(current);
-      // Deduplicate and limit
       msbtStrings = [...new Set(msbtStrings)].slice(0, 50);
     } catch { /* ignore */ }
   }
