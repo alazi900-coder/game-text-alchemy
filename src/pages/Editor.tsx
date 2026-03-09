@@ -134,7 +134,7 @@ const Editor = () => {
   const [fontTestWord, setFontTestWord] = React.useState("");
   const [pageLocked, setPageLocked] = React.useState(false);
   const [showToolHelp, setShowToolHelp] = React.useState<ToolType>(null);
-  const [detectedGame, setDetectedGame] = React.useState<GameId>(animal-crossinge");
+  const [detectedGame, setDetectedGame] = React.useState<GameId>("animal-crossing");
 
   // Detect game from IDB + handle autoload URL param
   React.useEffect(() => {
