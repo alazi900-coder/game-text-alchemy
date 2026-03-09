@@ -390,14 +390,21 @@ export { isArabicChar, hasArabicChars, reverseBidi as unReverseBidi } from "@/li
 export function isTechnicalText(text: string): boolean {
   const t = text.trim();
   if (/^[0-9A-Fa-f\-\._:\/]+$/.test(t)) return true;
-  if (/\[[^\]]*\]/.test(text) && text.length < 50) return true;
-  if (/<[^>]+>/.test(text)) return true;
-  if (/[\\/][\w\-]+[\\/]/i.test(text)) return true;
-  if (text.length < 10 && /[{}()\[\]<>|&%$#@!]/.test(text)) return true;
-  if (/^[a-z]+([A-Z][a-z]*)+$|^[a-z]+(_[a-z]+)+$/.test(t)) return true;
-  if (/^[a-zA-Z0-9]{1,6}$/.test(t) && !/^[A-Z][a-z]{2,}$/.test(t)) return true;
-  const strippedML = text.replace(/\[\s*\w+\s*:[^\]]*\]/g, '').trim();
-  if (strippedML.length === 0 && /\[\s*\w+\s*:[^\]]*\]/.test(text)) return true;
+  // Strip MSBT/game tags before checking — they don't make text "technical"
+  const stripped = t
+    .replace(/\[\s*MSBT\s*:[^\]]*\]/gi, '')
+    .replace(/\[\s*\w+\s*:[^\]]*\]/g, '')
+    .replace(/[\uE000-\uE0FF]+/g, '')
+    .trim();
+  // If after stripping tags nothing remains, it's tag-only → technical
+  if (stripped.length === 0 && t.length > 0) return true;
+  // Only mark as technical if the remaining text (without tags) is purely non-translatable
+  if (/\[[^\]]*\]/.test(stripped) && stripped.length < 50) return true;
+  if (/<[^>]+>/.test(stripped)) return true;
+  if (/[\\/][\w\-]+[\\/]/i.test(stripped)) return true;
+  if (stripped.length < 10 && /[{}()\[\]<>|&%$#@!]/.test(stripped)) return true;
+  if (/^[a-z]+([A-Z][a-z]*)+$|^[a-z]+(_[a-z]+)+$/.test(stripped)) return true;
+  if (/^[a-zA-Z0-9]{1,6}$/.test(stripped) && !/^[A-Z][a-z]{2,}$/.test(stripped)) return true;
   return false;
 }
 
