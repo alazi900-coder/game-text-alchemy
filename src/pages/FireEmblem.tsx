@@ -94,6 +94,14 @@ const filePaths = [
 ];
 
 export default function FireEmblem() {
+  const navigate = useNavigate();
+
+  const handleLoadEnglishTexts = async () => {
+    const { idbSet } = await import("@/lib/idb-storage");
+    await idbSet("editorGame", "fire-emblem");
+    navigate("/editor?autoload=fire-emblem");
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <header className="relative flex flex-col items-center justify-center min-h-[80vh] px-4 text-center overflow-hidden">
