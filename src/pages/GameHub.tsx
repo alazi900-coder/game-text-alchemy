@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Sparkles } from "lucide-react";
+import { Sparkles, Package } from "lucide-react";
 import { APP_VERSION } from "@/lib/version";
 import heroBgAcnh from "@/assets/acnh-hero-bg.jpg";
 import heroBgFe from "@/assets/fe-hero-bg.jpg";
@@ -79,6 +79,23 @@ export default function GameHub() {
               </div>
             </Link>
           ))}
+        </div>
+
+        {/* Bundle Extractor link */}
+        <div className="max-w-4xl mx-auto mt-8">
+          <Link
+            to="/bundle-extractor"
+            className="group flex items-center gap-4 rounded-2xl border border-border/50 p-5 transition-all hover:scale-[1.01] hover:shadow-xl hover:border-primary/30 bg-card/50"
+          >
+            <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 text-primary">
+              <Package className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="font-display font-bold text-foreground">أداة فك حزم Unity Asset Bundle</h3>
+              <p className="text-xs text-muted-foreground font-body">استخراج واستبدال ملفات MSBT داخل حزم .bundle و .bytes.bundle</p>
+            </div>
+            <span className="mr-auto text-muted-foreground group-hover:text-primary transition-colors">←</span>
+          </Link>
         </div>
       </section>
 
