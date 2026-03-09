@@ -103,9 +103,6 @@ const filePaths = [
 ];
 
 const Xenoblade = forwardRef<HTMLDivElement>((_, ref) => {
-  const navigate = useNavigate();
-
-
   return (
     <div ref={ref} className="min-h-screen flex flex-col">
       {/* Hero with background */}
