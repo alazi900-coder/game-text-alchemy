@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, XCircle, Check, X, Wrench } from "lucide-react";
-import { previewTagRestore } from "@/lib/xc3-tag-restoration";
+import { previewTagRestore } from "@/lib/tag-restoration";
 import type { ExtractedEntry } from "./types";
 
 export interface TagRepairItem {

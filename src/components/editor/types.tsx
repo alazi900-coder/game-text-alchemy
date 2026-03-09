@@ -104,6 +104,14 @@ export const FILE_CATEGORIES: FileCategory[] = [
   { id: "npc", label: "\u062D\u0648\u0627\u0631\u0627\u062A \u0627\u0644\u0634\u062E\u0635\u064A\u0627\u062A", emoji: "\uD83D\uDCAC", icon: "MessageCircle", color: "text-cyan-400" },
 ];
 
+/** @deprecated BDAT removed — stub for compatibility */
+export const BDAT_CATEGORIES: FileCategory[] = [];
+
+/** @deprecated BDAT removed — stub returns "other" */
+export function categorizeBdatTable(_label: string, _sourceFile?: string, _original?: string): string {
+  return "other";
+}
+
 // Check if text contains technical tag markers
 export function hasTechnicalTags(text: string): boolean {
   return /[\uFFF9\uFFFA\uFFFB\uFFFC\uE000-\uE0FF]/.test(text)

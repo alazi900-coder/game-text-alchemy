@@ -301,11 +301,6 @@ const Editor = () => {
               <Button variant="secondary" className="font-display" onClick={() => editor.loadGameEnglishTexts(gameType)}>
                 <Download className="w-4 h-4" /> تحميل النصوص الإنجليزية 📥
               </Button>
-              {gameType === "xenoblade" && (
-                <Button variant="outline" className="font-display" onClick={editor.loadDemoBdatData}>
-                  تحميل بيانات BDAT تجريبية
-                </Button>
-              )}
               <Link to="/"><Button variant="ghost" className="font-display">🏠 العودة للرئيسية</Button></Link>
             </div>
           </div>

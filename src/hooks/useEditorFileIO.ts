@@ -3,7 +3,15 @@ import type { ImportConflict } from "@/components/editor/ImportConflictDialog";
 import { removeArabicPresentationForms } from "@/lib/arabic-processing";
 import type { EditorState } from "@/components/editor/types";
 import { ExtractedEntry, hasArabicChars, unReverseBidi, isTechnicalText } from "@/components/editor/types";
-import { murmur3_32 } from "@/lib/bdat-hash-dictionary";
+/** Simple murmur3 hash stub for key normalization */
+function murmur3_32(key: string): number {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) {
+    h = Math.imul(h ^ key.charCodeAt(i), 0x5bd1e995);
+    h ^= h >>> 13;
+  }
+  return h >>> 0;
+}
 import { fetchBundledTranslations, uploadBundledTranslations } from "@/lib/bundled-cloud";
 
 /** Parse a single JSON object chunk, repairing common issues */
