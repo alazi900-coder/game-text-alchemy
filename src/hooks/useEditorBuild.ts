@@ -581,14 +581,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
 
         // Total = from loaded entries; fallback to re-parsing IDB file
         let total = totalLoaded;
-        if (total === 0 && fileExists && bdatBinaryFiles![fileName]) {
-          try {
-            const { parseBdatFile, extractBdatStrings } = await import("@/lib/bdat-parser");
-            const { unhashLabel } = await import("@/lib/bdat-hash-dictionary");
-            const data = new Uint8Array(bdatBinaryFiles![fileName]);
-            const bdatFile = parseBdatFile(data, unhashLabel);
-            total = extractBdatStrings(bdatFile, fileName).length;
-          } catch { total = 0; }
+        if (total === 0) {
+          total = 0;
         }
 
         files.push({ fileName, matched, total, orphaned: orphanedCount, isLegacyFormat, fileExists });
