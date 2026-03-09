@@ -276,13 +276,13 @@ export default function MsbtProcess() {
               ${isProcessing ? "opacity-50 pointer-events-none" : ""}`}
           >
             <FileText className="w-12 h-12 text-primary mb-3" />
-            <p className="font-display font-semibold mb-1">ملفات MSBT</p>
-            <p className="text-xs text-muted-foreground mb-4">اسحب الملفات هنا أو اختر من الجهاز</p>
+            <p className="font-display font-semibold mb-1">ملفات MSBT أو SARC.ZS</p>
+            <p className="text-xs text-muted-foreground mb-4">اسحب الملفات هنا أو اختر من الجهاز — يدعم .msbt و .sarc.zs</p>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10 border border-primary/30 text-sm font-display font-semibold cursor-pointer hover:bg-primary/20 transition-colors">
                 <Upload className="w-4 h-4" />
-                اختيار ملفات .msbt
-                <input type="file" accept=".msbt" multiple className="hidden" onChange={e => handleFileSelect(e.target.files)} disabled={isProcessing} />
+                اختيار ملفات
+                <input type="file" accept=".msbt,.sarc,.zs" multiple className="hidden" onChange={e => handleFileSelect(e.target.files)} disabled={isProcessing} />
               </label>
               <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary/10 border border-secondary/30 text-sm font-display font-semibold cursor-pointer hover:bg-secondary/20 transition-colors">
                 <FolderOpen className="w-4 h-4" />
