@@ -5,7 +5,7 @@
  */
 
 import lz4 from "lz4js";
-import { init as initZstd, ZstdStream } from "@bokuweb/zstd-wasm";
+import { init as initZstd, decompress as zstdDecompress } from "@bokuweb/zstd-wasm";
 
 let zstdReady: Promise<void> | null = null;
 function ensureZstd() {
