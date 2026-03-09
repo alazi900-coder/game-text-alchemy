@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { toast } from "@/hooks/use-toast";
 import {
   ExtractedEntry, EditorState, AI_BATCH_SIZE, PAGE_SIZE,
-  categorizeFile, isTechnicalText, hasTechnicalTags,
+  categorizeFile, categorizeACNHFile, categorizeBdatTable, isTechnicalText, hasTechnicalTags,
 } from "@/components/editor/types";
 import { restoreTagsLocally } from "@/lib/tag-restoration";
 import { protectTags, restoreTags } from "@/lib/tag-protection";
@@ -35,11 +35,12 @@ interface UseEditorTranslationProps {
   npcMode: boolean;
   npcSplitCharLimit: number;
   aiModel: string;
+  currentGameType: string;
 }
 
 export function useEditorTranslation({
   state, setState, setLastSaved, setTranslateProgress, setPreviousTranslations, updateTranslation,
-  filterCategory, activeGlossary, parseGlossaryMap, paginatedEntries, filteredEntries, totalPages, setCurrentPage, userGeminiKey, translationProvider, myMemoryEmail, addMyMemoryChars, addAiRequest, rebalanceNewlines, npcMaxLines, npcMode, npcSplitCharLimit, aiModel,
+  filterCategory, activeGlossary, parseGlossaryMap, paginatedEntries, filteredEntries, totalPages, setCurrentPage, userGeminiKey, translationProvider, myMemoryEmail, addMyMemoryChars, addAiRequest, rebalanceNewlines, npcMaxLines, npcMode, npcSplitCharLimit, aiModel, currentGameType,
 }: UseEditorTranslationProps) {
 
   /** Auto-sync Arabic line count to match English \n count (universal — all files) */
@@ -191,8 +192,14 @@ export function useEditorTranslation({
     finally { setTranslatingSingle(null); }
   };
 
-  /** Categorize an entry using the correct function (BDAT vs MSBT) */
+  /** Categorize an entry using the correct function based on game type */
   const categorizeEntry = (e: ExtractedEntry): string => {
+    const isBdat = /^.+?\[\d+\]\./.test(e.label);
+    if (isBdat) {
+      const catSourceFile = e.msbtFile.startsWith('bdat-bin:') ? e.msbtFile.split(':')[1] : e.msbtFile.startsWith('bdat:') ? e.msbtFile.slice(5) : undefined;
+      return categorizeBdatTable(e.label, catSourceFile);
+    }
+    if (currentGameType === 'animal-crossing') return categorizeACNHFile(e.msbtFile);
     return categorizeFile(e.msbtFile);
   };
 
