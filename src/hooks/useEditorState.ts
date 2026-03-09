@@ -2236,6 +2236,7 @@ export function useEditorState() {
 
       setState({ entries, translations: {}, protectedEntries: new Set(), technicalBypass: new Set() });
       await idbSet("editorGame", gameId);
+      setCurrentGameType(gameId);
       await idbSet("editorState", { entries, translations: {}, freshExtraction: true });
 
       const gameNames: Record<string, string> = {
