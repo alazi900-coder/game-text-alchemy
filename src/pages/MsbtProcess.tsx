@@ -261,7 +261,7 @@ export default function MsbtProcess() {
           رفع ملفات {config.title} {config.emoji}
         </h1>
         <p className="text-muted-foreground font-body">
-          ارفع ملفات MSBT — يمكنك رفع عدة ملفات دفعة واحدة
+          ارفع ملفات MSBT أو SARC.ZS — يمكنك رفع عدة ملفات دفعة واحدة
         </p>
       </header>
 
