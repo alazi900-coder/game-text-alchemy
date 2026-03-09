@@ -222,7 +222,7 @@ export function parseMsbtFile(data: Uint8Array): MsbtFile {
     sectionCount,
     fileSize,
     entries,
-    rawBuffer: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
+    rawBuffer: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer,
     hasAttributes,
   };
 }
