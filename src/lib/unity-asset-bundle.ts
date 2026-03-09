@@ -220,6 +220,7 @@ export async function parseUnityBundle(buffer: ArrayBuffer): Promise<UnityBundle
   const br = new BinaryReader(blockInfoBuf);
   br.skip(16); // uncompressed data hash
   const blockCount = br.readU32();
+  console.log("[UnityFS] blockInfoData size:", blockInfoData.byteLength, "blockCount:", blockCount, "compressionType:", compressionType, "flags:", flags.toString(16));
 
   const blocks: BlockInfo[] = [];
   for (let i = 0; i < blockCount; i++) {
