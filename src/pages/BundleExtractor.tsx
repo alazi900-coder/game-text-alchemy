@@ -197,7 +197,7 @@ export default function BundleExtractor() {
               </Card>
               <Card>
                 <CardContent className="p-4 text-center">
-                  <FileText className="w-8 h-8 mx-auto mb-2 text-green-500" />
+                  <FileText className="w-8 h-8 mx-auto mb-2 text-primary" />
                   <p className="text-2xl font-bold">{msbtCount}</p>
                   <p className="text-sm text-muted-foreground">ملف MSBT</p>
                 </CardContent>
