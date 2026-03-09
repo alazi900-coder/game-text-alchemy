@@ -24,8 +24,7 @@ import {
   BarChart3, Menu, MoreVertical, Replace, Columns, Key, Type, Trash2, Package, Wand2,
   Lock, Unlock, Rows3, Languages, StopCircle,
 } from "lucide-react";
-
-import acHeroBg from "@/assets/acnh-hero-bg.jpg";
+;
 import feHeroBg from "@/assets/fe-hero-bg.jpg";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -49,8 +48,7 @@ import DiffView from "@/components/editor/DiffView";
 import BuildStatsDialog from "@/components/editor/BuildStatsDialog";
 import BuildConfirmDialog from "@/components/editor/BuildConfirmDialog";
 import ConsistencyResultsPanel from "@/components/editor/ConsistencyResultsPanel";
-import BdatBuildReport from "@/components/editor/BdatBuildReport";
-import IntegrityCheckDialog from "@/components/editor/IntegrityCheckDialog";
+import BdatBuildReport from "@/components/editor/ditor/IntegrityCheckDialog";
 import PreBuildDiagnostic from "@/components/editor/PreBuildDiagnostic";
 import CompareEnginesDialog from "@/components/editor/CompareEnginesDialog";
 import SentenceSplitPanel from "@/components/editor/SentenceSplitPanel";
