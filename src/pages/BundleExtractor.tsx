@@ -278,7 +278,7 @@ export default function BundleExtractor() {
                             <p className="font-mono text-sm truncate" dir="ltr">{asset.name}</p>
                             <p className="text-xs text-muted-foreground">
                               {asset.type} · {(asset.data.length / 1024).toFixed(1)} KB
-                              {msbt && <span className="text-green-500 font-medium mr-2"> · MSBT ✓</span>}
+                              {msbt && <span className="text-primary font-medium mr-2"> · MSBT ✓</span>}
                             </p>
                           </div>
                         </div>
