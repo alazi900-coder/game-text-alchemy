@@ -10,8 +10,12 @@ import UpdateBanner from "@/components/UpdateBanner";
 import { lazy, Suspense } from "react";
 import { Loader2 } from "lucide-react";
 
+const GameHub = lazy(() => import("./pages/GameHub"));
 const Xenoblade = lazy(() => import("./pages/Xenoblade"));
 const XenobladeProcess = lazy(() => import("./pages/XenobladeProcess"));
+const AnimalCrossing = lazy(() => import("./pages/AnimalCrossing"));
+const FireEmblem = lazy(() => import("./pages/FireEmblem"));
+const MsbtProcess = lazy(() => import("./pages/MsbtProcess"));
 const Editor = lazy(() => import("./pages/Editor"));
 const Auth = lazy(() => import("./pages/Auth"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -39,8 +43,13 @@ const App = () => (
           <ErrorBoundary fallbackTitle="حدث خطأ في التطبيق">
             <Suspense fallback={<PageLoader />}>
               <Routes>
-                <Route path="/" element={<Xenoblade />} />
+                <Route path="/" element={<GameHub />} />
+                <Route path="/xenoblade" element={<Xenoblade />} />
                 <Route path="/process" element={<ErrorBoundary fallbackTitle="خطأ في المعالجة"><XenobladeProcess /></ErrorBoundary>} />
+                <Route path="/animal-crossing" element={<AnimalCrossing />} />
+                <Route path="/animal-crossing/process" element={<ErrorBoundary fallbackTitle="خطأ في المعالجة"><MsbtProcess key="ac" /></ErrorBoundary>} />
+                <Route path="/fire-emblem" element={<FireEmblem />} />
+                <Route path="/fire-emblem/process" element={<ErrorBoundary fallbackTitle="خطأ في المعالجة"><MsbtProcess key="fe" /></ErrorBoundary>} />
                 <Route path="/editor" element={<ErrorBoundary fallbackTitle="خطأ في المحرر"><Editor /></ErrorBoundary>} />
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/install" element={<Install />} />
