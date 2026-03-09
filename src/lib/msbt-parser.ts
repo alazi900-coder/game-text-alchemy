@@ -46,30 +46,48 @@ function writeU32(dv: DataView, offset: number, value: number, le: boolean) {
   dv.setUint32(offset, value, le);
 }
 
-/** Decode UTF-16LE string from Uint8Array, stopping at null terminator */
+/** Known MSBT control tag descriptions */
+const MSBT_TAG_NAMES: Record<string, string> = {
+  '0.0': 'روبي',
+  '0.1': 'حجم',
+  '0.2': 'لون',
+  '0.3': 'فاصل',
+  '0.4': 'تأخير',
+  '1.0': 'متغير',
+  '1.1': 'عدد',
+  '1.2': 'سلسلة',
+  '2.0': 'شرط',
+  '2.1': 'اختيار',
+  '3.0': 'صوت',
+  '4.0': 'رسوم',
+};
+
+function getMsbtTagLabel(group: number, type: number): string {
+  return MSBT_TAG_NAMES[`${group}.${type}`] || `G${group}T${type}`;
+}
+
+/** Decode UTF-16 string from Uint8Array, stopping at null terminator.
+ *  Control tags (0x0E/0x0F) are converted to [MSBT:label] placeholders. */
 function decodeUtf16(bytes: Uint8Array, le: boolean): string {
   const chars: string[] = [];
   for (let i = 0; i + 1 < bytes.length; i += 2) {
     const code = le ? (bytes[i] | (bytes[i + 1] << 8)) : ((bytes[i] << 8) | bytes[i + 1]);
     if (code === 0) break;
-    // Skip control tags (0x0E xx xx ... and 0x0F xx xx xx)
     if (code === 0x0E) {
-      // Control tag: group(2) + type(2) + paramSize(2) + params(paramSize)
-      i += 2; // skip group
-      i += 2; // skip type
-      i += 2; // advance to paramSize field
-      if (i + 1 < bytes.length) {
-        const paramSize = le ? (bytes[i] | (bytes[i + 1] << 8)) : ((bytes[i] << 8) | bytes[i + 1]);
-        i += paramSize; // skip params (loop will add 2)
-      }
+      let group = 0, type = 0, paramSize = 0;
+      if (i + 3 < bytes.length) { i += 2; group = le ? (bytes[i] | (bytes[i + 1] << 8)) : ((bytes[i] << 8) | bytes[i + 1]); }
+      if (i + 3 < bytes.length) { i += 2; type = le ? (bytes[i] | (bytes[i + 1] << 8)) : ((bytes[i] << 8) | bytes[i + 1]); }
+      if (i + 3 < bytes.length) { i += 2; paramSize = le ? (bytes[i] | (bytes[i + 1] << 8)) : ((bytes[i] << 8) | bytes[i + 1]); i += paramSize; }
+      chars.push(`[MSBT:${getMsbtTagLabel(group, type)}]`);
       continue;
     }
     if (code === 0x0F) {
-      // End tag: group(2) + type(2) = 4 bytes after the 0x0F char
-      i += 4;
+      let group = 0, type = 0;
+      if (i + 3 < bytes.length) { i += 2; group = le ? (bytes[i] | (bytes[i + 1] << 8)) : ((bytes[i] << 8) | bytes[i + 1]); }
+      if (i + 3 < bytes.length) { i += 2; type = le ? (bytes[i] | (bytes[i + 1] << 8)) : ((bytes[i] << 8) | bytes[i + 1]); }
+      chars.push(`[/MSBT:${getMsbtTagLabel(group, type)}]`);
       continue;
     }
-    // Handle surrogate pairs
     if (code >= 0xD800 && code <= 0xDBFF) {
       if (i + 3 < bytes.length) {
         const low = le ? (bytes[i + 2] | (bytes[i + 3] << 8)) : ((bytes[i + 2] << 8) | bytes[i + 3]);
