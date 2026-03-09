@@ -48,7 +48,7 @@ import DiffView from "@/components/editor/DiffView";
 import BuildStatsDialog from "@/components/editor/BuildStatsDialog";
 import BuildConfirmDialog from "@/components/editor/BuildConfirmDialog";
 import ConsistencyResultsPanel from "@/components/editor/ConsistencyResultsPanel";
-import IntegrityCheckDialog from "@/components/editor/IntegrityCheckDialog";
+import IntegrityCheckDialog from "@/components/edditor/IntegrityCheckDialog";
 import PreBuildDiagnostic from "@/components/editor/PreBuildDiagnostic";
 import CompareEnginesDialog from "@/components/editor/CompareEnginesDialog";
 import SentenceSplitPanel from "@/components/editor/SentenceSplitPanel";
@@ -134,7 +134,7 @@ const Editor = () => {
   const [fontTestWord, setFontTestWord] = React.useState("");
   const [pageLocked, setPageLocked] = React.useState(false);
   const [showToolHelp, setShowToolHelp] = React.useState<ToolType>(null);
-  const [detectedGame, setDetectedGame] = React.useState<GameId>("xenoblade");
+  const [detectedGame, setDetectedGame] = React.useState<GameId>(animal-crossinge");
 
   // Detect game from IDB + handle autoload URL param
   React.useEffect(() => {
