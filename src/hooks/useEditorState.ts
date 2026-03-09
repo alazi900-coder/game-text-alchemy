@@ -628,8 +628,7 @@ export function useEditorState() {
         translation.includes(search);
       const matchFile = filterFile === "all" || e.msbtFile === filterFile;
       const isBdat = /^.+?\[\d+\]\./.test(e.label);
-      const sourceFile = e.msbtFile.startsWith('bdat-bin:') ? e.msbtFile.split(':')[1] : e.msbtFile.startsWith('bdat:') ? e.msbtFile.slice(5) : undefined;
-      const matchCategory = filterCategory.length === 0 || filterCategory.includes(isBdat ? categorizeBdatTable(e.label, sourceFile, e.original) : categorizeFile(e.msbtFile));
+      const matchCategory = filterCategory.length === 0 || filterCategory.includes(categorizeFile(e.msbtFile));
       const matchStatus = 
         filterStatus === "all" || 
         (filterStatus === "translated" && isTranslated) ||

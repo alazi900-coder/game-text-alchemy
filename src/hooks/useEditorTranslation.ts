@@ -193,11 +193,6 @@ export function useEditorTranslation({
 
   /** Categorize an entry using the correct function (BDAT vs MSBT) */
   const categorizeEntry = (e: ExtractedEntry): string => {
-    const isBdat = /^.+?\[\d+\]\./.test(e.label);
-    if (isBdat) {
-      const sourceFile = e.msbtFile.startsWith('bdat-bin:') ? e.msbtFile.split(':')[1] : e.msbtFile.startsWith('bdat:') ? e.msbtFile.slice(5) : undefined;
-      return categorizeBdatTable(e.label, sourceFile, e.original);
-    }
     return categorizeFile(e.msbtFile);
   };
 
