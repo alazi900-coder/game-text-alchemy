@@ -21,6 +21,7 @@ const Auth = lazy(() => import("./pages/Auth"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Install = lazy(() => import("./pages/Install"));
 const ModPackager = lazy(() => import("./pages/ModPackager"));
+const BundleExtractor = lazy(() => import("./pages/BundleExtractor"));
 
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-background">
