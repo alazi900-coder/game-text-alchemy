@@ -1,10 +1,17 @@
 /**
  * Unity AssetBundle (UnityFS) parser for browser.
- * Supports UnityFS format version 6/7 with LZ4 and uncompressed blocks.
+ * Supports UnityFS format version 6/7 with LZ4, Zstd, and uncompressed blocks.
  * Designed to extract and REPACK TextAsset (.bytes) entries — e.g., MSBT files inside Fire Emblem Engage bundles.
  */
 
 import lz4 from "lz4js";
+import { init as initZstd, decompress as zstdDecompress } from "@bokuweb/zstd-wasm";
+
+let zstdReady: Promise<void> | null = null;
+function ensureZstd() {
+  if (!zstdReady) zstdReady = initZstd();
+  return zstdReady;
+}
 
 /* ───────── Binary Reader ───────── */
 class BinaryReader {
@@ -143,7 +150,9 @@ const COMPRESSION_LZMA = 1;
 const COMPRESSION_LZ4 = 2;
 const COMPRESSION_LZ4HC = 3;
 
-function decompressBlock(compressed: Uint8Array, decompressedSize: number, compressionType: number): Uint8Array {
+const COMPRESSION_ZSTD = 4;
+
+async function decompressBlock(compressed: Uint8Array, decompressedSize: number, compressionType: number): Promise<Uint8Array> {
   switch (compressionType) {
     case COMPRESSION_NONE:
       return compressed;
@@ -153,6 +162,10 @@ function decompressBlock(compressed: Uint8Array, decompressedSize: number, compr
       lz4.decompressBlock(compressed, output, 0, compressed.length, 0);
       return output;
     }
+    case COMPRESSION_ZSTD: {
+      await ensureZstd();
+      return zstdDecompress(compressed);
+    }
     case COMPRESSION_LZMA:
       throw new Error("ضغط LZMA غير مدعوم حالياً — يُرجى استخدام أداة خارجية لفك الضغط أولاً");
     default:
@@ -161,7 +174,7 @@ function decompressBlock(compressed: Uint8Array, decompressedSize: number, compr
 }
 
 /* ───────── Parse UnityFS Header & Directory ───────── */
-export function parseUnityBundle(buffer: ArrayBuffer): UnityBundleInfo {
+export async function parseUnityBundle(buffer: ArrayBuffer): Promise<UnityBundleInfo> {
   const r = new BinaryReader(buffer);
 
   const signature = r.readNullTermString();
@@ -186,11 +199,11 @@ export function parseUnityBundle(buffer: ArrayBuffer): UnityBundleInfo {
     const savedPos = r.position;
     r.position = r.length - compressedBlockInfoSize;
     const compressed = r.readBytes(compressedBlockInfoSize);
-    blockInfoData = decompressBlock(compressed, decompressedBlockInfoSize, compressionType);
+    blockInfoData = await decompressBlock(compressed, decompressedBlockInfoSize, compressionType);
     r.position = savedPos;
   } else {
     const compressed = r.readBytes(compressedBlockInfoSize);
-    blockInfoData = decompressBlock(compressed, decompressedBlockInfoSize, compressionType);
+    blockInfoData = await decompressBlock(compressed, decompressedBlockInfoSize, compressionType);
   }
 
   // Align to 16 bytes if flag is set
@@ -200,10 +213,14 @@ export function parseUnityBundle(buffer: ArrayBuffer): UnityBundleInfo {
 
   const dataOffset = r.position;
 
-  // Parse block info
-  const br = new BinaryReader(blockInfoData.buffer as ArrayBuffer);
+  // Parse block info — ensure we use the exact slice (blockInfoData might have byteOffset)
+  const blockInfoBuf = blockInfoData.buffer.byteLength === blockInfoData.byteLength
+    ? blockInfoData.buffer as ArrayBuffer
+    : blockInfoData.slice(0).buffer as ArrayBuffer;
+  const br = new BinaryReader(blockInfoBuf);
   br.skip(16); // uncompressed data hash
   const blockCount = br.readU32();
+  console.log("[UnityFS] blockInfoData size:", blockInfoData.byteLength, "blockCount:", blockCount, "compressionType:", compressionType, "flags:", flags.toString(16));
 
   const blocks: BlockInfo[] = [];
   for (let i = 0; i < blockCount; i++) {
@@ -229,7 +246,7 @@ export function parseUnityBundle(buffer: ArrayBuffer): UnityBundleInfo {
 }
 
 /* ───────── Decompress all blocks into a single data stream ───────── */
-export function decompressBundle(buffer: ArrayBuffer, info: UnityBundleInfo): Uint8Array {
+export async function decompressBundle(buffer: ArrayBuffer, info: UnityBundleInfo): Promise<Uint8Array> {
   const totalDecompressed = info.blocks.reduce((sum, b) => sum + b.decompressedSize, 0);
   const output = new Uint8Array(totalDecompressed);
   let outPos = 0;
@@ -238,7 +255,7 @@ export function decompressBundle(buffer: ArrayBuffer, info: UnityBundleInfo): Ui
   for (const block of info.blocks) {
     const compressed = new Uint8Array(buffer, readPos, block.compressedSize);
     const compressionType = block.flags & 0x3F;
-    const decompressed = decompressBlock(compressed, block.decompressedSize, compressionType);
+    const decompressed = await decompressBlock(compressed, block.decompressedSize, compressionType);
     output.set(decompressed, outPos);
     outPos += block.decompressedSize;
     readPos += block.compressedSize;
@@ -692,13 +709,13 @@ function buildBlockInfoBuffer(dataSize: number, entries: DirectoryEntry[]): Uint
 }
 
 /* ───────── High-level API ───────── */
-export function extractBundleAssets(buffer: ArrayBuffer): {
+export async function extractBundleAssets(buffer: ArrayBuffer): Promise<{
   info: UnityBundleInfo;
   assets: ExtractedAsset[];
   decompressedData: Uint8Array;
-} {
-  const info = parseUnityBundle(buffer);
-  const decompressedData = decompressBundle(buffer, info);
+}> {
+  const info = await parseUnityBundle(buffer);
+  const decompressedData = await decompressBundle(buffer, info);
   const assets = extractAssets(decompressedData, info);
   return { info, assets, decompressedData };
 }

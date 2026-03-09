@@ -48,7 +48,7 @@ export default function BundleExtractor() {
 
     try {
       const buffer = await file.arrayBuffer();
-      const { info, assets, decompressedData } = extractBundleAssets(buffer);
+      const { info, assets, decompressedData } = await extractBundleAssets(buffer);
       setBundle({ fileName: file.name, info, assets, decompressedData, originalBuffer: buffer });
     } catch (err: any) {
       setError(err.message || "فشل في قراءة الملف");
