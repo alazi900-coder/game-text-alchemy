@@ -35,6 +35,7 @@ interface UseEditorTranslationProps {
   npcMode: boolean;
   npcSplitCharLimit: number;
   aiModel: string;
+  currentGameType: string;
 }
 
 export function useEditorTranslation({
