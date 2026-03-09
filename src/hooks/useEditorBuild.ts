@@ -212,11 +212,10 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       const allOverflowErrors: { fileName: string; key: string; originalBytes: number; translationBytes: number; reason?: string; newOffset?: number }[] = [];
 
       if (hasBdatBinary) {
-        setBuildProgress("معالجة ملفات BDAT الثنائية محلياً...");
-        const { parseBdatFile } = await import("@/lib/bdat-parser");
-        const { patchBdatFile } = await import("@/lib/bdat-writer");
-        const { unhashLabel } = await import("@/lib/bdat-hash-dictionary");
-        const { processArabicText, hasArabicPresentationForms: hasPF } = await import("@/lib/arabic-processing");
+        // BDAT support removed
+        setBuildProgress("❌ ملفات BDAT غير مدعومة في هذا الإصدار");
+        setBuilding(false);
+        return;
 
         const nonEmptyTranslations: Record<string, string> = {};
         for (const [k, v] of Object.entries(currentState.translations)) { if (v.trim()) nonEmptyTranslations[k] = v; }
