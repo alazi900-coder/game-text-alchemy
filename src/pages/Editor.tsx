@@ -85,7 +85,7 @@ import ConsistencyCheckPanel from "@/components/editor/ConsistencyCheckPanel";
 import { useEditorKeyboard } from "@/hooks/useEditorKeyboard";
 import VirtualizedEntryList from "@/components/editor/VirtualizedEntryList";
 
-type GameId = "xaimal-crossing" | "fire-emblem";
+type GameId = "animal-crossing" | "fire-emblem";
 
 interface GameConfig {
   id: GameId;
