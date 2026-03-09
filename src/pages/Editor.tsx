@@ -1461,10 +1461,10 @@ const Editor = () => {
                     </>
                   )}
                   {gameType === "animal-crossing" && (
-                    <DropdownMenuItem onClick={() => editor.handleLoadGlossaryByUrl?.("/zelda-glossary.txt", "Animal Crossing")}>🌿 قاموس Animal Crossing</DropdownMenuItem>
+                    <DropdownMenuItem onClick={editor.handleImportGlossary}>🌿 قاموس Animal Crossing (.txt)</DropdownMenuItem>
                   )}
                   {gameType === "fire-emblem" && (
-                    <DropdownMenuItem onClick={() => editor.handleLoadGlossaryByUrl?.("/zelda-glossary.txt", "Fire Emblem")}>🗡️ قاموس Fire Emblem</DropdownMenuItem>
+                    <DropdownMenuItem onClick={editor.handleImportGlossary}>🗡️ قاموس Fire Emblem (.txt)</DropdownMenuItem>
                   )}
                   <DropdownMenuSeparator />
                   <DropdownMenuLabel className="text-xs">🔄 إنشاء تلقائي</DropdownMenuLabel>
