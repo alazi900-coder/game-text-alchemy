@@ -102,7 +102,7 @@ const GAME_CONFIGS: Record<GameId, GameConfig> = {
     id: "animal-crossing",
     title: "Animal Crossing: NH",
     emoji: "🌿",
-    heroBg: acHeroBg,
+    heroBg: acnhHeroBg,
     processPath: "/animal-crossing/process",
     fileLabel: "ملفات MSBT",
     fileFormat: "MSBT",
