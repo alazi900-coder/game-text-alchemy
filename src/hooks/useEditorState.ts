@@ -632,7 +632,9 @@ export function useEditorState() {
         translation.includes(search);
       const matchFile = filterFile === "all" || e.msbtFile === filterFile;
       const isBdat = /^.+?\[\d+\]\./.test(e.label);
-      const matchCategory = filterCategory.length === 0 || filterCategory.includes(categorizeFile(e.msbtFile));
+      const catSourceFile = e.msbtFile.startsWith('bdat-bin:') ? e.msbtFile.split(':')[1] : e.msbtFile.startsWith('bdat:') ? e.msbtFile.slice(5) : undefined;
+      const entryCat = isBdat ? categorizeBdatTable(e.label, catSourceFile) : currentGameType === 'animal-crossing' ? categorizeACNHFile(e.msbtFile) : categorizeFile(e.msbtFile);
+      const matchCategory = filterCategory.length === 0 || filterCategory.includes(entryCat);
       const matchStatus = 
         filterStatus === "all" || 
         (filterStatus === "translated" && isTranslated) ||
