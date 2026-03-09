@@ -301,6 +301,9 @@ const Editor = () => {
             <br />
             <div className="flex flex-wrap items-center gap-3 mt-4 justify-center">
               <Link to={processPath}><Button className="font-display">اذهب لصفحة المعالجة ({gameConfig.fileFormat})</Button></Link>
+              <Button variant="secondary" className="font-display" onClick={() => editor.loadGameEnglishTexts(gameType)}>
+                <Download className="w-4 h-4" /> تحميل النصوص الإنجليزية تلقائياً 📥
+              </Button>
               {gameType === "xenoblade" && (
                 <Button variant="outline" className="font-display" onClick={editor.loadDemoBdatData}>
                   تحميل بيانات BDAT تجريبية
