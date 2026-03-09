@@ -112,6 +112,86 @@ export function categorizeBdatTable(_label: string, _sourceFile?: string, _origi
   return "other";
 }
 
+// ========== Animal Crossing: New Horizons Categories ==========
+export const ACNH_CATEGORIES: FileCategory[] = [
+  { id: "acnh-furniture", label: "الأثاث والديكور", emoji: "🪑", icon: "Home", color: "text-amber-400" },
+  { id: "acnh-tools", label: "الأدوات", emoji: "🔨", icon: "Wrench", color: "text-slate-400" },
+  { id: "acnh-insects", label: "الحشرات", emoji: "🦋", icon: "Target", color: "text-lime-400" },
+  { id: "acnh-fish", label: "الأسماك", emoji: "🐟", icon: "Utensils", color: "text-sky-400" },
+  { id: "acnh-sea", label: "مخلوقات البحر", emoji: "🦑", icon: "FlaskConical", color: "text-cyan-400" },
+  { id: "acnh-shells", label: "الأصداف", emoji: "🐚", icon: "Gem", color: "text-pink-400" },
+  { id: "acnh-fossils", label: "الحفريات", emoji: "🦴", icon: "BookOpen", color: "text-orange-400" },
+  { id: "acnh-plants", label: "النباتات والزهور", emoji: "🌿", icon: "FlaskConical", color: "text-emerald-400" },
+  { id: "acnh-crafting", label: "الصناعة (DIY)", emoji: "🛠️", icon: "Wrench", color: "text-yellow-400" },
+  { id: "acnh-music", label: "الموسيقى", emoji: "🎵", icon: "Clapperboard", color: "text-violet-400" },
+  { id: "acnh-fences", label: "الأسوار", emoji: "🏡", icon: "ShieldCheck", color: "text-teal-400" },
+  { id: "acnh-villagers", label: "القرويون", emoji: "🏘️", icon: "Users", color: "text-rose-400" },
+  { id: "acnh-special-npcs", label: "الشخصيات الخاصة", emoji: "⭐", icon: "Sparkles", color: "text-yellow-400" },
+  { id: "acnh-events", label: "الأحداث والمناسبات", emoji: "🎉", icon: "Clapperboard", color: "text-red-400" },
+  { id: "acnh-species", label: "الأنواع والسلالات", emoji: "🐾", icon: "Drama", color: "text-purple-400" },
+  { id: "acnh-misc", label: "متنوع", emoji: "📦", icon: "Backpack", color: "text-muted-foreground" },
+  { id: "acnh-clothing", label: "الملابس والإكسسوارات", emoji: "👗", icon: "Shirt", color: "text-violet-400" },
+  { id: "acnh-wallpaper", label: "ورق الجدران والأرضيات", emoji: "🎨", icon: "MonitorSmartphone", color: "text-indigo-400" },
+  { id: "acnh-recipes", label: "الوصفات", emoji: "📋", icon: "ScrollText", color: "text-green-400" },
+  { id: "acnh-system", label: "النظام والقوائم", emoji: "⚙️", icon: "Settings", color: "text-slate-400" },
+  { id: "acnh-dialogue", label: "الحوارات", emoji: "💬", icon: "MessageCircle", color: "text-cyan-400" },
+  { id: "acnh-mail", label: "الرسائل والبريد", emoji: "✉️", icon: "MessageSquare", color: "text-blue-400" },
+];
+
+/**
+ * Categorize ACNH files — handles both CSV category names and MSBT filenames
+ */
+export function categorizeACNHFile(filePath: string): string {
+  const lower = filePath.toLowerCase();
+
+  // CSV category names (from loadGameEnglishTexts)
+  const csvMap: Record<string, string> = {
+    "furniture": "acnh-furniture",
+    "tools": "acnh-tools",
+    "insects": "acnh-insects",
+    "fish": "acnh-fish",
+    "sea creatures": "acnh-sea",
+    "shells": "acnh-shells",
+    "fossils": "acnh-fossils",
+    "plants": "acnh-plants",
+    "crafting": "acnh-crafting",
+    "miscellaneous": "acnh-misc",
+    "music": "acnh-music",
+    "fences": "acnh-fences",
+    "villagers": "acnh-villagers",
+    "special npcs": "acnh-special-npcs",
+    "events": "acnh-events",
+    "species": "acnh-species",
+  };
+  if (csvMap[lower]) return csvMap[lower];
+
+  // MSBT filename patterns
+  if (/STR_ItemName_00_Ftr|Furniture|FtrMsg/i.test(filePath)) return "acnh-furniture";
+  if (/STR_ItemName_20_Tool|ToolMsg/i.test(filePath)) return "acnh-tools";
+  if (/STR_ItemName_30_Insect|InsectMsg/i.test(filePath)) return "acnh-insects";
+  if (/STR_ItemName_31_Fish|FishMsg/i.test(filePath)) return "acnh-fish";
+  if (/STR_ItemName_32_Dive|DiveFish|SeaMsg/i.test(filePath)) return "acnh-sea";
+  if (/STR_ItemName_33_Shell|ShellMsg/i.test(filePath)) return "acnh-shells";
+  if (/STR_ItemName_34_Fossil|FossilMsg/i.test(filePath)) return "acnh-fossils";
+  if (/STR_ItemName_40_Plant|PlantMsg|FlowerMsg/i.test(filePath)) return "acnh-plants";
+  if (/STR_ItemName_70_Craft|CraftMsg|DIY/i.test(filePath)) return "acnh-crafting";
+  if (/STR_ItemName_82_Music|MusicMsg/i.test(filePath)) return "acnh-music";
+  if (/STR_ItemName_83_Fence|FenceMsg/i.test(filePath)) return "acnh-fences";
+  if (/STR_NNpcName|NNpc|TalkNNpc/i.test(filePath)) return "acnh-villagers";
+  if (/STR_SNpcName|SNpc|TalkSNpc/i.test(filePath)) return "acnh-special-npcs";
+  if (/STR_EventName|EventMsg|EventFlow/i.test(filePath)) return "acnh-events";
+  if (/STR_Race/i.test(filePath)) return "acnh-species";
+  if (/STR_ItemName_01_Cap|STR_ItemName_02_Tops|STR_ItemName_03_Bottoms|STR_ItemName_04_Dress|STR_ItemName_05_Socks|STR_ItemName_06_Shoes|STR_ItemName_07_Bag|STR_ItemName_08_Acc|Cloth/i.test(filePath)) return "acnh-clothing";
+  if (/STR_ItemName_10_Rug|STR_ItemName_11_Wall|STR_ItemName_12_Floor|Wallpaper|Floor|Rug/i.test(filePath)) return "acnh-wallpaper";
+  if (/RecipeMsg|Recipe/i.test(filePath)) return "acnh-recipes";
+  if (/SYS_|System|Config|Setting|Option/i.test(filePath)) return "acnh-system";
+  if (/Dialog|Talk|Chat/i.test(filePath)) return "acnh-dialogue";
+  if (/Mail|Letter/i.test(filePath)) return "acnh-mail";
+  if (/STR_ItemName_80_Etc/i.test(filePath)) return "acnh-misc";
+
+  return "other";
+}
+
 // Check if text contains technical tag markers
 export function hasTechnicalTags(text: string): boolean {
   return /[\uFFF9\uFFFA\uFFFB\uFFFC\uE000-\uE0FF]/.test(text)

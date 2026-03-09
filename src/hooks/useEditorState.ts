@@ -85,7 +85,7 @@ export function useEditorState() {
   const [isSearchPinned, setIsSearchPinned] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [showFindReplace, setShowFindReplace] = useState(false);
-
+  const [currentGameType, setCurrentGameType] = useState<string>("xenoblade");
 
 
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -100,7 +100,7 @@ export function useEditorState() {
   });
   const { activeGlossary, parseGlossaryMap } = glossary;
 
-  const quality = useEditorQuality({ state });
+  const quality = useEditorQuality({ state, gameType: currentGameType });
   const { isTranslationTooShort, isTranslationTooLong, hasStuckChars, isMixedLanguage, needsImprovement, qualityStats, needsImproveCount, categoryProgress, translatedCount } = quality;
 
   const build = useEditorBuild({ state, setState, setLastSaved, arabicNumerals, mirrorPunctuation, gameType: "xenoblade", forceSaveRef });
@@ -336,6 +336,10 @@ export function useEditorState() {
 
   useEffect(() => {
     const loadState = async () => {
+      // Load game type from IDB
+      const savedGame = await idbGet<string>("editorGame");
+      if (savedGame) setCurrentGameType(savedGame);
+
       // Check if stored originals exist
       const savedOriginals = await idbGet<Record<string, string>>("originalTexts");
       if (savedOriginals && Object.keys(savedOriginals).length > 0) {
@@ -2236,6 +2240,7 @@ export function useEditorState() {
 
       setState({ entries, translations: {}, protectedEntries: new Set(), technicalBypass: new Set() });
       await idbSet("editorGame", gameId);
+      setCurrentGameType(gameId);
       await idbSet("editorState", { entries, translations: {}, freshExtraction: true });
 
       const gameNames: Record<string, string> = {
@@ -3279,7 +3284,7 @@ export function useEditorState() {
     advancedAnalysisTab, literalResults, styleResults, consistencyCheckResult, alternativeResults, fullAnalysisResults, advancedAnalyzing, enhancedMemory,
     glossaryComplianceResults, checkingGlossaryCompliance,
     isSearchPinned, pinnedKeys,
-    categoryProgress, qualityStats, needsImproveCount, translatedCount, tagsCount, fuzzyCount, byteOverflowCount, multiLineCount, newlinesCount, npcAffectedCount, lineSyncAffectedCount,
+    categoryProgress, qualityStats, needsImproveCount, translatedCount, tagsCount, fuzzyCount, byteOverflowCount, multiLineCount, newlinesCount, npcAffectedCount, lineSyncAffectedCount, currentGameType,
     bdatTableNames, bdatColumnNames, bdatTableCounts, bdatColumnCounts,
     ...glossary,
     msbtFiles, filteredEntries, paginatedEntries, totalPages,

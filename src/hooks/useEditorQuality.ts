@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { hasArabicPresentationForms } from "@/lib/arabic-processing";
-import { ExtractedEntry, EditorState, categorizeFile, categorizeBdatTable, hasTechnicalTags } from "@/components/editor/types";
+import { ExtractedEntry, EditorState, categorizeFile, categorizeACNHFile, categorizeBdatTable, hasTechnicalTags } from "@/components/editor/types";
 
 export interface QualityStats {
   tooLong: number;
@@ -23,9 +23,10 @@ export interface NeedsImproveCount {
 
 interface UseEditorQualityProps {
   state: EditorState | null;
+  gameType?: string;
 }
 
-export function useEditorQuality({ state }: UseEditorQualityProps) {
+export function useEditorQuality({ state, gameType }: UseEditorQualityProps) {
   const [categoryProgress, setCategoryProgress] = useState<Record<string, { total: number; translated: number }>>({});
   const [qualityStats, setQualityStats] = useState<QualityStats>({ tooLong: 0, nearLimit: 0, missingTags: 0, placeholderMismatch: 0, total: 0, problemKeys: new Set<string>(), damagedTags: 0, damagedTagKeys: new Set<string>() });
   const [needsImproveCount, setNeedsImproveCount] = useState<NeedsImproveCount>({ total: 0, tooShort: 0, tooLong: 0, stuck: 0, mixed: 0 });
@@ -98,7 +99,7 @@ export function useEditorQuality({ state }: UseEditorQualityProps) {
         const isTranslated = trimmed !== '';
         const isBdat = /^.+?\[\d+\]\./.test(entry.label);
         const sourceFile = entry.msbtFile.startsWith('bdat-bin:') ? entry.msbtFile.split(':')[1] : entry.msbtFile.startsWith('bdat:') ? entry.msbtFile.slice(5) : undefined;
-        const cat = isBdat ? categorizeBdatTable(entry.label, sourceFile) : categorizeFile(entry.msbtFile);
+        const cat = isBdat ? categorizeBdatTable(entry.label, sourceFile) : gameType === 'animal-crossing' ? categorizeACNHFile(entry.msbtFile) : categorizeFile(entry.msbtFile);
 
         if (!progress[cat]) progress[cat] = { total: 0, translated: 0 };
         progress[cat].total++;
@@ -141,7 +142,7 @@ export function useEditorQuality({ state }: UseEditorQualityProps) {
       setTranslatedCount(translated);
     }, 800);
     return () => { if (combinedStatsTimerRef.current) clearTimeout(combinedStatsTimerRef.current); };
-  }, [state?.entries, state?.translations, isTranslationTooShort, isTranslationTooLong, hasStuckChars, isMixedLanguage]);
+  }, [state?.entries, state?.translations, isTranslationTooShort, isTranslationTooLong, hasStuckChars, isMixedLanguage, gameType]);
 
   return {
     // Stats
