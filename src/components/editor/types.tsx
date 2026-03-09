@@ -114,6 +114,16 @@ export function categorizeBdatTable(_label: string, _sourceFile?: string, _origi
 
 // ========== Animal Crossing: New Horizons Categories ==========
 export const ACNH_CATEGORIES: FileCategory[] = [
+  // UI & System subcategories
+  { id: "acnh-title", label: "الشاشة الرئيسية", emoji: "🏠", icon: "Home", color: "text-emerald-400" },
+  { id: "acnh-newgame", label: "بداية جديدة", emoji: "🆕", icon: "Sparkles", color: "text-sky-400" },
+  { id: "acnh-loading", label: "شاشات التحميل", emoji: "⏳", icon: "Monitor", color: "text-amber-400" },
+  { id: "acnh-hud", label: "العدادات والواجهة", emoji: "📊", icon: "BarChart3", color: "text-cyan-400" },
+  { id: "acnh-settings", label: "الإعدادات", emoji: "⚙️", icon: "Settings", color: "text-slate-400" },
+  { id: "acnh-save", label: "الحفظ والتحميل", emoji: "💾", icon: "Monitor", color: "text-blue-400" },
+  { id: "acnh-nookphone", label: "هاتف نوك", emoji: "📱", icon: "MonitorSmartphone", color: "text-green-400" },
+  { id: "acnh-shop", label: "المتاجر والتجارة", emoji: "🛒", icon: "ShoppingCart", color: "text-yellow-400" },
+  // Items
   { id: "acnh-furniture", label: "الأثاث والديكور", emoji: "🪑", icon: "Home", color: "text-amber-400" },
   { id: "acnh-clothing", label: "الملابس والإكسسوارات", emoji: "👗", icon: "Shirt", color: "text-violet-400" },
   { id: "acnh-tools", label: "الأدوات", emoji: "🔨", icon: "Wrench", color: "text-slate-400" },
@@ -128,14 +138,15 @@ export const ACNH_CATEGORIES: FileCategory[] = [
   { id: "acnh-music", label: "الموسيقى", emoji: "🎵", icon: "Clapperboard", color: "text-violet-400" },
   { id: "acnh-fences", label: "الأسوار", emoji: "🏡", icon: "ShieldCheck", color: "text-teal-400" },
   { id: "acnh-wallpaper", label: "ورق الجدران والأرضيات", emoji: "🎨", icon: "MonitorSmartphone", color: "text-indigo-400" },
+  // NPCs & Story
   { id: "acnh-villagers", label: "القرويون", emoji: "🏘️", icon: "Users", color: "text-rose-400" },
   { id: "acnh-special-npcs", label: "الشخصيات الخاصة", emoji: "⭐", icon: "Sparkles", color: "text-yellow-400" },
   { id: "acnh-events", label: "الأحداث والمناسبات", emoji: "🎉", icon: "Clapperboard", color: "text-red-400" },
   { id: "acnh-species", label: "الأنواع والسلالات", emoji: "🐾", icon: "Drama", color: "text-purple-400" },
-  { id: "acnh-misc", label: "متنوع", emoji: "📦", icon: "Backpack", color: "text-muted-foreground" },
-  { id: "acnh-system", label: "النظام والقوائم", emoji: "⚙️", icon: "Settings", color: "text-slate-400" },
   { id: "acnh-dialogue", label: "الحوارات", emoji: "💬", icon: "MessageCircle", color: "text-cyan-400" },
   { id: "acnh-mail", label: "الرسائل والبريد", emoji: "✉️", icon: "MessageSquare", color: "text-blue-400" },
+  { id: "acnh-misc", label: "متنوع", emoji: "📦", icon: "Backpack", color: "text-muted-foreground" },
+  { id: "acnh-system", label: "نظام أخرى", emoji: "🔧", icon: "SlidersHorizontal", color: "text-slate-400" },
 ];
 
 /**
@@ -168,7 +179,17 @@ export function categorizeACNHFile(filePath: string): string {
   };
   if (csvMap[lower]) return csvMap[lower];
 
-  // MSBT filename patterns
+  // UI & System subcategories — check before generic patterns
+  if (/Title|Boot|Opening|Startup/i.test(filePath)) return "acnh-title";
+  if (/NewGame|FirstPlay|Tutorial|Intro|Welcome/i.test(filePath)) return "acnh-newgame";
+  if (/Loading|NowLoading|Please_Wait/i.test(filePath)) return "acnh-loading";
+  if (/Save|AutoSave|Backup/i.test(filePath)) return "acnh-save";
+  if (/Hud|Counter|Gauge|Indicator|Bell|Miles|Timer|Clock/i.test(filePath)) return "acnh-hud";
+  if (/Option|Config|Setting/i.test(filePath)) return "acnh-settings";
+  if (/Phone|Nook.*Phone|App|SmartPhone/i.test(filePath)) return "acnh-nookphone";
+  if (/Shop|Store|Nook.*Cranny|Able.*Sister|Buy|Sell|Price|Trade|Catalog/i.test(filePath)) return "acnh-shop";
+
+  // Items
   if (/STR_ItemName_00_Ftr|Furniture|FtrMsg/i.test(filePath)) return "acnh-furniture";
   if (/STR_ItemName_20_Tool|ToolMsg/i.test(filePath)) return "acnh-tools";
   if (/STR_ItemName_30_Insect|InsectMsg/i.test(filePath)) return "acnh-insects";
@@ -186,11 +207,12 @@ export function categorizeACNHFile(filePath: string): string {
   if (/STR_Race/i.test(filePath)) return "acnh-species";
   if (/STR_ItemName_01_Cap|STR_ItemName_02_Tops|STR_ItemName_03_Bottoms|STR_ItemName_04_Dress|STR_ItemName_05_Socks|STR_ItemName_06_Shoes|STR_ItemName_07_Bag|STR_ItemName_08_Acc|Cloth/i.test(filePath)) return "acnh-clothing";
   if (/STR_ItemName_10_Rug|STR_ItemName_11_Wall|STR_ItemName_12_Floor|Wallpaper|Floor|Rug/i.test(filePath)) return "acnh-wallpaper";
-  if (/RecipeMsg|Recipe/i.test(filePath)) return "acnh-recipes";
-  if (/SYS_|System|Config|Setting|Option/i.test(filePath)) return "acnh-system";
+  if (/RecipeMsg|Recipe/i.test(filePath)) return "acnh-crafting";
+  if (/SYS_|System/i.test(filePath)) return "acnh-system";
   if (/Dialog|Talk|Chat/i.test(filePath)) return "acnh-dialogue";
   if (/Mail|Letter/i.test(filePath)) return "acnh-mail";
   if (/STR_ItemName_80_Etc/i.test(filePath)) return "acnh-misc";
+  if (/OneRoom|Room|Theme/i.test(filePath)) return "acnh-furniture";
 
   return "other";
 }
