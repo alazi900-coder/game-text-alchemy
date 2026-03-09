@@ -159,7 +159,7 @@ export default function MsbtProcess() {
 
       for (const file of msbtFiles) {
         try {
-          const buffer = await file.arrayBuffer();
+          const buffer = file.data;
           fileBuffers[file.name] = buffer;
           const data = new Uint8Array(buffer);
           addLog(`📂 ${file.name}: ${(data.length / 1024).toFixed(1)} KB`);
