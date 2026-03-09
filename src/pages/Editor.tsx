@@ -24,7 +24,7 @@ import {
   BarChart3, Menu, MoreVertical, Replace, Columns, Key, Type, Trash2, Package, Wand2,
   Lock, Unlock, Rows3, Languages, StopCircle,
 } from "lucide-react";
-import xc3HeroBg from "@/assets/xc3-hero-bg.jpg";
+
 import acHeroBg from "@/assets/acnh-hero-bg.jpg";
 import feHeroBg from "@/assets/fe-hero-bg.jpg";
 import { useIsMobile } from "@/hooks/use-mobile";
