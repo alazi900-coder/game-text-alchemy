@@ -192,8 +192,14 @@ export function useEditorTranslation({
     finally { setTranslatingSingle(null); }
   };
 
-  /** Categorize an entry using the correct function (BDAT vs MSBT) */
+  /** Categorize an entry using the correct function based on game type */
   const categorizeEntry = (e: ExtractedEntry): string => {
+    const isBdat = /^.+?\[\d+\]\./.test(e.label);
+    if (isBdat) {
+      const catSourceFile = e.msbtFile.startsWith('bdat-bin:') ? e.msbtFile.split(':')[1] : e.msbtFile.startsWith('bdat:') ? e.msbtFile.slice(5) : undefined;
+      return categorizeBdatTable(e.label, catSourceFile);
+    }
+    if (currentGameType === 'animal-crossing') return categorizeACNHFile(e.msbtFile);
     return categorizeFile(e.msbtFile);
   };
 
