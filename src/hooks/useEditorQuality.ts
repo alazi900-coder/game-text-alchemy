@@ -142,7 +142,7 @@ export function useEditorQuality({ state, gameType }: UseEditorQualityProps) {
       setTranslatedCount(translated);
     }, 800);
     return () => { if (combinedStatsTimerRef.current) clearTimeout(combinedStatsTimerRef.current); };
-  }, [state?.entries, state?.translations, isTranslationTooShort, isTranslationTooLong, hasStuckChars, isMixedLanguage]);
+  }, [state?.entries, state?.translations, isTranslationTooShort, isTranslationTooLong, hasStuckChars, isMixedLanguage, gameType]);
 
   return {
     // Stats
