@@ -207,7 +207,7 @@ export default function BundleExtractor() {
             <input
               ref={fileRef}
               type="file"
-              accept=".bundle,.unity3d,.assets"
+              accept=".bundle,.unity3d,.assets,.bytes"
               className="hidden"
               onChange={handleFileLoad}
             />
