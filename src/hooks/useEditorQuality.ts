@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { hasArabicPresentationForms } from "@/lib/arabic-processing";
-import { ExtractedEntry, EditorState, categorizeFile, categorizeBdatTable, hasTechnicalTags } from "@/components/editor/types";
+import { ExtractedEntry, EditorState, categorizeFile, categorizeACNHFile, categorizeBdatTable, hasTechnicalTags } from "@/components/editor/types";
 
 export interface QualityStats {
   tooLong: number;
