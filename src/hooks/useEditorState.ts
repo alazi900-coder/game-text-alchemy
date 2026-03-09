@@ -193,8 +193,15 @@ export function useEditorState() {
     const autoTranslations: Record<string, string> = {};
     for (const entry of editorState.entries) {
       const key = `${entry.msbtFile}:${entry.index}`;
-      if (!editorState.translations[key]?.trim() && arabicRegex.test(entry.original)) {
-        autoTranslations[key] = entry.original;
+      if (!editorState.translations[key]?.trim()) {
+        // Strip bracket tags [Tag:Value] and {var} before checking for Arabic
+        // to avoid false positives from Arabic tag labels like [MSBT:فاصل]
+        const strippedText = entry.original
+          .replace(/\[[^\]]*\]/g, '')
+          .replace(/\{[^}]*\}/g, '');
+        if (arabicRegex.test(strippedText)) {
+          autoTranslations[key] = entry.original;
+        }
       }
     }
     return autoTranslations;
