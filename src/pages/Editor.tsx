@@ -87,6 +87,48 @@ import ConsistencyCheckPanel from "@/components/editor/ConsistencyCheckPanel";
 import { useEditorKeyboard } from "@/hooks/useEditorKeyboard";
 import VirtualizedEntryList from "@/components/editor/VirtualizedEntryList";
 
+type GameId = "xenoblade" | "animal-crossing" | "fire-emblem";
+
+interface GameConfig {
+  id: GameId;
+  title: string;
+  emoji: string;
+  heroBg: string;
+  processPath: string;
+  fileLabel: string;
+  fileFormat: string;
+}
+
+const GAME_CONFIGS: Record<GameId, GameConfig> = {
+  xenoblade: {
+    id: "xenoblade",
+    title: "Xenoblade Chronicles 3",
+    emoji: "⚔️",
+    heroBg: xc3HeroBg,
+    processPath: "/process",
+    fileLabel: "ملفات BDAT",
+    fileFormat: "BDAT",
+  },
+  "animal-crossing": {
+    id: "animal-crossing",
+    title: "Animal Crossing: NH",
+    emoji: "🌿",
+    heroBg: acHeroBg,
+    processPath: "/animal-crossing/process",
+    fileLabel: "ملفات MSBT",
+    fileFormat: "MSBT",
+  },
+  "fire-emblem": {
+    id: "fire-emblem",
+    title: "Fire Emblem Engage",
+    emoji: "🗡️",
+    heroBg: feHeroBg,
+    processPath: "/fire-emblem/process",
+    fileLabel: "ملفات MSBT",
+    fileFormat: "MSBT",
+  },
+};
+
 const Editor = () => {
   const editor = useEditorState();
   const { findSimilar } = useTranslationMemory(editor.state);
@@ -103,8 +145,23 @@ const Editor = () => {
   const [fontTestWord, setFontTestWord] = React.useState("");
   const [pageLocked, setPageLocked] = React.useState(false);
   const [showToolHelp, setShowToolHelp] = React.useState<ToolType>(null);
-  const gameType = "xenoblade";
-  const processPath = "/process";
+  const [detectedGame, setDetectedGame] = React.useState<GameId>("xenoblade");
+
+  // Detect game from IDB
+  React.useEffect(() => {
+    (async () => {
+      const { idbGet } = await import("@/lib/idb-storage");
+      const game = await idbGet<string>("editorGame");
+      if (game && game in GAME_CONFIGS) {
+        setDetectedGame(game as GameId);
+      }
+    })();
+  }, []);
+
+  const gameConfig = GAME_CONFIGS[detectedGame];
+  const heroBg = gameConfig.heroBg;
+  const gameType = detectedGame;
+  const processPath = gameConfig.processPath;
 
   // Keyboard shortcuts
   useEditorKeyboard({
