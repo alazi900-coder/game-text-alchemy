@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { FileText, Download, Shield, Sparkles } from "lucide-react";
 import GameInfoSection from "@/components/GameInfoSection";
+import ExtractionGuideSection from "@/components/ExtractionGuideSection";
 import heroBg from "@/assets/fe-hero-bg.jpg";
 import { APP_VERSION } from "@/lib/version";
 
@@ -9,6 +10,87 @@ const steps = [
   { icon: FileText, title: "ارفع الملفات", desc: "ارفع ملفات MSBT من مجلد Message داخل romFS" },
   { icon: Shield, title: "معالجة تلقائية", desc: "استخراج النصوص ومعالجتها وربط الحروف العربية" },
   { icon: Download, title: "حمّل النتيجة", desc: "حمّل الملف المعرّب جاهزاً للعبة" },
+];
+
+const extractionSteps = [
+  {
+    title: "تثبيت nxdumptool على السويتش",
+    desc: "على جهاز سويتش مهكّر، ثبّت nxdumptool من Homebrew App Store",
+  },
+  {
+    title: "فك romFS",
+    desc: "افتح nxdumptool > Dump gamecard content > RomFS options > Dump RomFS section data",
+    warning: "تأكد من وجود مساحة كافية على بطاقة SD (اللعبة ~15GB)",
+  },
+  {
+    title: "باستخدام المحاكي (yuzu/Ryujinx)",
+    desc: "كليك يمين على اللعبة > Extract Data > RomFS",
+    code: "Right-click Fire Emblem Engage > Extract Data > RomFS",
+  },
+  {
+    title: "الوصول لملفات النصوص",
+    desc: "ملفات MSBT موجودة داخل ملفات .bytes.bundle — تحتاج فكها أولاً",
+    code: "romfs/StreamingAssets/aa/Switch/fe_assets_message/",
+  },
+  {
+    title: "فك ملفات Bundle",
+    desc: "استخدم AssetStudio أو UABE لفك ملفات .bytes.bundle واستخراج MSBT",
+    warning: "Fire Emblem Engage تستخدم Unity — الملفات مضغوطة داخل Asset Bundles",
+  },
+];
+
+const packingSteps = [
+  {
+    title: "إنشاء بنية المجلدات",
+    desc: "أنشئ مجلد romfs بنفس بنية الملفات الأصلية",
+    code: "atmosphere/contents/0100A6301214E000/romfs/",
+  },
+  {
+    title: "إعادة حزم ملفات Bundle",
+    desc: "استخدم UABE Avalonia لإعادة حزم ملفات MSBT داخل Asset Bundles",
+  },
+  {
+    title: "نسخ الملفات المعرّبة",
+    desc: "ضع ملفات Bundle المعدّلة في مسار romfs الصحيح",
+    code: "romfs/StreamingAssets/aa/Switch/fe_assets_message/",
+  },
+  {
+    title: "ملاحظة مهمة",
+    desc: "Fire Emblem Engage تتطلب 7 bytes من الـ null terminators (0x00) في نهاية كل نص",
+    warning: "MSBT Editor Reloaded يزيل 4 bytes — يجب إضافتها يدوياً بمحرر Hex",
+  },
+];
+
+const installSteps = [
+  {
+    title: "على السويتش (Atmosphere)",
+    desc: "انسخ مجلد atmosphere إلى جذر بطاقة SD",
+    code: "SD:/atmosphere/contents/0100A6301214E000/romfs/",
+  },
+  {
+    title: "تفعيل LayeredFS",
+    desc: "Atmosphere يدعم LayeredFS تلقائياً — فقط ضع الملفات وشغّل اللعبة",
+  },
+  {
+    title: "على المحاكي",
+    desc: "في yuzu/Ryujinx: كليك يمين على اللعبة > Open Mod Data Location",
+    code: "yuzu/load/0100A6301214E000/arabic-mod/romfs/",
+  },
+];
+
+const requiredTools = [
+  { name: "nxdumptool", url: "https://github.com/DarkMatterCore/nxdumptool", desc: "لفك ملفات اللعبة من السويتش مباشرة" },
+  { name: "AssetStudio", url: "https://github.com/Perfare/AssetStudio", desc: "لفك ملفات Unity Asset Bundles" },
+  { name: "UABE Avalonia", url: "https://github.com/nesrak1/UABEA", desc: "لتعديل وإعادة حزم Asset Bundles" },
+  { name: "HxD", url: "https://mh-nexus.de/en/hxd/", desc: "محرر Hex لإصلاح null terminators" },
+  { name: "Atmosphere", url: "https://github.com/Atmosphere-NX/Atmosphere", desc: "Custom Firmware للسويتش" },
+];
+
+const filePaths = [
+  { path: "StreamingAssets/aa/Switch/fe_assets_message/", desc: "جميع ملفات النصوص (داخل .bytes.bundle)" },
+  { path: "fe_assets_message_usen.bytes.bundle", desc: "النصوص الإنجليزية الأمريكية" },
+  { path: "fe_assets_message_euen.bytes.bundle", desc: "النصوص الإنجليزية الأوروبية" },
+  { path: "داخل Bundle: *.msbt", desc: "ملفات MSBT الفعلية داخل كل Bundle" },
 ];
 
 export default function FireEmblem() {
@@ -64,22 +146,34 @@ export default function FireEmblem() {
         </div>
       </section>
 
+      <ExtractionGuideSection
+        accentColor="hsl(0, 60%, 50%)"
+        gameTitle="Fire Emblem Engage"
+        titleId="0100A6301214E000"
+        extractionSteps={extractionSteps}
+        packingSteps={packingSteps}
+        installSteps={installSteps}
+        requiredTools={requiredTools}
+        filePaths={filePaths}
+      />
+
       <GameInfoSection
         accentColor="hsl(0, 60%, 50%)"
         secondaryColor="hsl(220, 60%, 50%)"
-        fileFormat=".msbt"
-        fileFormatDesc="Fire Emblem Engage تستخدم ملفات MSBT (MsgStdBn) لتخزين جميع النصوص: الحوارات، أسماء الشخصيات، أوصاف الأسلحة، نصوص المهام والقصة."
+        fileFormat=".msbt (داخل .bytes.bundle)"
+        fileFormatDesc="Fire Emblem Engage تستخدم ملفات MSBT داخل Unity Asset Bundles. يجب فك الـ Bundle أولاً للوصول لملفات MSBT، ثم إعادة حزمها بعد التعديل."
         requiredFiles={[
-          { name: "ملفات MSBT", desc: "تحتوي على جميع نصوص اللعبة — موجودة في مجلد Message داخل romFS" },
-          { name: "مجلد Script", desc: "يحتوي على ملفات MSBT لحوارات القصة والمشاهد السينمائية" },
-          { name: "مجلد Menu", desc: "يحتوي على ملفات MSBT للقوائم وأسماء العناصر والأسلحة" },
+          { name: "ملفات .bytes.bundle", desc: "تحتوي على ملفات MSBT مضغوطة — موجودة في StreamingAssets" },
+          { name: "fe_assets_message_*.bundle", desc: "ملفات النصوص حسب اللغة" },
+          { name: "ملفات MSBT", desc: "داخل كل Bundle — تحتوي على الحوارات والقوائم" },
         ]}
         tools={[
-          { name: "محلل MSBT المدمج", desc: "محلل ثنائي مدمج — يقرأ ملفات .msbt مباشرة في المتصفح" },
-          { name: "NX Editor", desc: "لاستخراج وإعادة حزم ملفات romFS" },
+          { name: "محلل MSBT المدمج", desc: "محلل ثنائي مدمج — يقرأ ملفات .msbt المستخرجة" },
+          { name: "AssetStudio", desc: "لفك ملفات Unity Asset Bundles" },
+          { name: "UABE Avalonia", desc: "لإعادة حزم الملفات المعدّلة" },
         ]}
-        method="يتم رفع ملفات MSBT مباشرة وتحليلها في المتصفح. يتم استخراج Labels والنصوص، ترجمتها، تطبيق ربط الحروف العربية وعكس الاتجاه، ثم إعادة بناء ملف MSBT مع تحديث كافة الأوفست تلقائياً."
-        notes="Fire Emblem Engage تحتوي على حوارات كثيرة وأسماء شخصيات عديدة. يُنصح بالبدء بقوائم اللعبة والأسلحة أولاً ثم الحوارات."
+        method="يتم رفع ملفات MSBT المستخرجة من Asset Bundles. يتم استخراج النصوص وترجمتها وتطبيق ربط الحروف العربية، ثم إعادة بناء ملف MSBT. بعدها يجب إعادة حزم الملف داخل Bundle باستخدام UABE."
+        notes="Fire Emblem Engage تتطلب خطوات إضافية لفك وإعادة حزم ملفات Unity. تأكد من إصلاح null terminators (7 bytes) بعد التعديل."
       />
 
       <footer className="mt-auto py-6 text-center text-sm text-muted-foreground border-t border-border">
