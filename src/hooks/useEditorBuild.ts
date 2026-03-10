@@ -311,12 +311,94 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
             : '';
           setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — جميع الملفات في ZIP واحد${overflowSummary}`);
         } else {
-          const blobUrl = URL.createObjectURL(blob);
-          const a = document.createElement("a");
-          a.href = blobUrl;
-          a.download = "xenoblade_arabized.zip";
-          a.click();
-          setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — الملفات في ملف ZIP`);
+          // Check if we need to repack into SARC.ZS
+          const sarcArchives = await idbGet<Array<{
+            originalFileName: string;
+            endian: "big" | "little";
+            nonMsbtEntries: { name: string; data: number[] }[];
+            msbtEntryNames: string[];
+          }>>("editorSarcArchives");
+          const legacySingle = await idbGet<{
+            originalFileName: string;
+            endian: "big" | "little";
+            nonMsbtEntries: { name: string; data: number[] }[];
+            msbtEntryNames: string[];
+          }>("editorSarcArchive");
+          const allArchives = sarcArchives && sarcArchives.length > 0 
+            ? sarcArchives 
+            : (legacySingle && legacySingle.msbtEntryNames.length > 0 ? [legacySingle] : []);
+
+          if (allArchives.length > 0) {
+            const JSZip = (await import("jszip")).default;
+            const { buildSarcZs } = await import("@/lib/sarc-parser");
+            const serverZip = await JSZip.loadAsync(blob);
+            const msbtFilesFromIdb = await idbGet<Record<string, ArrayBuffer>>("editorMsbtFiles");
+
+            if (allArchives.length === 1) {
+              const sarcMeta = allArchives[0];
+              setBuildProgress("إعادة بناء أرشيف SARC.ZS...");
+              const sarcEntries: { name: string; data: Uint8Array }[] = [];
+              for (const entry of sarcMeta.nonMsbtEntries) {
+                sarcEntries.push({ name: entry.name, data: new Uint8Array(entry.data) });
+              }
+              for (const msbtName of sarcMeta.msbtEntryNames) {
+                const shortName = msbtName.replace(/.*[/\\]/, '');
+                const zipFile = serverZip.file(shortName) || serverZip.file(msbtName);
+                if (zipFile) {
+                  sarcEntries.push({ name: msbtName, data: await zipFile.async("uint8array") });
+                } else if (msbtFilesFromIdb && msbtFilesFromIdb[shortName]) {
+                  sarcEntries.push({ name: msbtName, data: new Uint8Array(msbtFilesFromIdb[shortName]) });
+                }
+              }
+              setBuildProgress(`تجميع ${sarcEntries.length} ملف في SARC وضغط ZS...`);
+              const compressed = await buildSarcZs(sarcEntries, sarcMeta.endian);
+              const sarcBlob = new Blob([new Uint8Array(compressed) as BlobPart], { type: "application/octet-stream" });
+              const sarcUrl = URL.createObjectURL(sarcBlob);
+              const a = document.createElement("a");
+              a.href = sarcUrl;
+              a.download = sarcMeta.originalFileName.replace(/\.zs$/i, '_arabized.zs').replace(/\.sarc$/i, '_arabized.sarc.zs');
+              if (!a.download.includes('arabized')) a.download = `arabized_${sarcMeta.originalFileName}`;
+              a.click();
+              URL.revokeObjectURL(sarcUrl);
+            } else {
+              const outputZip = new JSZip();
+              for (let ai = 0; ai < allArchives.length; ai++) {
+                const sarcMeta = allArchives[ai];
+                setBuildProgress(`إعادة بناء ${ai + 1}/${allArchives.length}: ${sarcMeta.originalFileName}...`);
+                const sarcEntries: { name: string; data: Uint8Array }[] = [];
+                for (const entry of sarcMeta.nonMsbtEntries) {
+                  sarcEntries.push({ name: entry.name, data: new Uint8Array(entry.data) });
+                }
+                for (const msbtName of sarcMeta.msbtEntryNames) {
+                  const shortName = msbtName.replace(/.*[/\\]/, '');
+                  const zipFile = serverZip.file(shortName) || serverZip.file(msbtName);
+                  if (zipFile) {
+                    sarcEntries.push({ name: msbtName, data: await zipFile.async("uint8array") });
+                  } else if (msbtFilesFromIdb && msbtFilesFromIdb[shortName]) {
+                    sarcEntries.push({ name: msbtName, data: new Uint8Array(msbtFilesFromIdb[shortName]) });
+                  }
+                }
+                const compressed = await buildSarcZs(sarcEntries, sarcMeta.endian);
+                outputZip.file(sarcMeta.originalFileName, compressed);
+              }
+              setBuildProgress("ضغط جميع ملفات SARC.ZS في ZIP...");
+              const finalBlob = await outputZip.generateAsync({ type: "blob" });
+              const finalUrl = URL.createObjectURL(finalBlob);
+              const a = document.createElement("a");
+              a.href = finalUrl;
+              a.download = "arabized_sarc_files.zip";
+              a.click();
+              URL.revokeObjectURL(finalUrl);
+            }
+            setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — ${allArchives.length} ملف SARC.ZS جاهز للعبة 🎮`);
+          } else {
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = blobUrl;
+            a.download = "xenoblade_arabized.zip";
+            a.click();
+            setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — الملفات في ملف ZIP`);
+          }
         }
       } else if (localBdatResults.length > 0) {
         // Only binary BDAT files → pack ALL into a single ZIP
@@ -476,7 +558,17 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     }
     const isXenoblade = gameType === "xenoblade";
     
-    if (isXenoblade) {
+    // Check if we have SARC archives (ACNH flow) — use Xenoblade-style individual MSBT build
+    type SarcMetaCheck = {
+      originalFileName: string;
+      endian: "big" | "little";
+      nonMsbtEntries: { name: string; data: number[] }[];
+      msbtEntryNames: string[];
+    };
+    const sarcArchivesCheck = await idbGet<SarcMetaCheck[]>("editorSarcArchives");
+    const hasSarcArchives = sarcArchivesCheck && sarcArchivesCheck.length > 0;
+    
+    if (isXenoblade || hasSarcArchives) {
       return handleBuildXenoblade();
     }
     
