@@ -353,7 +353,8 @@ export function rebuildMsbt(
   for (const entry of original.entries) {
     const translated = translations[entry.label];
     if (translated && translated.trim()) {
-      newTexts.push(encodeUtf16(translated, le));
+      // Use tag-aware encoding to restore binary MSBT tags from [MSBT:...] placeholders
+      newTexts.push(encodeUtf16WithTags(translated, entry.rawBytes, le));
     } else {
       // Keep original raw bytes
       newTexts.push(entry.rawBytes);
