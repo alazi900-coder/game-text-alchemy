@@ -399,7 +399,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
             a.click();
             setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — الملفات في ملف ZIP`);
           }
-        } else if (localBdatResults.length > 0) {
+        }
+      } else if (localBdatResults.length > 0) {
         // Only binary BDAT files → pack ALL into a single ZIP
         setBuildProgress(`تجميع ${localBdatResults.length} ملف BDAT في ZIP...`);
         const JSZip = (await import("jszip")).default;
