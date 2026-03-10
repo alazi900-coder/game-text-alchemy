@@ -177,12 +177,9 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
   };
 
   const handleBuildXenoblade = async () => {
-    // Always use the LATEST state via ref to avoid stale closures
     const currentState = stateRef.current;
     if (!currentState) return;
-    // Close the build confirm dialog so progress messages are visible
     setShowBuildConfirm(false);
-    // Force-save to IDB before reading data — prevents race condition with autosave
     if (forceSaveRef?.current) {
       await forceSaveRef.current();
     }
@@ -190,240 +187,159 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     try {
       const msbtFiles = await idbGet<Record<string, ArrayBuffer>>("editorMsbtFiles");
       const msbtFileNames = await idbGet<string[]>("editorMsbtFileNames");
-      const bdatFiles = await idbGet<Record<string, string>>("editorBdatFiles");
-      const bdatFileNames = await idbGet<string[]>("editorBdatFileNames");
-      const bdatBinaryFiles = await idbGet<Record<string, ArrayBuffer>>("editorBdatBinaryFiles");
-      const bdatBinaryFileNames = await idbGet<string[]>("editorBdatBinaryFileNames");
 
-      const hasMsbt = msbtFiles && msbtFileNames && msbtFileNames.length > 0;
-      const hasBdat = bdatFiles && bdatFileNames && bdatFileNames.length > 0;
-      const hasBdatBinary = bdatBinaryFiles && bdatBinaryFileNames && bdatBinaryFileNames.length > 0;
-
-      if (!hasMsbt && !hasBdat && !hasBdatBinary) {
-        setBuildProgress("❌ لا توجد ملفات. يرجى العودة لصفحة المعالجة وإعادة رفع الملفات.");
+      if (!msbtFiles || !msbtFileNames || msbtFileNames.length === 0) {
+        setBuildProgress("❌ لا توجد ملفات MSBT. يرجى العودة لصفحة المعالجة وإعادة رفع الملفات.");
         setBuilding(false);
         return;
       }
 
-      // Process binary BDAT files locally
-      let localBdatResults: { name: string; data: Uint8Array }[] = [];
-      let localModifiedCount = 0;
-      const newBdatFileStats: BdatFileStat[] = [];
-      const allOverflowErrors: { fileName: string; key: string; originalBytes: number; translationBytes: number; reason?: string; newOffset?: number }[] = [];
-
-      if (hasBdatBinary) {
-        // BDAT support removed
-        setBuildProgress("❌ ملفات BDAT غير مدعومة في هذا الإصدار");
-        setBuilding(false);
-        return;
+      // Collect non-empty translations
+      const nonEmptyTranslations: Record<string, string> = {};
+      for (const [k, v] of Object.entries(currentState.translations)) {
+        if (v.trim()) nonEmptyTranslations[k] = v;
       }
-      
-      // Handle MSBT and JSON BDAT files via server
-      if (hasMsbt || hasBdat) {
-        const formData = new FormData();
-        if (hasMsbt) {
-          for (let i = 0; i < msbtFileNames!.length; i++) {
-            const name = msbtFileNames![i];
-            const buf = msbtFiles![name];
-            if (buf) formData.append(`msbt_${i}`, new File([new Uint8Array(buf)], name));
-          }
-        }
-        if (hasBdat) {
-          for (let i = 0; i < bdatFileNames!.length; i++) {
-            const name = bdatFileNames![i];
-            const text = bdatFiles![name];
-            if (text) formData.append(`bdat_${i}`, new File([text], name, { type: 'application/json' }));
-          }
-        }
-        
-        const nonEmptyTranslations: Record<string, string> = {};
-        for (const [k, v] of Object.entries(currentState.translations)) { if (v.trim()) nonEmptyTranslations[k] = v; }
 
-        // Auto Arabic processing before build
-        let autoProcessedCountMsbt = 0;
-        for (const [key, value] of Object.entries(nonEmptyTranslations)) {
-          if (!value?.trim()) continue;
-          if (hasArabicPresentationForms(value)) continue;
-          if (!hasArabicCharsProcessing(value)) continue;
-          nonEmptyTranslations[key] = processArabicText(value, { arabicNumerals, mirrorPunct: mirrorPunctuation });
-          autoProcessedCountMsbt++;
-        }
-        if (autoProcessedCountMsbt > 0) {
-          setBuildProgress(`✅ تمت معالجة ${autoProcessedCountMsbt} نص عربي تلقائياً...`);
-          await new Promise(r => setTimeout(r, 800));
-        }
-        
-        // Auto-fix damaged tags before build
-        for (const entry of currentState.entries) {
-          if (!/[\uFFF9-\uFFFC\uE000-\uE0FF]/.test(entry.original)) continue;
-          const key = `${entry.msbtFile}:${entry.index}`;
+      // Auto Arabic processing before build
+      let autoProcessedCount = 0;
+      for (const [key, value] of Object.entries(nonEmptyTranslations)) {
+        if (!value?.trim()) continue;
+        if (hasArabicPresentationForms(value)) continue;
+        if (!hasArabicCharsProcessing(value)) continue;
+        nonEmptyTranslations[key] = processArabicText(value, { arabicNumerals, mirrorPunct: mirrorPunctuation });
+        autoProcessedCount++;
+      }
+      if (autoProcessedCount > 0) {
+        setBuildProgress(`✅ تمت معالجة ${autoProcessedCount} نص عربي تلقائياً...`);
+        await new Promise(r => setTimeout(r, 500));
+      }
+
+      // Import MSBT parser + rebuilder
+      const { parseMsbtFile, rebuildMsbt } = await import("@/lib/msbt-parser");
+
+      // Rebuild each MSBT file locally with translations injected
+      let modifiedCount = 0;
+      const rebuiltMsbtFiles: Record<string, Uint8Array> = {};
+
+      for (let fi = 0; fi < msbtFileNames.length; fi++) {
+        const fileName = msbtFileNames[fi];
+        const buf = msbtFiles[fileName];
+        if (!buf) continue;
+        setBuildProgress(`معالجة ${fi + 1}/${msbtFileNames.length}: ${fileName}...`);
+
+        const msbt = parseMsbtFile(new Uint8Array(buf));
+
+        // Build translations map: label → translated text
+        // Editor keys are "msbt:filename:label:index"
+        const translationsForFile: Record<string, string> = {};
+        for (const entry of msbt.entries) {
+          // Try to find the translation by matching key pattern
+          const key = `msbt:${fileName}:${entry.label}:0`;
           const trans = nonEmptyTranslations[key];
-          if (!trans) continue;
-          const origTagCount = (entry.original.match(/[\uFFF9-\uFFFC\uE000-\uE0FF]/g) || []).length;
-          const transTagCount = (trans.match(/[\uFFF9-\uFFFC\uE000-\uE0FF]/g) || []).length;
-          if (transTagCount < origTagCount) {
-            nonEmptyTranslations[key] = restoreTagsLocally(entry.original, trans);
+          if (trans && trans.trim()) {
+            translationsForFile[entry.label] = trans;
+            modifiedCount++;
           }
         }
-        
-        formData.append("translations", JSON.stringify(nonEmptyTranslations));
-        formData.append("protectedEntries", JSON.stringify(Array.from(currentState.protectedEntries || [])));
-        if (arabicNumerals) formData.append("arabicNumerals", "true");
-        if (mirrorPunctuation) formData.append("mirrorPunctuation", "true");
-        
-        setBuildProgress("إرسال للمعالجة...");
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-        const response = await fetch(`${supabaseUrl}/functions/v1/arabize-xenoblade?mode=build`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${supabaseKey}`, 'apikey': supabaseKey },
-          body: formData,
-        });
-        if (!response.ok) {
-          const ct = response.headers.get('content-type') || '';
-          if (ct.includes('json')) { const err = await response.json(); throw new Error(err.error || `خطأ ${response.status}`); }
-          throw new Error(`خطأ ${response.status}`);
-        }
-        setBuildProgress("تحميل الملف...");
-        const blob = await response.blob();
-        const modifiedCount = parseInt(response.headers.get('X-Modified-Count') || '0') + localModifiedCount;
-        
-        // Pack everything into a single ZIP (server ZIP + local BDAT results)
-        if (localBdatResults.length > 0) {
-          setBuildProgress(`دمج ${localBdatResults.length} ملف BDAT مع ملفات MSBT في ZIP واحد...`);
-          const JSZip = (await import("jszip")).default;
-          // Load the server ZIP so we can merge it
-          const serverZip = await JSZip.loadAsync(blob);
-          for (const result of localBdatResults) {
-            const cleanName = result.name.replace(/\.(txt|bin)$/i, "");
-            const finalName = cleanName.endsWith(".bdat") ? cleanName : cleanName + ".bdat";
-            serverZip.file(finalName, result.data);
-          }
-          const mergedBlob = await serverZip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
-          const mergedUrl = URL.createObjectURL(mergedBlob);
-          const a = document.createElement("a");
-          a.href = mergedUrl;
-          a.download = "xenoblade_arabized.zip";
-          a.click();
-          URL.revokeObjectURL(mergedUrl);
-          const overflowSummary = allOverflowErrors.length > 0
-            ? ` ⚠️ ${allOverflowErrors.length} نص تجاوز الحجم وتم تخطيه`
-            : '';
-          setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — جميع الملفات في ZIP واحد${overflowSummary}`);
+
+        if (Object.keys(translationsForFile).length > 0) {
+          rebuiltMsbtFiles[fileName] = rebuildMsbt(msbt, translationsForFile);
         } else {
-          // Check if we need to repack into SARC.ZS
-          const sarcArchives = await idbGet<Array<{
-            originalFileName: string;
-            endian: "big" | "little";
-            nonMsbtEntries: { name: string; data: number[] }[];
-            msbtEntryNames: string[];
-          }>>("editorSarcArchives");
-          const legacySingle = await idbGet<{
-            originalFileName: string;
-            endian: "big" | "little";
-            nonMsbtEntries: { name: string; data: number[] }[];
-            msbtEntryNames: string[];
-          }>("editorSarcArchive");
-          const allArchives = sarcArchives && sarcArchives.length > 0 
-            ? sarcArchives 
-            : (legacySingle && legacySingle.msbtEntryNames.length > 0 ? [legacySingle] : []);
-
-          if (allArchives.length > 0) {
-            const JSZip = (await import("jszip")).default;
-            const { buildSarcZs } = await import("@/lib/sarc-parser");
-            const serverZip = await JSZip.loadAsync(blob);
-            const msbtFilesFromIdb = await idbGet<Record<string, ArrayBuffer>>("editorMsbtFiles");
-
-            if (allArchives.length === 1) {
-              const sarcMeta = allArchives[0];
-              setBuildProgress("إعادة بناء أرشيف SARC.ZS...");
-              const sarcEntries: { name: string; data: Uint8Array }[] = [];
-              for (const entry of sarcMeta.nonMsbtEntries) {
-                sarcEntries.push({ name: entry.name, data: new Uint8Array(entry.data) });
-              }
-              for (const msbtName of sarcMeta.msbtEntryNames) {
-                const shortName = msbtName.replace(/.*[/\\]/, '');
-                const zipFile = serverZip.file(shortName) || serverZip.file(msbtName);
-                if (zipFile) {
-                  sarcEntries.push({ name: msbtName, data: await zipFile.async("uint8array") });
-                } else if (msbtFilesFromIdb && msbtFilesFromIdb[shortName]) {
-                  sarcEntries.push({ name: msbtName, data: new Uint8Array(msbtFilesFromIdb[shortName]) });
-                }
-              }
-              setBuildProgress(`تجميع ${sarcEntries.length} ملف في SARC وضغط ZS...`);
-              const compressed = await buildSarcZs(sarcEntries, sarcMeta.endian);
-              const sarcBlob = new Blob([new Uint8Array(compressed) as BlobPart], { type: "application/octet-stream" });
-              const sarcUrl = URL.createObjectURL(sarcBlob);
-              const a = document.createElement("a");
-              a.href = sarcUrl;
-              a.download = sarcMeta.originalFileName.replace(/\.zs$/i, '_arabized.zs').replace(/\.sarc$/i, '_arabized.sarc.zs');
-              if (!a.download.includes('arabized')) a.download = `arabized_${sarcMeta.originalFileName}`;
-              a.click();
-              URL.revokeObjectURL(sarcUrl);
-            } else {
-              const outputZip = new JSZip();
-              for (let ai = 0; ai < allArchives.length; ai++) {
-                const sarcMeta = allArchives[ai];
-                setBuildProgress(`إعادة بناء ${ai + 1}/${allArchives.length}: ${sarcMeta.originalFileName}...`);
-                const sarcEntries: { name: string; data: Uint8Array }[] = [];
-                for (const entry of sarcMeta.nonMsbtEntries) {
-                  sarcEntries.push({ name: entry.name, data: new Uint8Array(entry.data) });
-                }
-                for (const msbtName of sarcMeta.msbtEntryNames) {
-                  const shortName = msbtName.replace(/.*[/\\]/, '');
-                  const zipFile = serverZip.file(shortName) || serverZip.file(msbtName);
-                  if (zipFile) {
-                    sarcEntries.push({ name: msbtName, data: await zipFile.async("uint8array") });
-                  } else if (msbtFilesFromIdb && msbtFilesFromIdb[shortName]) {
-                    sarcEntries.push({ name: msbtName, data: new Uint8Array(msbtFilesFromIdb[shortName]) });
-                  }
-                }
-                const compressed = await buildSarcZs(sarcEntries, sarcMeta.endian);
-                outputZip.file(sarcMeta.originalFileName, compressed);
-              }
-              setBuildProgress("ضغط جميع ملفات SARC.ZS في ZIP...");
-              const finalBlob = await outputZip.generateAsync({ type: "blob" });
-              const finalUrl = URL.createObjectURL(finalBlob);
-              const a = document.createElement("a");
-              a.href = finalUrl;
-              a.download = "arabized_sarc_files.zip";
-              a.click();
-              URL.revokeObjectURL(finalUrl);
-            }
-            setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — ${allArchives.length} ملف SARC.ZS جاهز للعبة 🎮`);
-          } else {
-            const blobUrl = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = blobUrl;
-            a.download = "xenoblade_arabized.zip";
-            a.click();
-            setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — الملفات في ملف ZIP`);
-          }
+          // No translations for this file — keep original
+          rebuiltMsbtFiles[fileName] = new Uint8Array(buf);
         }
-      } else if (localBdatResults.length > 0) {
-        // Only binary BDAT files → pack ALL into a single ZIP
-        setBuildProgress(`تجميع ${localBdatResults.length} ملف BDAT في ZIP...`);
+      }
+
+      // Now repack into SARC.ZS if archives exist
+      type SarcMeta = {
+        originalFileName: string;
+        endian: "big" | "little";
+        nonMsbtEntries: { name: string; data: number[] }[];
+        msbtEntryNames: string[];
+      };
+      const sarcArchives = await idbGet<SarcMeta[]>("editorSarcArchives");
+      const legacySingle = await idbGet<SarcMeta>("editorSarcArchive");
+      const allArchives: SarcMeta[] = sarcArchives && sarcArchives.length > 0
+        ? sarcArchives
+        : (legacySingle && legacySingle.msbtEntryNames.length > 0 ? [legacySingle] : []);
+
+      if (allArchives.length > 0) {
+        const { buildSarcZs } = await import("@/lib/sarc-parser");
+
+        if (allArchives.length === 1) {
+          const sarcMeta = allArchives[0];
+          setBuildProgress("إعادة بناء أرشيف SARC.ZS...");
+          const sarcEntries: { name: string; data: Uint8Array }[] = [];
+          for (const entry of sarcMeta.nonMsbtEntries) {
+            sarcEntries.push({ name: entry.name, data: new Uint8Array(entry.data) });
+          }
+          for (const msbtName of sarcMeta.msbtEntryNames) {
+            const shortName = msbtName.replace(/.*[/\\]/, '');
+            if (rebuiltMsbtFiles[shortName]) {
+              sarcEntries.push({ name: msbtName, data: rebuiltMsbtFiles[shortName] });
+            } else if (msbtFiles[shortName]) {
+              sarcEntries.push({ name: msbtName, data: new Uint8Array(msbtFiles[shortName]) });
+            }
+          }
+          setBuildProgress(`تجميع ${sarcEntries.length} ملف في SARC وضغط ZS...`);
+          const compressed = await buildSarcZs(sarcEntries, sarcMeta.endian);
+          const sarcBlob = new Blob([new Uint8Array(compressed) as BlobPart], { type: "application/octet-stream" });
+          const sarcUrl = URL.createObjectURL(sarcBlob);
+          const a = document.createElement("a");
+          a.href = sarcUrl;
+          a.download = sarcMeta.originalFileName.replace(/\.zs$/i, '_arabized.zs').replace(/\.sarc$/i, '_arabized.sarc.zs');
+          if (!a.download.includes('arabized')) a.download = `arabized_${sarcMeta.originalFileName}`;
+          a.click();
+          URL.revokeObjectURL(sarcUrl);
+        } else {
+          const JSZip = (await import("jszip")).default;
+          const outputZip = new JSZip();
+          for (let ai = 0; ai < allArchives.length; ai++) {
+            const sarcMeta = allArchives[ai];
+            setBuildProgress(`إعادة بناء ${ai + 1}/${allArchives.length}: ${sarcMeta.originalFileName}...`);
+            const sarcEntries: { name: string; data: Uint8Array }[] = [];
+            for (const entry of sarcMeta.nonMsbtEntries) {
+              sarcEntries.push({ name: entry.name, data: new Uint8Array(entry.data) });
+            }
+            for (const msbtName of sarcMeta.msbtEntryNames) {
+              const shortName = msbtName.replace(/.*[/\\]/, '');
+              if (rebuiltMsbtFiles[shortName]) {
+                sarcEntries.push({ name: msbtName, data: rebuiltMsbtFiles[shortName] });
+              } else if (msbtFiles[shortName]) {
+                sarcEntries.push({ name: msbtName, data: new Uint8Array(msbtFiles[shortName]) });
+              }
+            }
+            const compressed = await buildSarcZs(sarcEntries, sarcMeta.endian);
+            outputZip.file(sarcMeta.originalFileName, compressed);
+          }
+          setBuildProgress("ضغط جميع ملفات SARC.ZS في ZIP...");
+          const finalBlob = await outputZip.generateAsync({ type: "blob" });
+          const finalUrl = URL.createObjectURL(finalBlob);
+          const a = document.createElement("a");
+          a.href = finalUrl;
+          a.download = "arabized_sarc_files.zip";
+          a.click();
+          URL.revokeObjectURL(finalUrl);
+        }
+        setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — ${allArchives.length} ملف SARC.ZS جاهز للعبة 🎮`);
+      } else {
+        // No SARC archives — just export rebuilt MSBT files as ZIP
         const JSZip = (await import("jszip")).default;
         const zip = new JSZip();
-        for (const result of localBdatResults) {
-          const cleanName = result.name.replace(/\.(txt|bin)$/i, "");
-          const finalName = cleanName.endsWith(".bdat") ? cleanName : cleanName + ".bdat";
-          zip.file(finalName, result.data);
+        for (const [name, data] of Object.entries(rebuiltMsbtFiles)) {
+          zip.file(name, data);
         }
-        const zipBlob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 6 } });
-        const zipUrl = URL.createObjectURL(zipBlob);
+        const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
+        const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
-        a.href = zipUrl;
-        a.download = "xenoblade_arabized_bdat.zip";
+        a.href = url;
+        a.download = "arabized_msbt_files.zip";
         a.click();
-        URL.revokeObjectURL(zipUrl);
-        const overflowSummary = allOverflowErrors.length > 0
-          ? ` ⚠️ ${allOverflowErrors.length} نص تجاوز الحجم الأصلي وتم تخطيه`
-          : '';
-        setBuildProgress(`✅ تم بنجاح! ${localBdatResults.length} ملف BDAT في ZIP — تم تطبيق ${localModifiedCount} نص${overflowSummary}`);
+        URL.revokeObjectURL(url);
+        setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — الملفات في ملف ZIP`);
       }
-      
-      // Save translations snapshot for future re-extraction
+
+      // Save translations snapshot
       try {
         const { idbSet } = await import("@/lib/idb-storage");
         const nonEmpty: Record<string, string> = {};

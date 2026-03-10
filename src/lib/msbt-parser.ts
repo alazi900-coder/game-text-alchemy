@@ -119,6 +119,94 @@ function encodeUtf16(str: string, le: boolean): Uint8Array {
   return buf;
 }
 
+/**
+ * Extract binary tag chunks from original rawBytes.
+ * Each tag starts with 0x0E (open) or 0x0F (close) as a UTF-16 code unit.
+ * Returns array of Uint8Array chunks in order of appearance.
+ */
+function extractBinaryTags(rawBytes: Uint8Array, le: boolean): Uint8Array[] {
+  const tags: Uint8Array[] = [];
+  for (let i = 0; i + 1 < rawBytes.length; i += 2) {
+    const code = le ? (rawBytes[i] | (rawBytes[i + 1] << 8)) : ((rawBytes[i] << 8) | rawBytes[i + 1]);
+    if (code === 0) break;
+    if (code === 0x0E) {
+      // Open tag: 0x0E(2) + group(2) + type(2) + paramSize(2) + params(paramSize)
+      const tagStart = i;
+      i += 2; // skip 0x0E
+      if (i + 1 >= rawBytes.length) break;
+      i += 2; // skip group
+      if (i + 1 >= rawBytes.length) break;
+      i += 2; // skip type
+      if (i + 1 >= rawBytes.length) break;
+      const paramSize = le ? (rawBytes[i] | (rawBytes[i + 1] << 8)) : ((rawBytes[i] << 8) | rawBytes[i + 1]);
+      i += 2; // skip paramSize field
+      i += paramSize; // skip params
+      tags.push(rawBytes.slice(tagStart, i));
+      i -= 2; // will be incremented by loop
+    } else if (code === 0x0F) {
+      // Close tag: 0x0F(2) + group(2) + type(2)
+      const tagStart = i;
+      i += 6; // 0x0F + group + type
+      tags.push(rawBytes.slice(tagStart, i));
+      i -= 2; // will be incremented by loop
+    } else if (code >= 0xD800 && code <= 0xDBFF) {
+      i += 2; // skip surrogate pair low
+    }
+  }
+  return tags;
+}
+
+/**
+ * Encode translated string to UTF-16 bytes, restoring binary MSBT tags
+ * from original rawBytes wherever [MSBT:...] or [/MSBT:...] placeholders appear.
+ */
+function encodeUtf16WithTags(translated: string, originalRawBytes: Uint8Array, le: boolean): Uint8Array {
+  const binaryTags = extractBinaryTags(originalRawBytes, le);
+  let tagIdx = 0;
+
+  // Regex to match [MSBT:...] and [/MSBT:...] placeholders
+  const tagPlaceholder = /\[\/?MSBT:[^\]]*\]/g;
+
+  // Split translated text by tag placeholders
+  const parts: (string | 'TAG')[] = [];
+  let lastIdx = 0;
+  let m: RegExpExecArray | null;
+  while ((m = tagPlaceholder.exec(translated)) !== null) {
+    if (m.index > lastIdx) parts.push(translated.slice(lastIdx, m.index));
+    parts.push('TAG');
+    lastIdx = m.index + m[0].length;
+  }
+  if (lastIdx < translated.length) parts.push(translated.slice(lastIdx));
+
+  // Build output: encode text parts as UTF-16, insert binary tags for TAG markers
+  const chunks: Uint8Array[] = [];
+  for (const part of parts) {
+    if (part === 'TAG') {
+      if (tagIdx < binaryTags.length) {
+        chunks.push(binaryTags[tagIdx++]);
+      }
+    } else {
+      // Encode text as UTF-16 (no null terminator)
+      for (let ci = 0; ci < part.length; ci++) {
+        const code = part.charCodeAt(ci);
+        const b = new Uint8Array(2);
+        if (le) { b[0] = code & 0xFF; b[1] = (code >> 8) & 0xFF; }
+        else { b[0] = (code >> 8) & 0xFF; b[1] = code & 0xFF; }
+        chunks.push(b);
+      }
+    }
+  }
+  // Null terminator
+  chunks.push(new Uint8Array(2));
+
+  // Concatenate
+  const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+  const result = new Uint8Array(totalLen);
+  let offset = 0;
+  for (const c of chunks) { result.set(c, offset); offset += c.length; }
+  return result;
+}
+
 /** Align offset to 16-byte boundary */
 function align16(offset: number): number {
   return (offset + 15) & ~15;
@@ -265,7 +353,8 @@ export function rebuildMsbt(
   for (const entry of original.entries) {
     const translated = translations[entry.label];
     if (translated && translated.trim()) {
-      newTexts.push(encodeUtf16(translated, le));
+      // Use tag-aware encoding to restore binary MSBT tags from [MSBT:...] placeholders
+      newTexts.push(encodeUtf16WithTags(translated, entry.rawBytes, le));
     } else {
       // Keep original raw bytes
       newTexts.push(entry.rawBytes);
