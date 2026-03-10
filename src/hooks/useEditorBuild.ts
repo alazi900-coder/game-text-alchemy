@@ -476,7 +476,17 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     }
     const isXenoblade = gameType === "xenoblade";
     
-    if (isXenoblade) {
+    // Check if we have SARC archives (ACNH flow) — use Xenoblade-style individual MSBT build
+    type SarcMetaCheck = {
+      originalFileName: string;
+      endian: "big" | "little";
+      nonMsbtEntries: { name: string; data: number[] }[];
+      msbtEntryNames: string[];
+    };
+    const sarcArchivesCheck = await idbGet<SarcMetaCheck[]>("editorSarcArchives");
+    const hasSarcArchives = sarcArchivesCheck && sarcArchivesCheck.length > 0;
+    
+    if (isXenoblade || hasSarcArchives) {
       return handleBuildXenoblade();
     }
     
