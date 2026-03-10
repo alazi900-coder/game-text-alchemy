@@ -230,11 +230,12 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         const msbt = parseMsbtFile(new Uint8Array(buf));
 
         // Build translations map: label → translated text
-        // Editor keys are "msbt:filename:label:index"
+        // Editor keys are "msbt:filename:label:index" where index is the entry's position
         const translationsForFile: Record<string, string> = {};
-        for (const entry of msbt.entries) {
-          // Try to find the translation by matching key pattern
-          const key = `msbt:${fileName}:${entry.label}:0`;
+        for (let ei = 0; ei < msbt.entries.length; ei++) {
+          const entry = msbt.entries[ei];
+          // The key format matches extractMsbtStrings: msbt:filename:label is msbtFile, index is position
+          const key = `msbt:${fileName}:${entry.label}:${ei}`;
           const trans = nonEmptyTranslations[key];
           if (trans && trans.trim()) {
             translationsForFile[entry.label] = trans;
