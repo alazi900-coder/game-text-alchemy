@@ -428,7 +428,30 @@ export default function MsbtProcess() {
 
           {/* Go to editor */}
           {stage === "done" && (
-            <div className="flex justify-center mb-6">
+            <div className="flex flex-col items-center gap-4 mb-6">
+              <Card className="w-full max-w-md border-primary/30 bg-primary/5">
+                <CardContent className="p-4 space-y-2 text-center">
+                  <p className="text-sm font-display font-bold">📊 ملخص الاستخراج</p>
+                  <div className="flex justify-center gap-6 text-sm">
+                    <div className="flex flex-col items-center">
+                      <span className="text-lg font-bold text-primary">{msbtFiles.length}</span>
+                      <span className="text-xs text-muted-foreground">ملف MSBT</span>
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <span className="text-lg font-bold text-foreground">
+                        {logs.find(l => l.includes('من أصل'))?.match(/(\d[\d,]*)\s*ترجمة من أصل\s*(\d[\d,]*)/)?.[2] || '—'}
+                      </span>
+                      <span className="text-xs text-muted-foreground">نص مستخرج</span>
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <span className="text-lg font-bold text-secondary">
+                        {logs.find(l => l.includes('من أصل'))?.match(/(\d[\d,]*)\s*ترجمة/)?.[1] || '0'}
+                      </span>
+                      <span className="text-xs text-muted-foreground">مترجم</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
               <Button size="lg" onClick={() => navigate("/editor")} className="gap-2 text-lg px-8">
                 <Pencil className="w-5 h-5" />
                 انتقل إلى المحرر

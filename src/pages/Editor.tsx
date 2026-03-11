@@ -1251,8 +1251,11 @@ const Editor = () => {
                   {editor.byteOverflowCount > 0 && <option value="byte-overflow">⛔ تجاوز البايتات ({editor.byteOverflowCount})</option>}
                 </select>
                 <select value={editor.filterFile} onChange={e => editor.setFilterFile(e.target.value)} className="w-full px-3 py-2 rounded bg-background border border-border font-body text-sm">
-                  <option value="all">كل الملفات</option>
-                  {editor.msbtFiles.map(f => <option key={f} value={f}>{f}</option>)}
+                  <option value="all">كل الملفات ({editor.msbtFiles.length})</option>
+                  {editor.msbtFiles.map(f => {
+                    const s = perFileStats.get(f);
+                    return <option key={f} value={f}>{f} {s ? `(${s.translated}/${s.total})` : ''}</option>;
+                  })}
                 </select>
                 {editor.bdatTableNames.length > 0 && (
                   <select value={editor.filterTable} onChange={e => { editor.setFilterTable(e.target.value); editor.setFilterColumn("all"); }} className="w-full px-3 py-2 rounded bg-background border border-border font-body text-sm">
