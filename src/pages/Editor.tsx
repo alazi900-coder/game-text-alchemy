@@ -38,52 +38,54 @@ import { useTranslationMemory } from "@/hooks/useTranslationMemory";
 import { PAGE_SIZE, isTechnicalText, type FilterStatus, type FilterTechnical } from "@/components/editor/types";
 import DebouncedInput from "@/components/editor/DebouncedInput";
 import CategoryProgress from "@/components/editor/CategoryProgress";
-import QualityStatsPanel from "@/components/editor/QualityStatsPanel";
 import EntryCard from "@/components/editor/EntryCard";
-import ReviewPanel from "@/components/editor/ReviewPanel";
-import QuickReviewMode from "@/components/editor/QuickReviewMode";
 import PaginationControls from "@/components/editor/PaginationControls";
-import FindReplacePanel from "@/components/editor/FindReplacePanel";
-import DiffView from "@/components/editor/DiffView";
-import BuildStatsDialog from "@/components/editor/BuildStatsDialog";
-import BuildConfirmDialog from "@/components/editor/BuildConfirmDialog";
-import ConsistencyResultsPanel from "@/components/editor/ConsistencyResultsPanel";
-import IntegrityCheckDialog from "@/components/editor/IntegrityCheckDialog";
-import PreBuildDiagnostic from "@/components/editor/PreBuildDiagnostic";
-import CompareEnginesDialog from "@/components/editor/CompareEnginesDialog";
-import SentenceSplitPanel from "@/components/editor/SentenceSplitPanel";
-import NewlineCleanPanel from "@/components/editor/NewlineCleanPanel";
-import DiacriticsCleanPanel from "@/components/editor/DiacriticsCleanPanel";
-import DuplicateAlefCleanPanel from "@/components/editor/DuplicateAlefCleanPanel";
-import MirrorCharsCleanPanel from "@/components/editor/MirrorCharsCleanPanel";
-import MergeToBundledPanel from "@/components/editor/MergeToBundledPanel";
-import SentenceOrderPanel from "@/components/editor/SentenceOrderPanel";
-import ArabicTextFixPanel from "@/components/editor/ArabicTextFixPanel";
-import ExportEnglishDialog from "@/components/editor/ExportEnglishDialog";
-import GlossaryStatsPanel from "@/components/editor/GlossaryStatsPanel";
-import GlossaryDuplicatesPanel from "@/components/editor/GlossaryDuplicatesPanel";
-import TranslationStatsPanel from "@/components/editor/TranslationStatsPanel";
-import ImportConflictDialog from "@/components/editor/ImportConflictDialog";
-import TagRepairPanel from "@/components/editor/TagRepairPanel";
-import TagBracketFixPanel from "@/components/editor/TagBracketFixPanel";
-import NewlineSplitPanel from "@/components/editor/NewlineSplitPanel";
-import PageTranslationCompare from "@/components/editor/PageTranslationCompare";
-import QualityChecksPanel from "@/components/editor/QualityChecksPanel";
-import CleanupToolsPanel from "@/components/editor/CleanupToolsPanel";
-import LineBalancePanel from "@/components/editor/LineBalancePanel";
-import TranslationToolsPanel from "@/components/editor/TranslationToolsPanel";
-import MismatchDetectorPanel from "@/components/editor/MismatchDetectorPanel";
-import GlossaryMergePreviewDialog from "@/components/editor/GlossaryMergePreviewDialog";
-import SmartReviewPanel from "@/components/editor/SmartReviewPanel";
-import GlossaryCompliancePanel from "@/components/editor/GlossaryCompliancePanel";
-import GlossaryTranslationPreview from "@/components/editor/GlossaryTranslationPreview";
-import TranslationEnhancePanel from "@/components/editor/TranslationEnhancePanel";
-import AdvancedTranslationPanel from "@/components/editor/AdvancedTranslationPanel";
-import ToolHelpDialog, { ToolType } from "@/components/editor/ToolHelpDialog";
-import TranslationProgressDashboard from "@/components/editor/TranslationProgressDashboard";
-import ConsistencyCheckPanel from "@/components/editor/ConsistencyCheckPanel";
 import { useEditorKeyboard } from "@/hooks/useEditorKeyboard";
 import VirtualizedEntryList from "@/components/editor/VirtualizedEntryList";
+
+// Lazy-load ALL heavy panels — only loaded when actually needed
+const QualityStatsPanel = React.lazy(() => import("@/components/editor/QualityStatsPanel"));
+const ReviewPanel = React.lazy(() => import("@/components/editor/ReviewPanel"));
+const QuickReviewMode = React.lazy(() => import("@/components/editor/QuickReviewMode"));
+const FindReplacePanel = React.lazy(() => import("@/components/editor/FindReplacePanel"));
+const DiffView = React.lazy(() => import("@/components/editor/DiffView"));
+const BuildStatsDialog = React.lazy(() => import("@/components/editor/BuildStatsDialog"));
+const BuildConfirmDialog = React.lazy(() => import("@/components/editor/BuildConfirmDialog"));
+const ConsistencyResultsPanel = React.lazy(() => import("@/components/editor/ConsistencyResultsPanel"));
+const IntegrityCheckDialog = React.lazy(() => import("@/components/editor/IntegrityCheckDialog"));
+const PreBuildDiagnostic = React.lazy(() => import("@/components/editor/PreBuildDiagnostic"));
+const CompareEnginesDialog = React.lazy(() => import("@/components/editor/CompareEnginesDialog"));
+const SentenceSplitPanel = React.lazy(() => import("@/components/editor/SentenceSplitPanel"));
+const NewlineCleanPanel = React.lazy(() => import("@/components/editor/NewlineCleanPanel"));
+const DiacriticsCleanPanel = React.lazy(() => import("@/components/editor/DiacriticsCleanPanel"));
+const DuplicateAlefCleanPanel = React.lazy(() => import("@/components/editor/DuplicateAlefCleanPanel"));
+const MirrorCharsCleanPanel = React.lazy(() => import("@/components/editor/MirrorCharsCleanPanel"));
+const MergeToBundledPanel = React.lazy(() => import("@/components/editor/MergeToBundledPanel"));
+const SentenceOrderPanel = React.lazy(() => import("@/components/editor/SentenceOrderPanel"));
+const ArabicTextFixPanel = React.lazy(() => import("@/components/editor/ArabicTextFixPanel"));
+const ExportEnglishDialog = React.lazy(() => import("@/components/editor/ExportEnglishDialog"));
+const GlossaryStatsPanel = React.lazy(() => import("@/components/editor/GlossaryStatsPanel"));
+const GlossaryDuplicatesPanel = React.lazy(() => import("@/components/editor/GlossaryDuplicatesPanel"));
+const TranslationStatsPanel = React.lazy(() => import("@/components/editor/TranslationStatsPanel"));
+const ImportConflictDialog = React.lazy(() => import("@/components/editor/ImportConflictDialog"));
+const TagRepairPanel = React.lazy(() => import("@/components/editor/TagRepairPanel"));
+const TagBracketFixPanel = React.lazy(() => import("@/components/editor/TagBracketFixPanel"));
+const NewlineSplitPanel = React.lazy(() => import("@/components/editor/NewlineSplitPanel"));
+const PageTranslationCompare = React.lazy(() => import("@/components/editor/PageTranslationCompare"));
+const QualityChecksPanel = React.lazy(() => import("@/components/editor/QualityChecksPanel"));
+const CleanupToolsPanel = React.lazy(() => import("@/components/editor/CleanupToolsPanel"));
+const LineBalancePanel = React.lazy(() => import("@/components/editor/LineBalancePanel"));
+const TranslationToolsPanel = React.lazy(() => import("@/components/editor/TranslationToolsPanel"));
+const MismatchDetectorPanel = React.lazy(() => import("@/components/editor/MismatchDetectorPanel"));
+const GlossaryMergePreviewDialog = React.lazy(() => import("@/components/editor/GlossaryMergePreviewDialog"));
+const SmartReviewPanel = React.lazy(() => import("@/components/editor/SmartReviewPanel"));
+const GlossaryCompliancePanel = React.lazy(() => import("@/components/editor/GlossaryCompliancePanel"));
+const GlossaryTranslationPreview = React.lazy(() => import("@/components/editor/GlossaryTranslationPreview"));
+const TranslationEnhancePanel = React.lazy(() => import("@/components/editor/TranslationEnhancePanel"));
+const AdvancedTranslationPanel = React.lazy(() => import("@/components/editor/AdvancedTranslationPanel"));
+const TranslationProgressDashboard = React.lazy(() => import("@/components/editor/TranslationProgressDashboard"));
+const ConsistencyCheckPanel = React.lazy(() => import("@/components/editor/ConsistencyCheckPanel"));
+import ToolHelpDialog, { ToolType } from "@/components/editor/ToolHelpDialog";
 
 type GameId = "animal-crossing" | "fire-emblem";
 
@@ -225,34 +227,23 @@ const Editor = () => {
       await editor.handleDropImport(e.dataTransfer);
     }
   }, [editor.handleDropImport]);
-  // حساب عدد النصوص العربية التي تحتاج معالجة (Reshaping/BiDi)
-  const unprocessedArabicCount = React.useMemo(() => {
-    if (!editor.state) return 0;
-    let count = 0;
-    for (const [key, value] of Object.entries(editor.state.translations)) {
-      if (!value?.trim()) continue;
-      // يحتوي حروف عربية عادية (Unicode blocks) لكن بدون Presentation Forms
-      const hasArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(value);
-      const hasForms = /[\uFB50-\uFDFF\uFE70-\uFEFF]/.test(value);
-      if (hasArabic && !hasForms) count++;
-    }
-    return count;
-  }, [editor.state?.translations]);
+  // Lazy-compute counts only when explicitly needed (not on every render)
+  const [showToolPanels, setShowToolPanels] = React.useState(false);
 
-  // حساب عدد النصوص غير المترجمة (يحترم الفلتر النشط)
   const untranslatedCount = React.useMemo(() => {
-    if (!editor.state) return 0;
+    if (!showExportEnglishDialog || !editor.state) return 0;
     const entries = editor.isFilterActive ? editor.filteredEntries : editor.state.entries;
     return entries.filter(e => {
       const key = `${e.msbtFile}:${e.index}`;
       const t = editor.state!.translations[key]?.trim();
       return !t || t === e.original || t === e.original.trim();
     }).length;
-  }, [editor.state, editor.filteredEntries, editor.isFilterActive]);
+  }, [editor.state, editor.filteredEntries, editor.isFilterActive, showExportEnglishDialog]);
 
   const skippedTechnicalCount = React.useMemo(() => {
+    if (!showExportEnglishDialog) return 0;
     return editor.getSkippedTechnicalCount?.() ?? 0;
-  }, [editor.state, editor.filteredEntries, editor.isFilterActive]);
+  }, [editor.state, editor.filteredEntries, editor.isFilterActive, showExportEnglishDialog]);
 
   // Show recovery dialog if saved session exists
   if (editor.pendingRecovery) {
@@ -362,6 +353,7 @@ const Editor = () => {
           </div>
         </header>
 
+        <React.Suspense fallback={<div className="text-center py-8 text-muted-foreground">جاري التحميل...</div>}>
         <div className="flex-1 py-4 md:py-6 px-3 md:px-4">
         <div className="max-w-6xl mx-auto">
 
@@ -814,46 +806,60 @@ const Editor = () => {
             glossary={editor.activeGlossary}
           />
 
-          {/* Cleanup Tools */}
-          <CleanupToolsPanel
-            state={editor.state}
-            onApplyFix={(key, fix) => editor.updateTranslation(key, fix)}
-            onApplyAll={(fixes) => {
-              for (const f of fixes) editor.updateTranslation(f.key, f.value);
-            }}
-          />
+          {/* Toggle for heavy tool panels — not mounted until opened */}
+          <Button
+            variant={showToolPanels ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => setShowToolPanels(!showToolPanels)}
+            className="mb-4 font-body text-xs"
+          >
+            <BarChart3 className="w-3 h-3" /> {showToolPanels ? "إخفاء لوحات الأدوات" : "عرض لوحات الأدوات (تنظيف، موازنة، تحليل)"}
+          </Button>
 
-          {/* Line Balance Tool */}
-          <LineBalancePanel
-            state={editor.state}
-            onApplyFix={(key, fix) => editor.updateTranslation(key, fix)}
-            onApplyAll={(fixes) => {
-              for (const f of fixes) editor.updateTranslation(f.key, f.value);
-            }}
-          />
+          {showToolPanels && (
+            <React.Suspense fallback={<div className="text-center py-4 text-muted-foreground text-sm">جاري التحميل...</div>}>
+              {/* Cleanup Tools */}
+              <CleanupToolsPanel
+                state={editor.state}
+                onApplyFix={(key, fix) => editor.updateTranslation(key, fix)}
+                onApplyAll={(fixes) => {
+                  for (const f of fixes) editor.updateTranslation(f.key, f.value);
+                }}
+              />
 
-          {/* Translation Progress Dashboard */}
-          <TranslationProgressDashboard
-            state={editor.state}
-            qualityStats={editor.qualityStats}
-            glossarySessionStats={editor.glossarySessionStats}
-            aiRequestsToday={editor.aiRequestsToday}
-            aiRequestsMonth={editor.aiRequestsMonth}
-          />
+              {/* Line Balance Tool */}
+              <LineBalancePanel
+                state={editor.state}
+                onApplyFix={(key, fix) => editor.updateTranslation(key, fix)}
+                onApplyAll={(fixes) => {
+                  for (const f of fixes) editor.updateTranslation(f.key, f.value);
+                }}
+              />
 
-          {/* Cross-file Consistency Check */}
-          <ConsistencyCheckPanel
-            state={editor.state}
-            updateTranslation={editor.updateTranslation}
-          />
+              {/* Translation Progress Dashboard */}
+              <TranslationProgressDashboard
+                state={editor.state}
+                qualityStats={editor.qualityStats}
+                glossarySessionStats={editor.glossarySessionStats}
+                aiRequestsToday={editor.aiRequestsToday}
+                aiRequestsMonth={editor.aiRequestsMonth}
+              />
 
-          {/* Translation Tools */}
-          <TranslationToolsPanel
-            state={editor.state}
-            currentEntry={null}
-            currentTranslation=""
-            onApplyTranslation={(key, val) => editor.updateTranslation(key, val)}
-          />
+              {/* Cross-file Consistency Check */}
+              <ConsistencyCheckPanel
+                state={editor.state}
+                updateTranslation={editor.updateTranslation}
+              />
+
+              {/* Translation Tools */}
+              <TranslationToolsPanel
+                state={editor.state}
+                currentEntry={null}
+                currentTranslation=""
+                onApplyTranslation={(key, val) => editor.updateTranslation(key, val)}
+              />
+            </React.Suspense>
+          )}
 
           {/* Review Results */}
           <ReviewPanel
@@ -1848,30 +1854,7 @@ const Editor = () => {
             </CardContent>
           </Card>
 
-          {/* Arabic Unprocessed Warning Banner */}
-          {unprocessedArabicCount > 0 && (
-            <div className="mb-4 flex items-start gap-3 p-3 rounded-lg border border-secondary/40 bg-secondary/8">
-              <AlertTriangle className="w-5 h-5 text-secondary shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-display font-bold text-secondary">
-                  ⚠️ {unprocessedArabicCount} نص عربي لم يُعالَج بعد
-                </p>
-                <p className="text-xs text-muted-foreground font-body mt-0.5">
-                  هذه النصوص تحتوي عربية غير مُشكَّلة (بدون Reshaping). سيتم معالجتها تلقائياً عند البناء، أو اضغط الزر أدناه للمعاينة أولاً.
-                </p>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={editor.handleApplyArabicProcessing}
-                disabled={editor.applyingArabic}
-                className="shrink-0 text-xs font-body border-secondary/40 text-secondary hover:border-secondary/60"
-              >
-                {editor.applyingArabic ? <Loader2 className="w-3 h-3 animate-spin ml-1" /> : <Sparkles className="w-3 h-3 ml-1" />}
-                معالجة الآن
-              </Button>
-            </div>
-          )}
+          {/* Unprocessed Arabic Warning — removed expensive always-on scan */}
 
           {/* Arabic Processing + Build Buttons */}
            <div className="flex gap-3 mb-6">
@@ -2178,6 +2161,7 @@ const Editor = () => {
             }
           }}
         />
+        </React.Suspense>
       </div>
     </TooltipProvider>
   );
