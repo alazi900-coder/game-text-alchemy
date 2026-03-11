@@ -353,6 +353,7 @@ const Editor = () => {
           </div>
         </header>
 
+        <React.Suspense fallback={<div className="text-center py-8 text-muted-foreground">جاري التحميل...</div>}>
         <div className="flex-1 py-4 md:py-6 px-3 md:px-4">
         <div className="max-w-6xl mx-auto">
 
