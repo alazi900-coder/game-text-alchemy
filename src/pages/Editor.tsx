@@ -230,6 +230,21 @@ const Editor = () => {
   // Lazy-compute counts only when explicitly needed (not on every render)
   const [showToolPanels, setShowToolPanels] = React.useState(false);
 
+  // Per-file translation counts for file filter dropdowns
+  const perFileStats = React.useMemo(() => {
+    if (!editor.state) return new Map<string, { total: number; translated: number }>();
+    const map = new Map<string, { total: number; translated: number }>();
+    for (const entry of editor.state.entries) {
+      const file = entry.msbtFile;
+      if (!map.has(file)) map.set(file, { total: 0, translated: 0 });
+      const stats = map.get(file)!;
+      stats.total++;
+      const key = `${entry.msbtFile}:${entry.index}`;
+      if (editor.state.translations[key]?.trim()) stats.translated++;
+    }
+    return map;
+  }, [editor.state?.entries, editor.state?.translations]);
+
   const untranslatedCount = React.useMemo(() => {
     if (!showExportEnglishDialog || !editor.state) return 0;
     const entries = editor.isFilterActive ? editor.filteredEntries : editor.state.entries;
