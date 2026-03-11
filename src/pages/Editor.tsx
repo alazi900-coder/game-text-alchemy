@@ -1839,30 +1839,7 @@ const Editor = () => {
             </CardContent>
           </Card>
 
-          {/* Arabic Unprocessed Warning Banner */}
-          {unprocessedArabicCount > 0 && (
-            <div className="mb-4 flex items-start gap-3 p-3 rounded-lg border border-secondary/40 bg-secondary/8">
-              <AlertTriangle className="w-5 h-5 text-secondary shrink-0 mt-0.5" />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-display font-bold text-secondary">
-                  ⚠️ {unprocessedArabicCount} نص عربي لم يُعالَج بعد
-                </p>
-                <p className="text-xs text-muted-foreground font-body mt-0.5">
-                  هذه النصوص تحتوي عربية غير مُشكَّلة (بدون Reshaping). سيتم معالجتها تلقائياً عند البناء، أو اضغط الزر أدناه للمعاينة أولاً.
-                </p>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={editor.handleApplyArabicProcessing}
-                disabled={editor.applyingArabic}
-                className="shrink-0 text-xs font-body border-secondary/40 text-secondary hover:border-secondary/60"
-              >
-                {editor.applyingArabic ? <Loader2 className="w-3 h-3 animate-spin ml-1" /> : <Sparkles className="w-3 h-3 ml-1" />}
-                معالجة الآن
-              </Button>
-            </div>
-          )}
+          {/* Unprocessed Arabic Warning — removed expensive always-on scan */}
 
           {/* Arabic Processing + Build Buttons */}
            <div className="flex gap-3 mb-6">
