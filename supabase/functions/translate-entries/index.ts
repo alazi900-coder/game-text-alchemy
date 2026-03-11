@@ -173,7 +173,7 @@ function shieldTagsForBalance(text: string): ShieldResult {
   let idx = 0;
   const shielded = text.replace(TAG_SHIELD_PATTERN, (match) => {
     const placeholder = `◆${idx}◆`;
-    map.set(placeholder, { placeholder, original: match, displayLen: match.length });
+    map.set(placeholder, { placeholder, original: match, displayLen: 1 });
     idx++;
     return placeholder;
   });
