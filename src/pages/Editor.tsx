@@ -227,34 +227,23 @@ const Editor = () => {
       await editor.handleDropImport(e.dataTransfer);
     }
   }, [editor.handleDropImport]);
-  // حساب عدد النصوص العربية التي تحتاج معالجة (Reshaping/BiDi)
-  const unprocessedArabicCount = React.useMemo(() => {
-    if (!editor.state) return 0;
-    let count = 0;
-    for (const [key, value] of Object.entries(editor.state.translations)) {
-      if (!value?.trim()) continue;
-      // يحتوي حروف عربية عادية (Unicode blocks) لكن بدون Presentation Forms
-      const hasArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(value);
-      const hasForms = /[\uFB50-\uFDFF\uFE70-\uFEFF]/.test(value);
-      if (hasArabic && !hasForms) count++;
-    }
-    return count;
-  }, [editor.state?.translations]);
+  // Lazy-compute counts only when explicitly needed (not on every render)
+  const [showToolPanels, setShowToolPanels] = React.useState(false);
 
-  // حساب عدد النصوص غير المترجمة (يحترم الفلتر النشط)
   const untranslatedCount = React.useMemo(() => {
-    if (!editor.state) return 0;
+    if (!showExportEnglishDialog || !editor.state) return 0;
     const entries = editor.isFilterActive ? editor.filteredEntries : editor.state.entries;
     return entries.filter(e => {
       const key = `${e.msbtFile}:${e.index}`;
       const t = editor.state!.translations[key]?.trim();
       return !t || t === e.original || t === e.original.trim();
     }).length;
-  }, [editor.state, editor.filteredEntries, editor.isFilterActive]);
+  }, [editor.state, editor.filteredEntries, editor.isFilterActive, showExportEnglishDialog]);
 
   const skippedTechnicalCount = React.useMemo(() => {
+    if (!showExportEnglishDialog) return 0;
     return editor.getSkippedTechnicalCount?.() ?? 0;
-  }, [editor.state, editor.filteredEntries, editor.isFilterActive]);
+  }, [editor.state, editor.filteredEntries, editor.isFilterActive, showExportEnglishDialog]);
 
   // Show recovery dialog if saved session exists
   if (editor.pendingRecovery) {
