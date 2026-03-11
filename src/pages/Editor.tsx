@@ -805,46 +805,60 @@ const Editor = () => {
             glossary={editor.activeGlossary}
           />
 
-          {/* Cleanup Tools */}
-          <CleanupToolsPanel
-            state={editor.state}
-            onApplyFix={(key, fix) => editor.updateTranslation(key, fix)}
-            onApplyAll={(fixes) => {
-              for (const f of fixes) editor.updateTranslation(f.key, f.value);
-            }}
-          />
+          {/* Toggle for heavy tool panels — not mounted until opened */}
+          <Button
+            variant={showToolPanels ? "secondary" : "outline"}
+            size="sm"
+            onClick={() => setShowToolPanels(!showToolPanels)}
+            className="mb-4 font-body text-xs"
+          >
+            <BarChart3 className="w-3 h-3" /> {showToolPanels ? "إخفاء لوحات الأدوات" : "عرض لوحات الأدوات (تنظيف، موازنة، تحليل)"}
+          </Button>
 
-          {/* Line Balance Tool */}
-          <LineBalancePanel
-            state={editor.state}
-            onApplyFix={(key, fix) => editor.updateTranslation(key, fix)}
-            onApplyAll={(fixes) => {
-              for (const f of fixes) editor.updateTranslation(f.key, f.value);
-            }}
-          />
+          {showToolPanels && (
+            <React.Suspense fallback={<div className="text-center py-4 text-muted-foreground text-sm">جاري التحميل...</div>}>
+              {/* Cleanup Tools */}
+              <CleanupToolsPanel
+                state={editor.state}
+                onApplyFix={(key, fix) => editor.updateTranslation(key, fix)}
+                onApplyAll={(fixes) => {
+                  for (const f of fixes) editor.updateTranslation(f.key, f.value);
+                }}
+              />
 
-          {/* Translation Progress Dashboard */}
-          <TranslationProgressDashboard
-            state={editor.state}
-            qualityStats={editor.qualityStats}
-            glossarySessionStats={editor.glossarySessionStats}
-            aiRequestsToday={editor.aiRequestsToday}
-            aiRequestsMonth={editor.aiRequestsMonth}
-          />
+              {/* Line Balance Tool */}
+              <LineBalancePanel
+                state={editor.state}
+                onApplyFix={(key, fix) => editor.updateTranslation(key, fix)}
+                onApplyAll={(fixes) => {
+                  for (const f of fixes) editor.updateTranslation(f.key, f.value);
+                }}
+              />
 
-          {/* Cross-file Consistency Check */}
-          <ConsistencyCheckPanel
-            state={editor.state}
-            updateTranslation={editor.updateTranslation}
-          />
+              {/* Translation Progress Dashboard */}
+              <TranslationProgressDashboard
+                state={editor.state}
+                qualityStats={editor.qualityStats}
+                glossarySessionStats={editor.glossarySessionStats}
+                aiRequestsToday={editor.aiRequestsToday}
+                aiRequestsMonth={editor.aiRequestsMonth}
+              />
 
-          {/* Translation Tools */}
-          <TranslationToolsPanel
-            state={editor.state}
-            currentEntry={null}
-            currentTranslation=""
-            onApplyTranslation={(key, val) => editor.updateTranslation(key, val)}
-          />
+              {/* Cross-file Consistency Check */}
+              <ConsistencyCheckPanel
+                state={editor.state}
+                updateTranslation={editor.updateTranslation}
+              />
+
+              {/* Translation Tools */}
+              <TranslationToolsPanel
+                state={editor.state}
+                currentEntry={null}
+                currentTranslation=""
+                onApplyTranslation={(key, val) => editor.updateTranslation(key, val)}
+              />
+            </React.Suspense>
+          )}
 
           {/* Review Results */}
           <ReviewPanel
