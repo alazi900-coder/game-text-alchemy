@@ -2161,6 +2161,7 @@ const Editor = () => {
             }
           }}
         />
+        </React.Suspense>
       </div>
     </TooltipProvider>
   );
