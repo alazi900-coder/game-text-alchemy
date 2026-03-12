@@ -97,110 +97,114 @@ export default function MsbtProcess() {
     const newMsbt: { name: string; size: number; data: ArrayBuffer }[] = [];
     let bundleCount = 0;
     let totalMsbtFromBundles = 0;
+    const pendingBundleMeta: any[] = [];
+    const pendingSarcArchives: Array<{
+      originalFileName: string;
+      endian: "big" | "little";
+      nonMsbtEntries: { name: string; data: number[] }[];
+      msbtEntryNames: string[];
+    }> = [];
+
     // Count total bundles for progress
     let totalBundles = 0;
     for (let j = 0; j < total; j++) {
       const n = files[j].name.toLowerCase();
       if (n.endsWith('.bundle') || n.endsWith('.bytes')) totalBundles++;
     }
-    const BATCH = 200;
-    for (let start = 0; start < total; start += BATCH) {
-      const end = Math.min(start + BATCH, total);
-      for (let i = start; i < end; i++) {
-        const f = files[i];
-        const lower = f.name.toLowerCase();
-        if (cancelRef.current) break;
-        if (lower.endsWith('.msbt')) {
-          try {
-            const buf = await f.arrayBuffer();
-            newMsbt.push({ name: f.name, size: buf.byteLength, data: buf });
-          } catch (err) {
-            addLog(`⚠️ فشل قراءة ${f.name}: ${err instanceof Error ? err.message : 'خطأ'}`);
-          }
-        } else if (lower.endsWith('.bundle') || lower.endsWith('.bytes')) {
-          // Unity Asset Bundle — extract MSBT files automatically
-          try {
-            setBundleProgress({ current: bundleCount + 1, total: totalBundles, fileName: f.name, msbtFound: totalMsbtFromBundles, lastMsbt: '' });
-            const buf = await f.arrayBuffer();
-            const { extractBundleAssets, isMsbt } = await import("@/lib/unity-asset-bundle");
-            const { info, assets, decompressedData } = await extractBundleAssets(buf);
-            const msbtAssets = assets.filter(a => isMsbt(a.data));
-            bundleCount++;
 
-            // Log what was found inside the bundle for debugging
-            const typesSummary = assets.reduce((acc, a) => { acc[a.type] = (acc[a.type] || 0) + 1; return acc; }, {} as Record<string, number>);
-            const typesStr = Object.entries(typesSummary).map(([t, c]) => `${t}:${c}`).join(', ');
-            addLog(`🔍 ${f.name}: ${assets.length} عنصر (${typesStr || 'فارغ'})${info.entries.length > 0 ? ` — ${info.entries.length} ملف داخلي` : ''}`);
+    for (let i = 0; i < total; i++) {
+      const f = files[i];
+      const lower = f.name.toLowerCase();
+      if (cancelRef.current) break;
 
-            if (msbtAssets.length === 0) {
-              setBundleProgress(prev => prev ? { ...prev, current: bundleCount } : null);
-            } else {
-              addLog(`✅ ${f.name}: ${msbtAssets.length} ملف MSBT`);
+      if (lower.endsWith('.msbt')) {
+        try {
+          const buf = await f.arrayBuffer();
+          newMsbt.push({ name: f.name, size: buf.byteLength, data: buf });
+        } catch (err) {
+          addLog(`⚠️ فشل قراءة ${f.name}: ${err instanceof Error ? err.message : 'خطأ'}`);
+        }
+      } else if (lower.endsWith('.bundle') || lower.endsWith('.bytes')) {
+        // Unity Asset Bundle — extract MSBT files automatically
+        try {
+          setBundleProgress({ current: bundleCount + 1, total: totalBundles, fileName: f.name, msbtFound: totalMsbtFromBundles, lastMsbt: '' });
+          const buf = await f.arrayBuffer();
+          const { extractBundleAssets, isMsbt } = await import("@/lib/unity-asset-bundle");
+          const { info, assets, decompressedData } = await extractBundleAssets(buf);
+          const msbtAssets = assets.filter(a => isMsbt(a.data));
+          bundleCount++;
 
-              const { idbGet, idbSet } = await import("@/lib/idb-storage");
-              const existingBundles = (await idbGet<any[]>("editorBundleMeta")) || [];
-              existingBundles.push({
-                originalFileName: f.name,
-                info,
-                assets,
-                decompressedData: decompressedData.buffer,
-                originalBuffer: buf,
-              });
-              await idbSet("editorBundleMeta", existingBundles);
+          // Log what was found inside the bundle for debugging
+          const typesSummary = assets.reduce((acc, a) => { acc[a.type] = (acc[a.type] || 0) + 1; return acc; }, {} as Record<string, number>);
+          const typesStr = Object.entries(typesSummary).map(([t, c]) => `${t}:${c}`).join(', ');
+          addLog(`🔍 ${f.name}: ${assets.length} عنصر (${typesStr || 'فارغ'})${info.entries.length > 0 ? ` — ${info.entries.length} ملف داخلي` : ''}`);
 
-              for (const asset of msbtAssets) {
-                const assetName = asset.name.endsWith('.msbt') ? asset.name : `${asset.name}.msbt`;
-                newMsbt.push({ name: assetName, size: asset.data.length, data: asset.data.buffer as ArrayBuffer });
-                totalMsbtFromBundles++;
-                setBundleProgress(prev => prev ? { ...prev, current: bundleCount, msbtFound: totalMsbtFromBundles, lastMsbt: assetName } : null);
-              }
-            }
-          } catch (err) {
-            bundleCount++;
-            addLog(`⚠️ فشل فك Bundle ${f.name}: ${err instanceof Error ? err.message : 'خطأ'}`);
-          }
-        } else if (lower.endsWith('.sarc.zs') || lower.endsWith('.sarc')) {
-          try {
-            addLog(`📦 فك أرشيف ${f.name}...`);
-            const buf = await f.arrayBuffer();
-            const data = new Uint8Array(buf);
-            const { parseSarc, parseSarcZs, extractMsbtFromSarc } = await import("@/lib/sarc-parser");
-            const archive = lower.endsWith('.zs') ? await parseSarcZs(data) : parseSarc(data);
-            const msbtEntries = extractMsbtFromSarc(archive);
-            addLog(`✅ ${f.name}: ${archive.entries.length} ملف داخلي — ${msbtEntries.length} ملف MSBT`);
+          if (msbtAssets.length === 0) {
+            setBundleProgress(prev => prev ? { ...prev, current: bundleCount } : null);
+          } else {
+            addLog(`✅ ${f.name}: ${msbtAssets.length} ملف MSBT`);
 
-            const { idbSet, idbGet } = await import("@/lib/idb-storage");
-            // Store multiple SARC archives (append, don't overwrite)
-            const existingArchives = (await idbGet<Array<{
-              originalFileName: string;
-              endian: "big" | "little";
-              nonMsbtEntries: { name: string; data: number[] }[];
-              msbtEntryNames: string[];
-            }>>("editorSarcArchives")) || [];
-            existingArchives.push({
+            pendingBundleMeta.push({
               originalFileName: f.name,
-              endian: archive.endian,
-              nonMsbtEntries: archive.entries
-                .filter(e => !e.name.toLowerCase().endsWith(".msbt"))
-                .map(e => ({ name: e.name, data: Array.from(e.data) })),
-              msbtEntryNames: msbtEntries.map(e => e.name),
+              info,
+              assets,
+              decompressedData: decompressedData.buffer,
+              originalBuffer: buf,
             });
-            await idbSet("editorSarcArchives", existingArchives);
-            // Also keep legacy key for backward compat
-            await idbSet("editorSarcArchive", existingArchives[existingArchives.length - 1]);
 
-            for (const entry of msbtEntries) {
-              const entryBuf = new Uint8Array(entry.data).buffer;
-              newMsbt.push({ name: entry.name.replace(/.*[/\\]/, ''), size: entry.data.length, data: entryBuf });
+            for (const asset of msbtAssets) {
+              const assetName = asset.name.endsWith('.msbt') ? asset.name : `${asset.name}.msbt`;
+              newMsbt.push({ name: assetName, size: asset.data.length, data: asset.data.buffer as ArrayBuffer });
+              totalMsbtFromBundles++;
+              setBundleProgress(prev => prev ? { ...prev, current: bundleCount, msbtFound: totalMsbtFromBundles, lastMsbt: assetName } : null);
             }
-          } catch (err) {
-            addLog(`⚠️ فشل فك ${f.name}: ${err instanceof Error ? err.message : 'خطأ'}`);
           }
+        } catch (err) {
+          bundleCount++;
+          addLog(`⚠️ فشل فك Bundle ${f.name}: ${err instanceof Error ? err.message : 'خطأ'}`);
+        }
+      } else if (lower.endsWith('.sarc.zs') || lower.endsWith('.sarc')) {
+        try {
+          addLog(`📦 فك أرشيف ${f.name}...`);
+          const buf = await f.arrayBuffer();
+          const data = new Uint8Array(buf);
+          const { parseSarc, parseSarcZs, extractMsbtFromSarc } = await import("@/lib/sarc-parser");
+          const archive = lower.endsWith('.zs') ? await parseSarcZs(data) : parseSarc(data);
+          const msbtEntries = extractMsbtFromSarc(archive);
+          addLog(`✅ ${f.name}: ${archive.entries.length} ملف داخلي — ${msbtEntries.length} ملف MSBT`);
+
+          pendingSarcArchives.push({
+            originalFileName: f.name,
+            endian: archive.endian,
+            nonMsbtEntries: archive.entries
+              .filter(e => !e.name.toLowerCase().endsWith(".msbt"))
+              .map(e => ({ name: e.name, data: Array.from(e.data) })),
+            msbtEntryNames: msbtEntries.map(e => e.name),
+          });
+
+          for (const entry of msbtEntries) {
+            const entryBuf = new Uint8Array(entry.data).buffer;
+            newMsbt.push({ name: entry.name.replace(/.*[/\\]/, ''), size: entry.data.length, data: entryBuf });
+          }
+        } catch (err) {
+          addLog(`⚠️ فشل فك ${f.name}: ${err instanceof Error ? err.message : 'خطأ'}`);
         }
       }
-      setFileLoadProgress({ current: end, total });
-      await new Promise(r => setTimeout(r, 0));
+
+      setFileLoadProgress({ current: i + 1, total });
+      if (i % 4 === 0) await new Promise(r => setTimeout(r, 0));
       if (cancelRef.current) break;
+    }
+
+    if (pendingBundleMeta.length > 0) {
+      await idbSet("editorBundleMeta", pendingBundleMeta);
+    }
+
+    if (pendingSarcArchives.length > 0) {
+      await Promise.all([
+        idbSet("editorSarcArchives", pendingSarcArchives),
+        idbSet("editorSarcArchive", pendingSarcArchives[pendingSarcArchives.length - 1]),
+      ]);
     }
 
     setFileLoadProgress(null);
