@@ -285,8 +285,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       if (scopedArchives.length > 0) {
         const { buildSarcZs } = await import("@/lib/sarc-parser");
 
-        if (allArchives.length === 1) {
-          const sarcMeta = allArchives[0];
+        if (scopedArchives.length === 1) {
+          const sarcMeta = scopedArchives[0];
           setBuildProgress("إعادة بناء أرشيف SARC.ZS...");
           const sarcEntries: { name: string; data: Uint8Array }[] = [];
           for (const entry of sarcMeta.nonMsbtEntries) {
