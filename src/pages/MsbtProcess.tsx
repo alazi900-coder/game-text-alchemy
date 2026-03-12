@@ -194,7 +194,8 @@ export default function MsbtProcess() {
 
     if (newMsbt.length > 0) setMsbtFiles(newMsbt);
     setFileLoadProgress(null);
-    addLog(`📂 تم تحميل ${newMsbt.length} ملف MSBT`);
+    setBundleProgress(null);
+    addLog(`📂 تم تحميل ${newMsbt.length} ملف MSBT` + (bundleCount > 0 ? ` (من ${bundleCount} Bundle)` : ''));
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
