@@ -331,6 +331,7 @@ export function useEditorState() {
       idbSet("editorSarcArchive", null),
       idbSet("originalTexts", {}),
       idbSet("extractionSessionId", null),
+      idbSet("editorBundleMeta", null),
     ]);
     setPendingRecovery(null);
     // Load demo data

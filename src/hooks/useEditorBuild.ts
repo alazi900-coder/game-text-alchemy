@@ -291,7 +291,74 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         archive.msbtEntryNames.some(msbtName => fileNamesToBuildSet.has(msbtName.replace(/.*[/\\]/, "")))
       );
 
-      if (scopedArchives.length > 0) {
+      // Check for Unity bundle meta (Fire Emblem flow)
+      const bundleMeta = await idbGet<any[]>("editorBundleMeta");
+
+      if (bundleMeta && bundleMeta.length > 0) {
+        // === BUNDLE REPACK FLOW ===
+        const { repackBundle, isMsbt } = await import("@/lib/unity-asset-bundle");
+        const JSZip = (await import("jszip")).default;
+
+        if (bundleMeta.length === 1) {
+          const meta = bundleMeta[0];
+          setBuildProgress("إعادة بناء Bundle...");
+
+          const originalBuffer = new Uint8Array(meta.originalBuffer).buffer;
+          const decompressedData = new Uint8Array(meta.decompressedData);
+          const replacements = new Map<string, Uint8Array>();
+
+          for (const asset of meta.assets) {
+            if (!isMsbt(new Uint8Array(asset.data))) continue;
+            const assetName = asset.name.endsWith('.msbt') ? asset.name : `${asset.name}.msbt`;
+            if (rebuiltMsbtFiles[assetName]) {
+              replacements.set(asset.name, rebuiltMsbtFiles[assetName]);
+            }
+          }
+
+          console.log(`[BUILD] Bundle repack: ${replacements.size} MSBT replacements`);
+          const result = repackBundle(originalBuffer, meta.info, decompressedData, meta.assets, replacements);
+
+          const blob = new Blob([new Uint8Array(result.buffer)], { type: "application/octet-stream" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = meta.originalFileName.replace(/\.(bytes\.)?bundle$/i, '_arabized.bytes.bundle');
+          a.click();
+          URL.revokeObjectURL(url);
+          setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — Bundle جاهز للعبة 🎮`);
+        } else {
+          const outputZip = new JSZip();
+          for (let bi = 0; bi < bundleMeta.length; bi++) {
+            const meta = bundleMeta[bi];
+            setBuildProgress(`إعادة بناء Bundle ${bi + 1}/${bundleMeta.length}: ${meta.originalFileName}...`);
+
+            const originalBuffer = new Uint8Array(meta.originalBuffer).buffer;
+            const decompressedData = new Uint8Array(meta.decompressedData);
+            const replacements = new Map<string, Uint8Array>();
+
+            for (const asset of meta.assets) {
+              if (!isMsbt(new Uint8Array(asset.data))) continue;
+              const assetName = asset.name.endsWith('.msbt') ? asset.name : `${asset.name}.msbt`;
+              if (rebuiltMsbtFiles[assetName]) {
+                replacements.set(asset.name, rebuiltMsbtFiles[assetName]);
+              }
+            }
+
+            const result = repackBundle(originalBuffer, meta.info, decompressedData, meta.assets, replacements);
+            outputZip.file(meta.originalFileName, new Uint8Array(result.buffer));
+          }
+
+          setBuildProgress("ضغط جميع ملفات Bundle في ZIP...");
+          const finalBlob = await outputZip.generateAsync({ type: "blob" });
+          const finalUrl = URL.createObjectURL(finalBlob);
+          const a = document.createElement("a");
+          a.href = finalUrl;
+          a.download = "arabized_bundles.zip";
+          a.click();
+          URL.revokeObjectURL(finalUrl);
+          setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — ${bundleMeta.length} ملف Bundle جاهز 🎮`);
+        }
+      } else if (scopedArchives.length > 0) {
         const { buildSarcZs } = await import("@/lib/sarc-parser");
 
         if (scopedArchives.length === 1) {
@@ -351,7 +418,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         }
         setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — ${scopedArchives.length} ملف SARC.ZS جاهز للعبة 🎮`);
       } else {
-        // No SARC archives — just export rebuilt MSBT files as ZIP
+        // No SARC archives or bundles — just export rebuilt MSBT files as ZIP
         const JSZip = (await import("jszip")).default;
         const zip = new JSZip();
         for (const [name, data] of Object.entries(rebuiltMsbtFiles)) {

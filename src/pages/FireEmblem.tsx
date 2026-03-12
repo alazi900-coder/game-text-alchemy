@@ -138,10 +138,10 @@ export default function FireEmblem() {
               <Download className="w-5 h-5 ml-2" />
               تحميل النصوص الإنجليزية 📥
             </Button>
-            <Link to="/bundle-extractor">
-              <Button size="lg" variant="outline" className="font-display font-bold text-lg px-10 py-6">
-                فاك ملفات Bundle 📦
-              </Button>
+          </div>
+          <div className="mt-3">
+            <Link to="/bundle-extractor" className="text-sm text-muted-foreground hover:text-foreground underline">
+              أداة متقدمة: فاك ملفات Bundle يدوياً 📦
             </Link>
           </div>
         </div>
