@@ -98,7 +98,9 @@ function decodeUtf16(bytes: Uint8Array, le: boolean): string {
     }
     chars.push(String.fromCharCode(code));
   }
-  return chars.join('');
+  // Normalize Presentation Forms (U+FB50–U+FDFF, U+FE70–U+FEFF) to standard Arabic
+  const raw = chars.join('');
+  return raw.normalize('NFKC');
 }
 
 /** Encode string to UTF-16LE with null terminator */
