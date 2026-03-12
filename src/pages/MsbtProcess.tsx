@@ -91,6 +91,14 @@ export default function MsbtProcess() {
     setMsbtFiles([]);
 
     const newMsbt: { name: string; size: number; data: ArrayBuffer }[] = [];
+    let bundleCount = 0;
+    let totalMsbtFromBundles = 0;
+    // Count total bundles for progress
+    let totalBundles = 0;
+    for (let j = 0; j < total; j++) {
+      const n = files[j].name.toLowerCase();
+      if (n.endsWith('.bundle') || n.endsWith('.bytes')) totalBundles++;
+    }
     const BATCH = 200;
     for (let start = 0; start < total; start += BATCH) {
       const end = Math.min(start + BATCH, total);
