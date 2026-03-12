@@ -254,7 +254,6 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         const translationsForFile: Record<string, string> = {};
         for (let ei = 0; ei < msbt.entries.length; ei++) {
           const entry = msbt.entries[ei];
-          // The key format matches extractMsbtStrings: msbt:filename:label is msbtFile, index is position
           const key = `msbt:${fileName}:${entry.label}:${ei}`;
           const trans = nonEmptyTranslations[key];
           if (trans && trans.trim()) {
@@ -263,10 +262,13 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           }
         }
 
+        console.log(`[BUILD] ${fileName}: ${Object.keys(translationsForFile).length} translations applied out of ${msbt.entries.length} entries`);
+
         if (Object.keys(translationsForFile).length > 0) {
           rebuiltMsbtFiles[fileName] = rebuildMsbt(msbt, translationsForFile);
         } else {
           // No translations for this file — keep original
+          console.warn(`[BUILD] ⚠️ ${fileName}: NO translations matched — file will be unchanged`);
           rebuiltMsbtFiles[fileName] = new Uint8Array(buf);
         }
       }
