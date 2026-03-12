@@ -87,10 +87,11 @@ const requiredTools = [
 ];
 
 const filePaths = [
-  { path: "StreamingAssets/aa/Switch/fe_assets_message/", desc: "جميع ملفات النصوص (داخل .bytes.bundle)" },
-  { path: "fe_assets_message_usen.bytes.bundle", desc: "النصوص الإنجليزية الأمريكية" },
-  { path: "fe_assets_message_euen.bytes.bundle", desc: "النصوص الإنجليزية الأوروبية" },
-  { path: "داخل Bundle: *.msbt", desc: "ملفات MSBT الفعلية داخل كل Bundle" },
+  { path: "Data/StreamingAssets/aa/Switch/fe_assets_message/", desc: "المجلد الرئيسي لجميع ملفات النصوص" },
+  { path: "fe_assets_message/us/usen/", desc: "النصوص الإنجليزية الأمريكية (الأكثر اكتمالاً)" },
+  { path: "fe_assets_message/eu/euen/", desc: "النصوص الإنجليزية الأوروبية" },
+  { path: "*.bytes.bundle", desc: "كل ملف bundle في مجلد اللغة يحتوي ملفات MSBT" },
+  { path: "⚠️ تجنب ملفات gr_ / ma_ / mo_", desc: "هذه ملفات رسوميات ونماذج — لا تحتوي نصوص" },
 ];
 
 
