@@ -1237,17 +1237,30 @@ ${textsBlock}
     if (!apiKey) throw new Error('Missing LOVABLE_API_KEY');
 
     const callLovableAI = async (aiPrompt: string, count: number): Promise<Record<string, string>> => {
+      const gatewayModel = normalizedAiModel === 'gpt-5'
+        ? 'openai/gpt-5'
+        : normalizedAiModel === 'gemini-2.5-pro'
+          ? 'google/gemini-2.5-pro'
+          : normalizedAiModel === 'gemini-3.1-pro-preview'
+            ? 'google/gemini-3.1-pro-preview'
+            : 'google/gemini-2.5-flash';
+
+      const gatewayPayload: Record<string, unknown> = {
+        model: gatewayModel,
+        messages: [
+          { role: 'system', content: 'You are a Xenoblade Chronicles 3 game text translator. Output ONLY a valid JSON object with keys like K0, K1, K2... and Arabic translation values. Never modify ⟪T#⟫ placeholders. ALWAYS use glossary terms exactly. ALWAYS maintain consistency with previously translated texts — same English word = same Arabic translation. CRITICAL: Never use unescaped double quotes inside translation values. Use single quotes or escaped quotes (\") instead. Ensure the JSON is complete and valid.' },
+          { role: 'user', content: aiPrompt },
+        ],
+      };
+
+      if (normalizedAiModel !== 'gpt-5') {
+        gatewayPayload.temperature = 0.3;
+      }
+
       const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: normalizedAiModel === 'gpt-5' ? 'openai/gpt-5' : normalizedAiModel === 'gemini-2.5-pro' ? 'google/gemini-2.5-pro' : normalizedAiModel === 'gemini-3.1-pro-preview' ? 'google/gemini-3.1-pro-preview' : 'google/gemini-2.5-flash',
-          messages: [
-            { role: 'system', content: 'You are a Xenoblade Chronicles 3 game text translator. Output ONLY a valid JSON object with keys like K0, K1, K2... and Arabic translation values. Never modify ⟪T#⟫ placeholders. ALWAYS use glossary terms exactly. ALWAYS maintain consistency with previously translated texts — same English word = same Arabic translation. CRITICAL: Never use unescaped double quotes inside translation values. Use single quotes or escaped quotes (\\\") instead. Ensure the JSON is complete and valid.' },
-            { role: 'user', content: aiPrompt },
-          ],
-          temperature: 0.3,
-        }),
+        body: JSON.stringify(gatewayPayload),
       });
 
       if (!response.ok) {
