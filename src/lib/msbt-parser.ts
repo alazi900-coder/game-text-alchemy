@@ -156,33 +156,40 @@ function encodeUtf16(str: string, le: boolean): Uint8Array {
  */
 function extractBinaryTags(rawBytes: Uint8Array, le: boolean): Uint8Array[] {
   const tags: Uint8Array[] = [];
+
   for (let i = 0; i + 1 < rawBytes.length; i += 2) {
-    const code = le ? (rawBytes[i] | (rawBytes[i + 1] << 8)) : ((rawBytes[i] << 8) | rawBytes[i + 1]);
+    const code = readCodeUnit(rawBytes, i, le);
     if (code === 0) break;
+
     if (code === 0x0E) {
-      // Open tag: 0x0E(2) + group(2) + type(2) + paramSize(2) + params(paramSize)
-      const tagStart = i;
-      i += 2; // skip 0x0E
-      if (i + 1 >= rawBytes.length) break;
-      i += 2; // skip group
-      if (i + 1 >= rawBytes.length) break;
-      i += 2; // skip type
-      if (i + 1 >= rawBytes.length) break;
-      const paramSize = le ? (rawBytes[i] | (rawBytes[i + 1] << 8)) : ((rawBytes[i] << 8) | rawBytes[i + 1]);
-      i += 2; // skip paramSize field
-      i += paramSize; // skip params
-      tags.push(rawBytes.slice(tagStart, i));
-      i -= 2; // will be incremented by loop
-    } else if (code === 0x0F) {
-      // Close tag: 0x0F(2) + group(2) + type(2)
-      const tagStart = i;
-      i += 6; // 0x0F + group + type
-      tags.push(rawBytes.slice(tagStart, i));
-      i -= 2; // will be incremented by loop
-    } else if (code >= 0xD800 && code <= 0xDBFF) {
+      let p = i + 2;
+      if (p + 5 >= rawBytes.length) break;
+
+      p += 2; // group
+      p += 2; // type
+      const paramSize = readCodeUnit(rawBytes, p, le); p += 2;
+      p += paramSize;
+      if ((p & 1) !== 0) p += 1; // keep UTF-16 alignment when param size is odd
+      if (p > rawBytes.length) p = rawBytes.length;
+
+      tags.push(rawBytes.slice(i, p));
+      i = p - 2;
+      continue;
+    }
+
+    if (code === 0x0F) {
+      const end = i + 6;
+      if (end > rawBytes.length) break;
+      tags.push(rawBytes.slice(i, end));
+      i = end - 2;
+      continue;
+    }
+
+    if (code >= 0xD800 && code <= 0xDBFF) {
       i += 2; // skip surrogate pair low
     }
   }
+
   return tags;
 }
 
