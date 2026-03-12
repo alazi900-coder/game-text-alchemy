@@ -277,7 +277,12 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         ? sarcArchives
         : (legacySingle && legacySingle.msbtEntryNames.length > 0 ? [legacySingle] : []);
 
-      if (allArchives.length > 0) {
+      const fileNamesToBuildSet = new Set(fileNamesToBuild);
+      const scopedArchives = allArchives.filter(archive =>
+        archive.msbtEntryNames.some(msbtName => fileNamesToBuildSet.has(msbtName.replace(/.*[/\\]/, "")))
+      );
+
+      if (scopedArchives.length > 0) {
         const { buildSarcZs } = await import("@/lib/sarc-parser");
 
         if (allArchives.length === 1) {
