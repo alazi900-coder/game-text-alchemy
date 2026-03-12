@@ -107,18 +107,18 @@ export default function MsbtProcess() {
         } else if (lower.endsWith('.bundle') || lower.endsWith('.bytes')) {
           // Unity Asset Bundle — extract MSBT files automatically
           try {
-            addLog(`📦 فك Bundle (${i + 1}/${total}): ${f.name}...`);
+            setBundleProgress({ current: bundleCount + 1, total: totalBundles, fileName: f.name, msbtFound: totalMsbtFromBundles, lastMsbt: '' });
             const buf = await f.arrayBuffer();
             const { extractBundleAssets, isMsbt } = await import("@/lib/unity-asset-bundle");
             const { info, assets, decompressedData } = await extractBundleAssets(buf);
             const msbtAssets = assets.filter(a => isMsbt(a.data));
+            bundleCount++;
 
             if (msbtAssets.length === 0) {
-              addLog(`⏭️ ${f.name}: لا يحتوي على MSBT — تم تخطيه`);
+              setBundleProgress(prev => prev ? { ...prev, current: bundleCount } : null);
             } else {
               addLog(`✅ ${f.name}: ${msbtAssets.length} ملف MSBT`);
 
-              // Store bundle meta for repacking — use ArrayBuffer directly (NOT Array.from)
               const { idbGet, idbSet } = await import("@/lib/idb-storage");
               const existingBundles = (await idbGet<any[]>("editorBundleMeta")) || [];
               existingBundles.push({
@@ -133,9 +133,12 @@ export default function MsbtProcess() {
               for (const asset of msbtAssets) {
                 const assetName = asset.name.endsWith('.msbt') ? asset.name : `${asset.name}.msbt`;
                 newMsbt.push({ name: assetName, size: asset.data.length, data: asset.data.buffer as ArrayBuffer });
+                totalMsbtFromBundles++;
+                setBundleProgress(prev => prev ? { ...prev, current: bundleCount, msbtFound: totalMsbtFromBundles, lastMsbt: assetName } : null);
               }
             }
           } catch (err) {
+            bundleCount++;
             addLog(`⚠️ فشل فك Bundle ${f.name}: ${err instanceof Error ? err.message : 'خطأ'}`);
           }
         } else if (lower.endsWith('.sarc.zs') || lower.endsWith('.sarc')) {
