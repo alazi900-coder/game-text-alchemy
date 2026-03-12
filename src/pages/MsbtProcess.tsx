@@ -365,7 +365,7 @@ export default function MsbtProcess() {
               <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10 border border-primary/30 text-sm font-display font-semibold cursor-pointer hover:bg-primary/20 transition-colors">
                 <Upload className="w-4 h-4" />
                 اختيار ملفات
-                <input type="file" accept=".msbt,.sarc,.zs" multiple className="hidden" onChange={e => handleFileSelect(e.target.files)} disabled={isProcessing} />
+                <input type="file" accept=".msbt,.sarc,.zs,.bundle,.bytes" multiple className="hidden" onChange={e => handleFileSelect(e.target.files)} disabled={isProcessing} />
               </label>
               <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary/10 border border-secondary/30 text-sm font-display font-semibold cursor-pointer hover:bg-secondary/20 transition-colors">
                 <FolderOpen className="w-4 h-4" />
