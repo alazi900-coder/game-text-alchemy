@@ -280,20 +280,30 @@ export default function MsbtProcess() {
       // Auto-detect existing Arabic
       const autoTranslations: Record<string, string> = {};
       const arabicLetterRegex = /[\u0621-\u064A\u0671-\u06D3\uFB50-\uFDFF\uFE70-\uFEFF]/g;
-      const isReUploadedBuild = allEntries.some(e => hasArabicPresentationForms(e.original));
+      const eastAsianRegex = /[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uAC00-\uD7AF]/g;
+      const presentationEntries = allEntries.filter(e => hasArabicPresentationForms(e.original));
+      const reuploadThreshold = Math.min(allEntries.length, Math.max(25, Math.ceil(allEntries.length * 0.2)));
+      const isReUploadedBuild = presentationEntries.length >= reuploadThreshold;
 
       if (!isReUploadedBuild) {
         for (const entry of allEntries) {
           const stripped = entry.original.replace(/[\uE000-\uF8FF\uFFF9-\uFFFC\u0000-\u001F]/g, '').trim();
-          const arabicMatches = stripped.match(arabicLetterRegex);
-          if (arabicMatches && arabicMatches.length >= 2) {
+          const arabicCount = (stripped.match(arabicLetterRegex) || []).length;
+          const eastAsianCount = (stripped.match(eastAsianRegex) || []).length;
+          const latinCount = (stripped.match(/[A-Za-z]/g) || []).length;
+
+          const looksLikeArabicText = arabicCount >= 3
+            && arabicCount >= eastAsianCount * 2
+            && (latinCount === 0 || arabicCount >= latinCount);
+
+          if (looksLikeArabicText) {
             const key = `${entry.msbtFile}:${entry.index}`;
             autoTranslations[key] = stripped;
           }
         }
         addLog(`🎯 كشف تلقائي: ${Object.keys(autoTranslations).length} نص معرّب`);
       } else {
-        addLog("📌 ملف مبني سابقاً — تم تخطي الكشف التلقائي");
+        addLog(`📌 ملف مبني سابقاً — تم تخطي الكشف التلقائي (${presentationEntries.length} نص بصيغ عرض عربية)`);
         for (const entry of allEntries) {
           if (hasArabicPresentationForms(entry.original)) {
             entry.original = removeArabicPresentationForms(reverseBidi(entry.original));

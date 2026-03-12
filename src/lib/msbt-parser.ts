@@ -34,6 +34,10 @@ function readU16(dv: DataView, offset: number, le: boolean): number {
   return dv.getUint16(offset, le);
 }
 
+function readCodeUnit(bytes: Uint8Array, offset: number, le: boolean): number {
+  return le ? (bytes[offset] | (bytes[offset + 1] << 8)) : ((bytes[offset] << 8) | bytes[offset + 1]);
+}
+
 function readU32(dv: DataView, offset: number, le: boolean): number {
   return dv.getUint32(offset, le);
 }
@@ -70,37 +74,61 @@ function getMsbtTagLabel(group: number, type: number): string {
  *  Control tags (0x0E/0x0F) are converted to [MSBT:label] placeholders. */
 function decodeUtf16(bytes: Uint8Array, le: boolean): string {
   const chars: string[] = [];
+
   for (let i = 0; i + 1 < bytes.length; i += 2) {
-    const code = le ? (bytes[i] | (bytes[i + 1] << 8)) : ((bytes[i] << 8) | bytes[i + 1]);
+    const code = readCodeUnit(bytes, i, le);
     if (code === 0) break;
+
     if (code === 0x0E) {
-      let group = 0, type = 0, paramSize = 0;
-      if (i + 3 < bytes.length) { i += 2; group = le ? (bytes[i] | (bytes[i + 1] << 8)) : ((bytes[i] << 8) | bytes[i + 1]); }
-      if (i + 3 < bytes.length) { i += 2; type = le ? (bytes[i] | (bytes[i + 1] << 8)) : ((bytes[i] << 8) | bytes[i + 1]); }
-      if (i + 3 < bytes.length) { i += 2; paramSize = le ? (bytes[i] | (bytes[i + 1] << 8)) : ((bytes[i] << 8) | bytes[i + 1]); i += paramSize; }
+      let p = i + 2;
+      if (p + 5 >= bytes.length) {
+        chars.push("[MSBT:G0T0]");
+        break;
+      }
+
+      const group = readCodeUnit(bytes, p, le); p += 2;
+      const type = readCodeUnit(bytes, p, le); p += 2;
+      const paramSize = readCodeUnit(bytes, p, le); p += 2;
+
+      p += paramSize;
+      if ((p & 1) !== 0) p += 1; // keep UTF-16 alignment when param size is odd
+      if (p > bytes.length) p = bytes.length - (bytes.length % 2);
+
       chars.push(`[MSBT:${getMsbtTagLabel(group, type)}]`);
+      i = p - 2;
       continue;
     }
+
     if (code === 0x0F) {
-      let group = 0, type = 0;
-      if (i + 3 < bytes.length) { i += 2; group = le ? (bytes[i] | (bytes[i + 1] << 8)) : ((bytes[i] << 8) | bytes[i + 1]); }
-      if (i + 3 < bytes.length) { i += 2; type = le ? (bytes[i] | (bytes[i + 1] << 8)) : ((bytes[i] << 8) | bytes[i + 1]); }
+      let p = i + 2;
+      if (p + 3 >= bytes.length) {
+        chars.push("[/MSBT:G0T0]");
+        break;
+      }
+
+      const group = readCodeUnit(bytes, p, le); p += 2;
+      const type = readCodeUnit(bytes, p, le); p += 2;
+
       chars.push(`[/MSBT:${getMsbtTagLabel(group, type)}]`);
+      i = p - 2;
       continue;
     }
+
     if (code >= 0xD800 && code <= 0xDBFF) {
       if (i + 3 < bytes.length) {
-        const low = le ? (bytes[i + 2] | (bytes[i + 3] << 8)) : ((bytes[i + 2] << 8) | bytes[i + 3]);
+        const low = readCodeUnit(bytes, i + 2, le);
         chars.push(String.fromCharCode(code, low));
         i += 2;
         continue;
       }
     }
+
     chars.push(String.fromCharCode(code));
   }
+
   // Normalize Presentation Forms (U+FB50–U+FDFF, U+FE70–U+FEFF) to standard Arabic
-  const raw = chars.join('');
-  return raw.normalize('NFKC');
+  const raw = chars.join("");
+  return raw.normalize("NFKC");
 }
 
 /** Encode string to UTF-16LE with null terminator */
@@ -128,33 +156,40 @@ function encodeUtf16(str: string, le: boolean): Uint8Array {
  */
 function extractBinaryTags(rawBytes: Uint8Array, le: boolean): Uint8Array[] {
   const tags: Uint8Array[] = [];
+
   for (let i = 0; i + 1 < rawBytes.length; i += 2) {
-    const code = le ? (rawBytes[i] | (rawBytes[i + 1] << 8)) : ((rawBytes[i] << 8) | rawBytes[i + 1]);
+    const code = readCodeUnit(rawBytes, i, le);
     if (code === 0) break;
+
     if (code === 0x0E) {
-      // Open tag: 0x0E(2) + group(2) + type(2) + paramSize(2) + params(paramSize)
-      const tagStart = i;
-      i += 2; // skip 0x0E
-      if (i + 1 >= rawBytes.length) break;
-      i += 2; // skip group
-      if (i + 1 >= rawBytes.length) break;
-      i += 2; // skip type
-      if (i + 1 >= rawBytes.length) break;
-      const paramSize = le ? (rawBytes[i] | (rawBytes[i + 1] << 8)) : ((rawBytes[i] << 8) | rawBytes[i + 1]);
-      i += 2; // skip paramSize field
-      i += paramSize; // skip params
-      tags.push(rawBytes.slice(tagStart, i));
-      i -= 2; // will be incremented by loop
-    } else if (code === 0x0F) {
-      // Close tag: 0x0F(2) + group(2) + type(2)
-      const tagStart = i;
-      i += 6; // 0x0F + group + type
-      tags.push(rawBytes.slice(tagStart, i));
-      i -= 2; // will be incremented by loop
-    } else if (code >= 0xD800 && code <= 0xDBFF) {
+      let p = i + 2;
+      if (p + 5 >= rawBytes.length) break;
+
+      p += 2; // group
+      p += 2; // type
+      const paramSize = readCodeUnit(rawBytes, p, le); p += 2;
+      p += paramSize;
+      if ((p & 1) !== 0) p += 1; // keep UTF-16 alignment when param size is odd
+      if (p > rawBytes.length) p = rawBytes.length;
+
+      tags.push(rawBytes.slice(i, p));
+      i = p - 2;
+      continue;
+    }
+
+    if (code === 0x0F) {
+      const end = i + 6;
+      if (end > rawBytes.length) break;
+      tags.push(rawBytes.slice(i, end));
+      i = end - 2;
+      continue;
+    }
+
+    if (code >= 0xD800 && code <= 0xDBFF) {
       i += 2; // skip surrogate pair low
     }
   }
+
   return tags;
 }
 
