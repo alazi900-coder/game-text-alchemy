@@ -61,6 +61,7 @@ export default function MsbtProcess() {
   const [fileLoadProgress, setFileLoadProgress] = useState<{ current: number; total: number } | null>(null);
   const [bundleProgress, setBundleProgress] = useState<{ current: number; total: number; fileName: string; msbtFound: number; lastMsbt: string } | null>(null);
   const cancelRef = useRef(false);
+  const bundleStartTimeRef = useRef<number>(0);
   const navigate = useNavigate();
 
   useEffect(() => {
