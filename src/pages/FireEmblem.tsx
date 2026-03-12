@@ -7,9 +7,9 @@ import heroBg from "@/assets/fe-hero-bg.jpg";
 import { APP_VERSION } from "@/lib/version";
 
 const steps = [
-  { icon: FileText, title: "ارفع الملفات", desc: "ارفع ملفات MSBT من مجلد Message داخل romFS" },
-  { icon: Shield, title: "معالجة تلقائية", desc: "استخراج النصوص ومعالجتها وربط الحروف العربية" },
-  { icon: Download, title: "حمّل النتيجة", desc: "حمّل الملف المعرّب جاهزاً للعبة" },
+  { icon: FileText, title: "ارفع ملفات Bundle", desc: "ارفع ملفات .bytes.bundle مباشرة — يتم استخراج MSBT تلقائياً" },
+  { icon: Shield, title: "ترجمة ومعالجة", desc: "ترجم النصوص في المحرر مع ربط الحروف وعكس الاتجاه تلقائياً" },
+  { icon: Download, title: "حمّل Bundle معرّب", desc: "حمّل ملف Bundle جاهز للعبة مباشرة — بدون أدوات خارجية" },
 ];
 
 const extractionSteps = [
