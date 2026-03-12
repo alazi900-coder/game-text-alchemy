@@ -1,9 +1,9 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Upload, FileText, ArrowRight, Loader2, CheckCircle2, Clock, Pencil, Sparkles, Download, FolderOpen } from "lucide-react";
+import { Upload, FileText, ArrowRight, Loader2, CheckCircle2, Clock, Pencil, Sparkles, Download, FolderOpen, XCircle } from "lucide-react";
 
 type ProcessingStage = "idle" | "uploading" | "extracting" | "done" | "error";
 
@@ -60,6 +60,7 @@ export default function MsbtProcess() {
   const [hasPreviousSession, setHasPreviousSession] = useState(false);
   const [fileLoadProgress, setFileLoadProgress] = useState<{ current: number; total: number } | null>(null);
   const [bundleProgress, setBundleProgress] = useState<{ current: number; total: number; fileName: string; msbtFound: number; lastMsbt: string } | null>(null);
+  const cancelRef = useRef(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -76,6 +77,7 @@ export default function MsbtProcess() {
 
   const handleFileSelect = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
+    cancelRef.current = false;
     const total = files.length;
     setFileLoadProgress({ current: 0, total });
 
@@ -105,6 +107,7 @@ export default function MsbtProcess() {
       for (let i = start; i < end; i++) {
         const f = files[i];
         const lower = f.name.toLowerCase();
+        if (cancelRef.current) break;
         if (lower.endsWith('.msbt')) {
           try {
             const buf = await f.arrayBuffer();
@@ -190,12 +193,18 @@ export default function MsbtProcess() {
       }
       setFileLoadProgress({ current: end, total });
       await new Promise(r => setTimeout(r, 0));
+      if (cancelRef.current) break;
     }
 
-    if (newMsbt.length > 0) setMsbtFiles(newMsbt);
     setFileLoadProgress(null);
     setBundleProgress(null);
-    addLog(`📂 تم تحميل ${newMsbt.length} ملف MSBT` + (bundleCount > 0 ? ` (من ${bundleCount} Bundle)` : ''));
+    if (cancelRef.current) {
+      cancelRef.current = false;
+      addLog(`🚫 تم إلغاء المعالجة — ${newMsbt.length} ملف MSBT تم تحميله قبل الإلغاء`);
+    } else {
+      addLog(`📂 تم تحميل ${newMsbt.length} ملف MSBT` + (bundleCount > 0 ? ` (من ${bundleCount} Bundle)` : ''));
+    }
+    if (newMsbt.length > 0) setMsbtFiles(newMsbt);
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -425,6 +434,13 @@ export default function MsbtProcess() {
                     )}
                   </div>
                 )}
+                <button
+                  onClick={() => { cancelRef.current = true; }}
+                  className="mx-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-xs font-display font-semibold hover:bg-destructive/20 transition-colors"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  إلغاء
+                </button>
               </div>
             )}
           </div>
