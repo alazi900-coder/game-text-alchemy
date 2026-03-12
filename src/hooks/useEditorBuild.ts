@@ -303,8 +303,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           const meta = bundleMeta[0];
           setBuildProgress("إعادة بناء Bundle...");
 
-          const originalBuffer = new Uint8Array(meta.originalBuffer).buffer;
-          const decompressedData = new Uint8Array(meta.decompressedData);
+          const originalBuffer = meta.originalBuffer instanceof ArrayBuffer ? meta.originalBuffer : new Uint8Array(meta.originalBuffer).buffer;
+          const decompressedData = meta.decompressedData instanceof ArrayBuffer ? new Uint8Array(meta.decompressedData) : new Uint8Array(meta.decompressedData);
           const replacements = new Map<string, Uint8Array>();
 
           for (const asset of meta.assets) {
