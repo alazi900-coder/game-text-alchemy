@@ -145,7 +145,24 @@ export interface ExtractedAsset {
 }
 
 /* ───────── Compression helpers ───────── */
+/* ───────── Find MsgStdBn signature anywhere in buffer ───────── */
+const MSBT_MAGIC = [0x4D, 0x73, 0x67, 0x53, 0x74, 0x64, 0x42, 0x6E]; // "MsgStdBn"
+
+function findMsgStdBnOffset(data: Uint8Array): number {
+  // Search up to first 256 bytes (Unity may prepend name/length fields)
+  const searchLimit = Math.min(data.length - 8, 256);
+  for (let i = 0; i <= searchLimit; i++) {
+    if (data[i] === MSBT_MAGIC[0] && data[i + 1] === MSBT_MAGIC[1] &&
+        data[i + 2] === MSBT_MAGIC[2] && data[i + 3] === MSBT_MAGIC[3] &&
+        data[i + 4] === MSBT_MAGIC[4] && data[i + 5] === MSBT_MAGIC[5] &&
+        data[i + 6] === MSBT_MAGIC[6] && data[i + 7] === MSBT_MAGIC[7]) {
+      return i;
+    }
+  }
+  return -1;
+}
 const COMPRESSION_NONE = 0;
+
 const COMPRESSION_LZMA = 1;
 const COMPRESSION_LZ4 = 2;
 const COMPRESSION_LZ4HC = 3;
@@ -401,16 +418,17 @@ function parseSerializedFile(data: Uint8Array, entryIndex: number, entryAbsolute
         });
       }
     } else {
-      if (objData.length >= 8) {
-        const magic = new TextDecoder().decode(objData.slice(0, 8));
-        if (magic === "MsgStdBn") {
-          assets.push({
-            name: `msbt_${obj.pathId}`, data: objData, type: "TextAsset", pathId: obj.pathId,
-            entryIndex, absoluteDataOffset: absObjOffset, objectByteSize: obj.byteSize,
-            textAssetDataLenOffset: -1, textAssetDataBytesOffset: -1,
-          });
-          continue;
-        }
+      // Search for MsgStdBn signature in the ENTIRE object data (not just first 8 bytes)
+      // In FE Engage, Unity may prepend 16-32 bytes (name/length fields) before the MSBT signature
+      const msbtOffset = findMsgStdBnOffset(objData);
+      if (msbtOffset >= 0) {
+        const msbtData = objData.slice(msbtOffset);
+        assets.push({
+          name: `msbt_${obj.pathId}`, data: msbtData, type: "TextAsset", pathId: obj.pathId,
+          entryIndex, absoluteDataOffset: absObjOffset, objectByteSize: obj.byteSize,
+          textAssetDataLenOffset: -1, textAssetDataBytesOffset: -1,
+        });
+        continue;
       }
       assets.push({
         name: `object_${obj.pathId}`, data: objData, type: `class_${obj.classId}`, pathId: obj.pathId,

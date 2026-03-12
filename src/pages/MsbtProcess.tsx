@@ -125,6 +125,15 @@ export default function MsbtProcess() {
           addLog(`⚠️ فشل قراءة ${f.name}: ${err instanceof Error ? err.message : 'خطأ'}`);
         }
       } else if (lower.endsWith('.bundle') || lower.endsWith('.bytes')) {
+        // Auto-filter non-text bundles (graphics, maps, models)
+        const baseName = f.name.split('/').pop()?.toLowerCase() || lower;
+        const nonTextPrefixes = ['gr_', 'ma_', 'mo_', 'sc_', 'ef_'];
+        if (nonTextPrefixes.some(p => baseName.startsWith(p))) {
+          addLog(`⏭️ تخطي ${f.name} — ملف رسوميات/نماذج (ليس نصوص)`);
+          bundleCount++;
+          setBundleProgress(prev => prev ? { ...prev, current: bundleCount } : null);
+          continue;
+        }
         // Unity Asset Bundle — extract MSBT files automatically
         try {
           setBundleProgress({ current: bundleCount + 1, total: totalBundles, fileName: f.name, msbtFound: totalMsbtFromBundles, lastMsbt: '' });
