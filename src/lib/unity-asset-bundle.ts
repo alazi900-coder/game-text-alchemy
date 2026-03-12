@@ -145,7 +145,24 @@ export interface ExtractedAsset {
 }
 
 /* ───────── Compression helpers ───────── */
-const COMPRESSION_NONE = 0;
+/* ───────── Find MsgStdBn signature anywhere in buffer ───────── */
+const MSBT_MAGIC = [0x4D, 0x73, 0x67, 0x53, 0x74, 0x64, 0x42, 0x6E]; // "MsgStdBn"
+
+function findMsgStdBnOffset(data: Uint8Array): number {
+  // Search up to first 256 bytes (Unity may prepend name/length fields)
+  const searchLimit = Math.min(data.length - 8, 256);
+  for (let i = 0; i <= searchLimit; i++) {
+    if (data[i] === MSBT_MAGIC[0] && data[i + 1] === MSBT_MAGIC[1] &&
+        data[i + 2] === MSBT_MAGIC[2] && data[i + 3] === MSBT_MAGIC[3] &&
+        data[i + 4] === MSBT_MAGIC[4] && data[i + 5] === MSBT_MAGIC[5] &&
+        data[i + 6] === MSBT_MAGIC[6] && data[i + 7] === MSBT_MAGIC[7]) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+
 const COMPRESSION_LZMA = 1;
 const COMPRESSION_LZ4 = 2;
 const COMPRESSION_LZ4HC = 3;
