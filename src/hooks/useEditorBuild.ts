@@ -234,11 +234,11 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       let modifiedCount = 0;
       const rebuiltMsbtFiles: Record<string, Uint8Array> = {};
 
-      for (let fi = 0; fi < msbtFileNames.length; fi++) {
-        const fileName = msbtFileNames[fi];
+      for (let fi = 0; fi < fileNamesToBuild.length; fi++) {
+        const fileName = fileNamesToBuild[fi];
         const buf = msbtFiles[fileName];
         if (!buf) continue;
-        setBuildProgress(`معالجة ${fi + 1}/${msbtFileNames.length}: ${fileName}...`);
+        setBuildProgress(`معالجة ${fi + 1}/${fileNamesToBuild.length}: ${fileName}...`);
 
         const msbt = parseMsbtFile(new Uint8Array(buf));
 
