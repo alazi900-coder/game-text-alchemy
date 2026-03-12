@@ -600,8 +600,16 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       const allArchives: SarcMeta[] = sarcArchives && sarcArchives.length > 0 
         ? sarcArchives 
         : (legacySingle && legacySingle.msbtEntryNames.length > 0 ? [legacySingle] : []);
+      const activeMsbtFileSet = new Set(
+        currentState.entries
+          .map(entry => entry.msbtFile.match(/^msbt:([^:]+):/)?.[1])
+          .filter((name): name is string => !!name)
+      );
+      const scopedArchives = allArchives.filter(archive =>
+        archive.msbtEntryNames.some(msbtName => activeMsbtFileSet.has(msbtName.replace(/.*[/\\]/, "")))
+      );
 
-      if (allArchives.length > 0) {
+      if (scopedArchives.length > 0) {
         const JSZip = (await import("jszip")).default;
         const { buildSarcZs } = await import("@/lib/sarc-parser");
         const serverZip = await JSZip.loadAsync(blob);
