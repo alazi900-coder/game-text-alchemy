@@ -59,6 +59,7 @@ export default function MsbtProcess() {
   const [mergeMode, setMergeMode] = useState<"fresh" | "merge">("fresh");
   const [hasPreviousSession, setHasPreviousSession] = useState(false);
   const [fileLoadProgress, setFileLoadProgress] = useState<{ current: number; total: number } | null>(null);
+  const [bundleProgress, setBundleProgress] = useState<{ current: number; total: number; fileName: string; msbtFound: number; lastMsbt: string } | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
