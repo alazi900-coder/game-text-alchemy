@@ -85,6 +85,7 @@ export default function MsbtProcess() {
       idbSet("editorSarcArchive", null),
       idbSet("editorMsbtFiles", {}),
       idbSet("editorMsbtFileNames", []),
+      idbSet("editorBundleMeta", null),
     ]);
     setMsbtFiles([]);
 
@@ -101,6 +102,35 @@ export default function MsbtProcess() {
             newMsbt.push({ name: f.name, size: buf.byteLength, data: buf });
           } catch (err) {
             addLog(`⚠️ فشل قراءة ${f.name}: ${err instanceof Error ? err.message : 'خطأ'}`);
+          }
+        } else if (lower.endsWith('.bundle') || lower.endsWith('.bytes')) {
+          // Unity Asset Bundle — extract MSBT files automatically
+          try {
+            addLog(`📦 فك Bundle: ${f.name}...`);
+            const buf = await f.arrayBuffer();
+            const { extractBundleAssets, isMsbt } = await import("@/lib/unity-asset-bundle");
+            const { info, assets, decompressedData } = await extractBundleAssets(buf);
+            const msbtAssets = assets.filter(a => isMsbt(a.data));
+            addLog(`✅ ${f.name}: ${assets.length} asset — ${msbtAssets.length} ملف MSBT`);
+
+            // Store bundle meta for repacking later
+            const { idbGet, idbSet } = await import("@/lib/idb-storage");
+            const existingBundles = (await idbGet<any[]>("editorBundleMeta")) || [];
+            existingBundles.push({
+              originalFileName: f.name,
+              info,
+              assets,
+              decompressedData: Array.from(decompressedData),
+              originalBuffer: Array.from(new Uint8Array(buf)),
+            });
+            await idbSet("editorBundleMeta", existingBundles);
+
+            for (const asset of msbtAssets) {
+              const assetName = asset.name.endsWith('.msbt') ? asset.name : `${asset.name}.msbt`;
+              newMsbt.push({ name: assetName, size: asset.data.length, data: asset.data.buffer as ArrayBuffer });
+            }
+          } catch (err) {
+            addLog(`⚠️ فشل فك Bundle ${f.name}: ${err instanceof Error ? err.message : 'خطأ'}`);
           }
         } else if (lower.endsWith('.sarc.zs') || lower.endsWith('.sarc')) {
           try {
@@ -314,7 +344,7 @@ export default function MsbtProcess() {
           رفع ملفات {config.title} {config.emoji}
         </h1>
         <p className="text-muted-foreground font-body">
-          ارفع ملفات MSBT أو SARC.ZS — يمكنك رفع عدة ملفات دفعة واحدة
+          ارفع ملفات MSBT أو SARC.ZS أو .bytes.bundle — يمكنك رفع عدة ملفات دفعة واحدة
         </p>
       </header>
 
@@ -329,13 +359,13 @@ export default function MsbtProcess() {
               ${isProcessing ? "opacity-50 pointer-events-none" : ""}`}
           >
             <FileText className="w-12 h-12 text-primary mb-3" />
-            <p className="font-display font-semibold mb-1">ملفات MSBT أو SARC.ZS</p>
-            <p className="text-xs text-muted-foreground mb-4">اسحب الملفات هنا أو اختر من الجهاز — يدعم .msbt و .sarc.zs</p>
+            <p className="font-display font-semibold mb-1">ملفات MSBT أو SARC.ZS أو Bundle</p>
+            <p className="text-xs text-muted-foreground mb-4">اسحب الملفات هنا أو اختر من الجهاز — يدعم .msbt و .sarc.zs و .bytes.bundle</p>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-primary/10 border border-primary/30 text-sm font-display font-semibold cursor-pointer hover:bg-primary/20 transition-colors">
                 <Upload className="w-4 h-4" />
                 اختيار ملفات
-                <input type="file" accept=".msbt,.sarc,.zs" multiple className="hidden" onChange={e => handleFileSelect(e.target.files)} disabled={isProcessing} />
+                <input type="file" accept=".msbt,.sarc,.zs,.bundle,.bytes" multiple className="hidden" onChange={e => handleFileSelect(e.target.files)} disabled={isProcessing} />
               </label>
               <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary/10 border border-secondary/30 text-sm font-display font-semibold cursor-pointer hover:bg-secondary/20 transition-colors">
                 <FolderOpen className="w-4 h-4" />

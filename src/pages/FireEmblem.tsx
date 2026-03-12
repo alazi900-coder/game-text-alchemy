@@ -7,9 +7,9 @@ import heroBg from "@/assets/fe-hero-bg.jpg";
 import { APP_VERSION } from "@/lib/version";
 
 const steps = [
-  { icon: FileText, title: "ارفع الملفات", desc: "ارفع ملفات MSBT من مجلد Message داخل romFS" },
-  { icon: Shield, title: "معالجة تلقائية", desc: "استخراج النصوص ومعالجتها وربط الحروف العربية" },
-  { icon: Download, title: "حمّل النتيجة", desc: "حمّل الملف المعرّب جاهزاً للعبة" },
+  { icon: FileText, title: "ارفع ملفات Bundle", desc: "ارفع ملفات .bytes.bundle مباشرة — يتم استخراج MSBT تلقائياً" },
+  { icon: Shield, title: "ترجمة ومعالجة", desc: "ترجم النصوص في المحرر مع ربط الحروف وعكس الاتجاه تلقائياً" },
+  { icon: Download, title: "حمّل Bundle معرّب", desc: "حمّل ملف Bundle جاهز للعبة مباشرة — بدون أدوات خارجية" },
 ];
 
 const extractionSteps = [
@@ -126,7 +126,7 @@ export default function FireEmblem() {
             </span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-lg mx-auto font-body bg-background/40 backdrop-blur-sm rounded-lg px-4 py-2">
-            ارفع ملفات MSBT واحصل على نسخة معرّبة بالكامل مع ربط الحروف وعكس الاتجاه تلقائياً
+            ارفع ملفات .bytes.bundle مباشرة واحصل على نسخة معرّبة بالكامل — بدون أدوات خارجية
           </p>
           <div className="flex flex-col sm:flex-row gap-4 items-center justify-center">
             <Link to="/fire-emblem/process">
@@ -138,10 +138,10 @@ export default function FireEmblem() {
               <Download className="w-5 h-5 ml-2" />
               تحميل النصوص الإنجليزية 📥
             </Button>
-            <Link to="/bundle-extractor">
-              <Button size="lg" variant="outline" className="font-display font-bold text-lg px-10 py-6">
-                فاك ملفات Bundle 📦
-              </Button>
+          </div>
+          <div className="mt-3">
+            <Link to="/bundle-extractor" className="text-sm text-muted-foreground hover:text-foreground underline">
+              أداة متقدمة: فاك ملفات Bundle يدوياً 📦
             </Link>
           </div>
         </div>
