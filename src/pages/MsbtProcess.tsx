@@ -106,28 +106,33 @@ export default function MsbtProcess() {
         } else if (lower.endsWith('.bundle') || lower.endsWith('.bytes')) {
           // Unity Asset Bundle — extract MSBT files automatically
           try {
-            addLog(`📦 فك Bundle: ${f.name}...`);
+            addLog(`📦 فك Bundle (${i + 1}/${total}): ${f.name}...`);
             const buf = await f.arrayBuffer();
             const { extractBundleAssets, isMsbt } = await import("@/lib/unity-asset-bundle");
             const { info, assets, decompressedData } = await extractBundleAssets(buf);
             const msbtAssets = assets.filter(a => isMsbt(a.data));
-            addLog(`✅ ${f.name}: ${assets.length} asset — ${msbtAssets.length} ملف MSBT`);
 
-            // Store bundle meta for repacking later
-            const { idbGet, idbSet } = await import("@/lib/idb-storage");
-            const existingBundles = (await idbGet<any[]>("editorBundleMeta")) || [];
-            existingBundles.push({
-              originalFileName: f.name,
-              info,
-              assets,
-              decompressedData: Array.from(decompressedData),
-              originalBuffer: Array.from(new Uint8Array(buf)),
-            });
-            await idbSet("editorBundleMeta", existingBundles);
+            if (msbtAssets.length === 0) {
+              addLog(`⏭️ ${f.name}: لا يحتوي على MSBT — تم تخطيه`);
+            } else {
+              addLog(`✅ ${f.name}: ${msbtAssets.length} ملف MSBT`);
 
-            for (const asset of msbtAssets) {
-              const assetName = asset.name.endsWith('.msbt') ? asset.name : `${asset.name}.msbt`;
-              newMsbt.push({ name: assetName, size: asset.data.length, data: asset.data.buffer as ArrayBuffer });
+              // Store bundle meta for repacking — use ArrayBuffer directly (NOT Array.from)
+              const { idbGet, idbSet } = await import("@/lib/idb-storage");
+              const existingBundles = (await idbGet<any[]>("editorBundleMeta")) || [];
+              existingBundles.push({
+                originalFileName: f.name,
+                info,
+                assets,
+                decompressedData: decompressedData.buffer,
+                originalBuffer: buf,
+              });
+              await idbSet("editorBundleMeta", existingBundles);
+
+              for (const asset of msbtAssets) {
+                const assetName = asset.name.endsWith('.msbt') ? asset.name : `${asset.name}.msbt`;
+                newMsbt.push({ name: assetName, size: asset.data.length, data: asset.data.buffer as ArrayBuffer });
+              }
             }
           } catch (err) {
             addLog(`⚠️ فشل فك Bundle ${f.name}: ${err instanceof Error ? err.message : 'خطأ'}`);
