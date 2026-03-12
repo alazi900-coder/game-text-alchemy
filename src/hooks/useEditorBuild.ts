@@ -675,7 +675,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           URL.revokeObjectURL(finalUrl);
         }
         const expandedMsg = expandedCount > 0 ? ` (${expandedCount} تم توسيعها 📐)` : '';
-        setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص${expandedMsg} — ${allArchives.length} ملف SARC.ZS جاهز للعبة 🎮`);
+        setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص${expandedMsg} — ${scopedArchives.length} ملف SARC.ZS جاهز للعبة 🎮`);
       } else {
         const a = document.createElement("a");
         a.href = blobUrl;
