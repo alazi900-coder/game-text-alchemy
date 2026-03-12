@@ -416,14 +416,27 @@ export default function MsbtProcess() {
                 <span className="text-xs font-mono text-muted-foreground">{fileLoadProgress.current}/{fileLoadProgress.total}</span>
               </div>
             )}
-            {bundleProgress && (
+            {bundleProgress && (() => {
+              const elapsed = (Date.now() - bundleStartTimeRef.current) / 1000;
+              const fraction = bundleProgress.current / bundleProgress.total;
+              const remaining = fraction > 0.05 ? (elapsed / fraction) * (1 - fraction) : 0;
+              const fmt = (s: number) => {
+                const m = Math.floor(s / 60);
+                const sec = Math.floor(s % 60);
+                return m > 0 ? `${m}:${sec.toString().padStart(2, '0')}` : `${sec}s`;
+              };
+              return (
               <div className="mt-3 w-full max-w-sm space-y-2 px-2">
                 <div className="flex items-center gap-3">
                   <Loader2 className="w-4 h-4 animate-spin text-[hsl(var(--primary))] shrink-0" />
                   <div className="flex-1 h-2.5 rounded-full bg-muted overflow-hidden">
-                    <div className="h-full rounded-full bg-[hsl(var(--primary))] transition-all duration-300" style={{ width: `${Math.round((bundleProgress.current / bundleProgress.total) * 100)}%` }} />
+                    <div className="h-full rounded-full bg-[hsl(var(--primary))] transition-all duration-300" style={{ width: `${Math.round(fraction * 100)}%` }} />
                   </div>
                   <span className="text-xs font-mono text-muted-foreground">{bundleProgress.current}/{bundleProgress.total}</span>
+                </div>
+                <div className="flex items-center justify-center gap-3 text-xs text-muted-foreground">
+                  <span className="flex items-center gap-1"><Timer className="w-3 h-3" /> {fmt(elapsed)}</span>
+                  {remaining > 0 && <span className="text-[hsl(var(--primary))]">≈ {fmt(remaining)} متبقي</span>}
                 </div>
                 <div className="text-xs text-muted-foreground text-center truncate" dir="ltr">
                   📦 {bundleProgress.fileName}
@@ -444,7 +457,8 @@ export default function MsbtProcess() {
                   إلغاء
                 </button>
               </div>
-            )}
+              );
+            })()}
           </div>
 
           {/* File list */}
