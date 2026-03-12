@@ -1210,10 +1210,10 @@ ${textsBlock}
       console.error('Gemini API error:', errText);
       if (geminiResponse.status === 429) {
         console.log('Gemini quota exceeded, falling back to Lovable AI...');
+      } else if (geminiResponse.status === 400 || geminiResponse.status === 403) {
+        console.log(`Gemini key invalid/forbidden (${geminiResponse.status}), falling back to Lovable AI...`);
       } else {
-        if (geminiResponse.status === 400) throw new Error('مفتاح API غير صالح — تحقق من المفتاح');
-        if (geminiResponse.status === 403) throw new Error('مفتاح API محظور أو منتهي — أنشئ مفتاحاً جديداً من Google AI Studio');
-        throw new Error(`خطأ Gemini: ${geminiResponse.status}`);
+        console.log(`Gemini error ${geminiResponse.status}, falling back to Lovable AI...`);
       }
     } else {
       const geminiData = await geminiResponse.json();
