@@ -615,9 +615,9 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         const serverZip = await JSZip.loadAsync(blob);
         const msbtFilesFromIdb = await idbGet<Record<string, ArrayBuffer>>("editorMsbtFiles");
 
-        if (allArchives.length === 1) {
+        if (scopedArchives.length === 1) {
           // Single SARC — download directly as .zs file
-          const sarcMeta = allArchives[0];
+          const sarcMeta = scopedArchives[0];
           setBuildProgress("إعادة بناء أرشيف SARC.ZS...");
           const sarcEntries: { name: string; data: Uint8Array }[] = [];
           for (const entry of sarcMeta.nonMsbtEntries) {
