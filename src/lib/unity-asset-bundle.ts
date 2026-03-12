@@ -453,20 +453,21 @@ function parseSerializedFile(data: Uint8Array, entryIndex: number, entryAbsolute
           textAssetDataBytesOffset: obj.byteStart + textAsset.dataBytesOffset,
         });
       } catch {
-        assets.push({
-          name: `object_${obj.pathId}`, data: objData, type: "TextAsset", pathId: obj.pathId,
-          entryIndex, absoluteDataOffset: absObjOffset, objectByteSize: obj.byteSize,
-          textAssetDataLenOffset: -1, textAssetDataBytesOffset: -1,
-        });
+        assets.push(createRawOrEmbeddedMsbtAsset(objData, {
+          name: `object_${obj.pathId}`,
+          entryIndex,
+          absoluteDataOffset: absObjOffset,
+          objectByteSize: obj.byteSize,
+          pathId: obj.pathId,
+        }));
       }
     } else {
-      // Search for MsgStdBn signature in the ENTIRE object data (not just first 8 bytes)
-      // In FE Engage, Unity may prepend 16-32 bytes (name/length fields) before the MSBT signature
-      const msbtOffset = findMsgStdBnOffset(objData);
+      // Scan deeper than 256 bytes for FE variants where headers can be longer
+      const msbtOffset = findMsgStdBnOffset(objData, 4096);
       if (msbtOffset >= 0) {
         const msbtData = objData.slice(msbtOffset);
         assets.push({
-          name: `msbt_${obj.pathId}`, data: msbtData, type: "TextAsset", pathId: obj.pathId,
+          name: `msbt_${obj.pathId}.msbt`, data: msbtData, type: "TextAsset", pathId: obj.pathId,
           entryIndex, absoluteDataOffset: absObjOffset, objectByteSize: obj.byteSize,
           textAssetDataLenOffset: -1, textAssetDataBytesOffset: -1,
         });
