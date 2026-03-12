@@ -59,6 +59,7 @@ export default function MsbtProcess() {
   const [mergeMode, setMergeMode] = useState<"fresh" | "merge">("fresh");
   const [hasPreviousSession, setHasPreviousSession] = useState(false);
   const [fileLoadProgress, setFileLoadProgress] = useState<{ current: number; total: number } | null>(null);
+  const [bundleProgress, setBundleProgress] = useState<{ current: number; total: number; fileName: string; msbtFound: number; lastMsbt: string } | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -90,6 +91,14 @@ export default function MsbtProcess() {
     setMsbtFiles([]);
 
     const newMsbt: { name: string; size: number; data: ArrayBuffer }[] = [];
+    let bundleCount = 0;
+    let totalMsbtFromBundles = 0;
+    // Count total bundles for progress
+    let totalBundles = 0;
+    for (let j = 0; j < total; j++) {
+      const n = files[j].name.toLowerCase();
+      if (n.endsWith('.bundle') || n.endsWith('.bytes')) totalBundles++;
+    }
     const BATCH = 200;
     for (let start = 0; start < total; start += BATCH) {
       const end = Math.min(start + BATCH, total);
@@ -106,18 +115,18 @@ export default function MsbtProcess() {
         } else if (lower.endsWith('.bundle') || lower.endsWith('.bytes')) {
           // Unity Asset Bundle — extract MSBT files automatically
           try {
-            addLog(`📦 فك Bundle (${i + 1}/${total}): ${f.name}...`);
+            setBundleProgress({ current: bundleCount + 1, total: totalBundles, fileName: f.name, msbtFound: totalMsbtFromBundles, lastMsbt: '' });
             const buf = await f.arrayBuffer();
             const { extractBundleAssets, isMsbt } = await import("@/lib/unity-asset-bundle");
             const { info, assets, decompressedData } = await extractBundleAssets(buf);
             const msbtAssets = assets.filter(a => isMsbt(a.data));
+            bundleCount++;
 
             if (msbtAssets.length === 0) {
-              addLog(`⏭️ ${f.name}: لا يحتوي على MSBT — تم تخطيه`);
+              setBundleProgress(prev => prev ? { ...prev, current: bundleCount } : null);
             } else {
               addLog(`✅ ${f.name}: ${msbtAssets.length} ملف MSBT`);
 
-              // Store bundle meta for repacking — use ArrayBuffer directly (NOT Array.from)
               const { idbGet, idbSet } = await import("@/lib/idb-storage");
               const existingBundles = (await idbGet<any[]>("editorBundleMeta")) || [];
               existingBundles.push({
@@ -132,9 +141,12 @@ export default function MsbtProcess() {
               for (const asset of msbtAssets) {
                 const assetName = asset.name.endsWith('.msbt') ? asset.name : `${asset.name}.msbt`;
                 newMsbt.push({ name: assetName, size: asset.data.length, data: asset.data.buffer as ArrayBuffer });
+                totalMsbtFromBundles++;
+                setBundleProgress(prev => prev ? { ...prev, current: bundleCount, msbtFound: totalMsbtFromBundles, lastMsbt: assetName } : null);
               }
             }
           } catch (err) {
+            bundleCount++;
             addLog(`⚠️ فشل فك Bundle ${f.name}: ${err instanceof Error ? err.message : 'خطأ'}`);
           }
         } else if (lower.endsWith('.sarc.zs') || lower.endsWith('.sarc')) {
@@ -182,7 +194,8 @@ export default function MsbtProcess() {
 
     if (newMsbt.length > 0) setMsbtFiles(newMsbt);
     setFileLoadProgress(null);
-    addLog(`📂 تم تحميل ${newMsbt.length} ملف MSBT`);
+    setBundleProgress(null);
+    addLog(`📂 تم تحميل ${newMsbt.length} ملف MSBT` + (bundleCount > 0 ? ` (من ${bundleCount} Bundle)` : ''));
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -390,6 +403,28 @@ export default function MsbtProcess() {
                   <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${Math.round((fileLoadProgress.current / fileLoadProgress.total) * 100)}%` }} />
                 </div>
                 <span className="text-xs font-mono text-muted-foreground">{fileLoadProgress.current}/{fileLoadProgress.total}</span>
+              </div>
+            )}
+            {bundleProgress && (
+              <div className="mt-3 w-full max-w-sm space-y-2 px-2">
+                <div className="flex items-center gap-3">
+                  <Loader2 className="w-4 h-4 animate-spin text-[hsl(var(--primary))] shrink-0" />
+                  <div className="flex-1 h-2.5 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full rounded-full bg-[hsl(var(--primary))] transition-all duration-300" style={{ width: `${Math.round((bundleProgress.current / bundleProgress.total) * 100)}%` }} />
+                  </div>
+                  <span className="text-xs font-mono text-muted-foreground">{bundleProgress.current}/{bundleProgress.total}</span>
+                </div>
+                <div className="text-xs text-muted-foreground text-center truncate" dir="ltr">
+                  📦 {bundleProgress.fileName}
+                </div>
+                {bundleProgress.msbtFound > 0 && (
+                  <div className="text-xs text-center space-y-0.5">
+                    <span className="text-[hsl(var(--primary))] font-semibold">{bundleProgress.msbtFound} MSBT</span>
+                    {bundleProgress.lastMsbt && (
+                      <div className="text-muted-foreground truncate" dir="ltr">← {bundleProgress.lastMsbt}</div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
