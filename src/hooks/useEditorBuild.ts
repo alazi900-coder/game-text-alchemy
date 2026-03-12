@@ -194,6 +194,19 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         return;
       }
 
+      const activeMsbtFileSet = new Set(
+        currentState.entries
+          .map(entry => entry.msbtFile.match(/^msbt:([^:]+):/)?.[1])
+          .filter((name): name is string => !!name)
+      );
+      const fileNamesToBuild = msbtFileNames.filter(name => activeMsbtFileSet.has(name));
+
+      if (fileNamesToBuild.length === 0) {
+        setBuildProgress("❌ لا توجد ملفات مطابقة لهذه الجلسة. أعد الاستخراج من صفحة الرفع.");
+        setBuilding(false);
+        return;
+      }
+
       // Collect non-empty translations
       const nonEmptyTranslations: Record<string, string> = {};
       for (const [k, v] of Object.entries(currentState.translations)) {
