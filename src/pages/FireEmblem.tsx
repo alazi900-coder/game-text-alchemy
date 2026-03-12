@@ -126,7 +126,7 @@ export default function FireEmblem() {
             </span>
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-lg mx-auto font-body bg-background/40 backdrop-blur-sm rounded-lg px-4 py-2">
-            ارفع ملفات MSBT واحصل على نسخة معرّبة بالكامل مع ربط الحروف وعكس الاتجاه تلقائياً
+            ارفع ملفات .bytes.bundle مباشرة واحصل على نسخة معرّبة بالكامل — بدون أدوات خارجية
           </p>
           <div className="flex flex-col sm:flex-row gap-4 items-center justify-center">
             <Link to="/fire-emblem/process">
