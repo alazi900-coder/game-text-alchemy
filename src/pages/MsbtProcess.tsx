@@ -240,17 +240,24 @@ export default function MsbtProcess() {
 
       // Save to IDB
       const { idbSet, idbClearExcept } = await import("@/lib/idb-storage");
+
+      // Generate a session ID to link extraction ↔ build
+      const sessionId = crypto.randomUUID();
       
       if (!isReUploadedBuild) {
         const originalTextsMap: Record<string, string> = {};
         for (const entry of allEntries) {
           originalTextsMap[`${entry.msbtFile}:${entry.index}`] = entry.original;
         }
-        await idbClearExcept(["buildTranslations", "editorSarcArchives", "editorSarcArchive"]);
+        // Don't preserve archives — they'll be rewritten below from this session's data
+        await idbClearExcept(["buildTranslations"]);
         await idbSet("originalTexts", originalTextsMap);
       } else {
-        await idbClearExcept(["originalTexts", "buildTranslations", "editorSarcArchives", "editorSarcArchive"]);
+        await idbClearExcept(["originalTexts", "buildTranslations"]);
       }
+
+      // Store session ID so the build step can verify it matches
+      await idbSet("extractionSessionId", sessionId);
 
       await idbSet("editorState", {
         entries: allEntries,
