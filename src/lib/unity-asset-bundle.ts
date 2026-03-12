@@ -144,14 +144,13 @@ export interface ExtractedAsset {
   textAssetDataBytesOffset: number;
 }
 
-/* ───────── Compression helpers ───────── */
-/* ───────── Find MsgStdBn signature anywhere in buffer ───────── */
+/* ───────── Find MsgStdBn signature in buffer ───────── */
 const MSBT_MAGIC = [0x4D, 0x73, 0x67, 0x53, 0x74, 0x64, 0x42, 0x6E]; // "MsgStdBn"
 
-function findMsgStdBnOffset(data: Uint8Array): number {
-  // Search up to first 256 bytes (Unity may prepend name/length fields)
-  const searchLimit = Math.min(data.length - 8, 256);
-  for (let i = 0; i <= searchLimit; i++) {
+function findMsgStdBnOffset(data: Uint8Array, maxSearchBytes = 256): number {
+  if (data.length < 8) return -1;
+  const end = Math.min(data.length, Math.max(8, maxSearchBytes));
+  for (let i = 0; i <= end - 8; i++) {
     if (data[i] === MSBT_MAGIC[0] && data[i + 1] === MSBT_MAGIC[1] &&
         data[i + 2] === MSBT_MAGIC[2] && data[i + 3] === MSBT_MAGIC[3] &&
         data[i + 4] === MSBT_MAGIC[4] && data[i + 5] === MSBT_MAGIC[5] &&
@@ -161,8 +160,49 @@ function findMsgStdBnOffset(data: Uint8Array): number {
   }
   return -1;
 }
-const COMPRESSION_NONE = 0;
 
+function createRawOrEmbeddedMsbtAsset(
+  data: Uint8Array,
+  opts: {
+    name: string;
+    entryIndex: number;
+    absoluteDataOffset: number;
+    objectByteSize: number;
+    pathId?: bigint;
+  },
+): ExtractedAsset {
+  const msbtOffset = findMsgStdBnOffset(data, Math.min(data.length, 1024 * 1024));
+
+  if (msbtOffset >= 0) {
+    const baseName = opts.name || (opts.pathId ? `msbt_${opts.pathId}` : "embedded_msbt");
+    const normalizedName = baseName.endsWith(".msbt") ? baseName : `${baseName}.msbt`;
+    return {
+      name: normalizedName,
+      data: data.slice(msbtOffset),
+      type: "TextAsset",
+      pathId: opts.pathId ?? BigInt(0),
+      entryIndex: opts.entryIndex,
+      absoluteDataOffset: opts.absoluteDataOffset,
+      objectByteSize: opts.objectByteSize,
+      textAssetDataLenOffset: -1,
+      textAssetDataBytesOffset: -1,
+    };
+  }
+
+  return {
+    name: opts.name,
+    data,
+    type: "raw",
+    pathId: opts.pathId ?? BigInt(0),
+    entryIndex: opts.entryIndex,
+    absoluteDataOffset: opts.absoluteDataOffset,
+    objectByteSize: opts.objectByteSize,
+    textAssetDataLenOffset: -1,
+    textAssetDataBytesOffset: -1,
+  };
+}
+
+const COMPRESSION_NONE = 0;
 const COMPRESSION_LZMA = 1;
 const COMPRESSION_LZ4 = 2;
 const COMPRESSION_LZ4HC = 3;
@@ -295,11 +335,12 @@ export function extractAssets(decompressedData: Uint8Array, info: UnityBundleInf
       const parsed = parseSerializedFile(entryData, ei, entryOffset);
       assets.push(...parsed);
     } catch {
-      assets.push({
-        name: entry.name, data: entryData, type: "raw", pathId: BigInt(0),
-        entryIndex: ei, absoluteDataOffset: entryOffset, objectByteSize: size,
-        textAssetDataLenOffset: -1, textAssetDataBytesOffset: -1,
-      });
+      assets.push(createRawOrEmbeddedMsbtAsset(entryData, {
+        name: entry.name || `entry_${ei}`,
+        entryIndex: ei,
+        absoluteDataOffset: entryOffset,
+        objectByteSize: size,
+      }));
     }
   }
 
@@ -317,11 +358,12 @@ function parseSerializedFile(data: Uint8Array, entryIndex: number, entryAbsolute
   const dataOffset = r.readU32();
 
   if (version < 9 || version > 50) {
-    return [{
-      name: "unknown", data, type: "raw", pathId: BigInt(0),
-      entryIndex, absoluteDataOffset: entryAbsoluteOffset, objectByteSize: data.length,
-      textAssetDataLenOffset: -1, textAssetDataBytesOffset: -1,
-    }];
+    return [createRawOrEmbeddedMsbtAsset(data, {
+      name: `entry_${entryIndex}`,
+      entryIndex,
+      absoluteDataOffset: entryAbsoluteOffset,
+      objectByteSize: data.length,
+    })];
   }
 
   if (version >= 9) {
@@ -411,20 +453,21 @@ function parseSerializedFile(data: Uint8Array, entryIndex: number, entryAbsolute
           textAssetDataBytesOffset: obj.byteStart + textAsset.dataBytesOffset,
         });
       } catch {
-        assets.push({
-          name: `object_${obj.pathId}`, data: objData, type: "TextAsset", pathId: obj.pathId,
-          entryIndex, absoluteDataOffset: absObjOffset, objectByteSize: obj.byteSize,
-          textAssetDataLenOffset: -1, textAssetDataBytesOffset: -1,
-        });
+        assets.push(createRawOrEmbeddedMsbtAsset(objData, {
+          name: `object_${obj.pathId}`,
+          entryIndex,
+          absoluteDataOffset: absObjOffset,
+          objectByteSize: obj.byteSize,
+          pathId: obj.pathId,
+        }));
       }
     } else {
-      // Search for MsgStdBn signature in the ENTIRE object data (not just first 8 bytes)
-      // In FE Engage, Unity may prepend 16-32 bytes (name/length fields) before the MSBT signature
-      const msbtOffset = findMsgStdBnOffset(objData);
+      // Scan deeper than 256 bytes for FE variants where headers can be longer
+      const msbtOffset = findMsgStdBnOffset(objData, 4096);
       if (msbtOffset >= 0) {
         const msbtData = objData.slice(msbtOffset);
         assets.push({
-          name: `msbt_${obj.pathId}`, data: msbtData, type: "TextAsset", pathId: obj.pathId,
+          name: `msbt_${obj.pathId}.msbt`, data: msbtData, type: "TextAsset", pathId: obj.pathId,
           entryIndex, absoluteDataOffset: absObjOffset, objectByteSize: obj.byteSize,
           textAssetDataLenOffset: -1, textAssetDataBytesOffset: -1,
         });
