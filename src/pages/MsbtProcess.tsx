@@ -78,6 +78,11 @@ export default function MsbtProcess() {
     const total = files.length;
     setFileLoadProgress({ current: 0, total });
 
+    // Clear previous SARC archives so only the new upload is included in build
+    const { idbSet } = await import("@/lib/idb-storage");
+    await idbSet("editorSarcArchives", []);
+    await idbSet("editorSarcArchive", null);
+
     const newMsbt: { name: string; size: number; data: ArrayBuffer }[] = [];
     const BATCH = 200;
     for (let start = 0; start < total; start += BATCH) {
