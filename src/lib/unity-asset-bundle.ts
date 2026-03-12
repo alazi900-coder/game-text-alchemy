@@ -401,16 +401,17 @@ function parseSerializedFile(data: Uint8Array, entryIndex: number, entryAbsolute
         });
       }
     } else {
-      if (objData.length >= 8) {
-        const magic = new TextDecoder().decode(objData.slice(0, 8));
-        if (magic === "MsgStdBn") {
-          assets.push({
-            name: `msbt_${obj.pathId}`, data: objData, type: "TextAsset", pathId: obj.pathId,
-            entryIndex, absoluteDataOffset: absObjOffset, objectByteSize: obj.byteSize,
-            textAssetDataLenOffset: -1, textAssetDataBytesOffset: -1,
-          });
-          continue;
-        }
+      // Search for MsgStdBn signature in the ENTIRE object data (not just first 8 bytes)
+      // In FE Engage, Unity may prepend 16-32 bytes (name/length fields) before the MSBT signature
+      const msbtOffset = findMsgStdBnOffset(objData);
+      if (msbtOffset >= 0) {
+        const msbtData = objData.slice(msbtOffset);
+        assets.push({
+          name: `msbt_${obj.pathId}`, data: msbtData, type: "TextAsset", pathId: obj.pathId,
+          entryIndex, absoluteDataOffset: absObjOffset, objectByteSize: obj.byteSize,
+          textAssetDataLenOffset: -1, textAssetDataBytesOffset: -1,
+        });
+        continue;
       }
       assets.push({
         name: `object_${obj.pathId}`, data: objData, type: `class_${obj.classId}`, pathId: obj.pathId,

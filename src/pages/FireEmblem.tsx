@@ -29,13 +29,13 @@ const extractionSteps = [
   },
   {
     title: "الوصول لملفات النصوص",
-    desc: "ملفات MSBT موجودة داخل ملفات .bytes.bundle — تحتاج فكها أولاً",
-    code: "romfs/StreamingAssets/aa/Switch/fe_assets_message/",
+    desc: "ملفات النصوص موجودة حصرياً في مجلد fe_assets_message ثم مجلد اللغة (مثل usen للإنجليزية)",
+    code: "Data/StreamingAssets/aa/Switch/fe_assets_message/us/usen/",
   },
   {
-    title: "فك ملفات Bundle",
-    desc: "استخدم AssetStudio أو UABE لفك ملفات .bytes.bundle واستخراج MSBT",
-    warning: "Fire Emblem Engage تستخدم Unity — الملفات مضغوطة داخل Asset Bundles",
+    title: "رفع ملفات Bundle للأداة",
+    desc: "ارفع كل ملفات .bytes.bundle من مجلد usen مباشرة — الأداة تفك وتستخرج MSBT تلقائياً",
+    warning: "تجنب رفع ملفات gr_ أو ma_ أو mo_ — هذه ملفات رسوميات ولا تحتوي نصوص",
   },
 ];
 
