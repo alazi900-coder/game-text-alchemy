@@ -434,6 +434,13 @@ export default function MsbtProcess() {
                     )}
                   </div>
                 )}
+                <button
+                  onClick={() => { cancelRef.current = true; }}
+                  className="mx-auto flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-xs font-display font-semibold hover:bg-destructive/20 transition-colors"
+                >
+                  <XCircle className="w-3.5 h-3.5" />
+                  إلغاء
+                </button>
               </div>
             )}
           </div>
