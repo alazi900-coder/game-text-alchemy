@@ -161,7 +161,7 @@ function findMsgStdBnOffset(data: Uint8Array): number {
   }
   return -1;
 }
-
+const COMPRESSION_NONE = 0;
 
 const COMPRESSION_LZMA = 1;
 const COMPRESSION_LZ4 = 2;
