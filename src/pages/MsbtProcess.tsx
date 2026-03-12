@@ -85,6 +85,7 @@ export default function MsbtProcess() {
       idbSet("editorSarcArchive", null),
       idbSet("editorMsbtFiles", {}),
       idbSet("editorMsbtFileNames", []),
+      idbSet("editorBundleMeta", null),
     ]);
     setMsbtFiles([]);
 
