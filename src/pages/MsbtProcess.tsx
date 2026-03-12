@@ -193,12 +193,18 @@ export default function MsbtProcess() {
       }
       setFileLoadProgress({ current: end, total });
       await new Promise(r => setTimeout(r, 0));
+      if (cancelRef.current) break;
     }
 
-    if (newMsbt.length > 0) setMsbtFiles(newMsbt);
     setFileLoadProgress(null);
     setBundleProgress(null);
-    addLog(`📂 تم تحميل ${newMsbt.length} ملف MSBT` + (bundleCount > 0 ? ` (من ${bundleCount} Bundle)` : ''));
+    if (cancelRef.current) {
+      cancelRef.current = false;
+      addLog(`🚫 تم إلغاء المعالجة — ${newMsbt.length} ملف MSBT تم تحميله قبل الإلغاء`);
+    } else {
+      addLog(`📂 تم تحميل ${newMsbt.length} ملف MSBT` + (bundleCount > 0 ? ` (من ${bundleCount} Bundle)` : ''));
+    }
+    if (newMsbt.length > 0) setMsbtFiles(newMsbt);
   }, []);
 
   const handleDrop = useCallback((e: React.DragEvent) => {
