@@ -405,6 +405,28 @@ export default function MsbtProcess() {
                 <span className="text-xs font-mono text-muted-foreground">{fileLoadProgress.current}/{fileLoadProgress.total}</span>
               </div>
             )}
+            {bundleProgress && (
+              <div className="mt-3 w-full max-w-sm space-y-2 px-2">
+                <div className="flex items-center gap-3">
+                  <Loader2 className="w-4 h-4 animate-spin text-[hsl(var(--primary))] shrink-0" />
+                  <div className="flex-1 h-2.5 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full rounded-full bg-[hsl(var(--primary))] transition-all duration-300" style={{ width: `${Math.round((bundleProgress.current / bundleProgress.total) * 100)}%` }} />
+                  </div>
+                  <span className="text-xs font-mono text-muted-foreground">{bundleProgress.current}/{bundleProgress.total}</span>
+                </div>
+                <div className="text-xs text-muted-foreground text-center truncate" dir="ltr">
+                  📦 {bundleProgress.fileName}
+                </div>
+                {bundleProgress.msbtFound > 0 && (
+                  <div className="text-xs text-center space-y-0.5">
+                    <span className="text-[hsl(var(--primary))] font-semibold">{bundleProgress.msbtFound} MSBT</span>
+                    {bundleProgress.lastMsbt && (
+                      <div className="text-muted-foreground truncate" dir="ltr">← {bundleProgress.lastMsbt}</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* File list */}
