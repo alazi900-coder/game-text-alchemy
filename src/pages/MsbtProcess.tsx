@@ -239,17 +239,21 @@ export default function MsbtProcess() {
       }
 
       // Save to IDB
-      const { idbSet, idbClearExcept } = await import("@/lib/idb-storage");
+      const { idbSet, idbGet, idbClearExcept } = await import("@/lib/idb-storage");
 
       // Generate a session ID to link extraction ↔ build
       const sessionId = crypto.randomUUID();
+
+      // Save SARC archives from handleFileSelect BEFORE clearing IDB
+      const sarcArchivesBefore = await idbGet<any[]>("editorSarcArchives");
+      const sarcArchiveBefore = await idbGet<any>("editorSarcArchive");
       
       if (!isReUploadedBuild) {
         const originalTextsMap: Record<string, string> = {};
         for (const entry of allEntries) {
           originalTextsMap[`${entry.msbtFile}:${entry.index}`] = entry.original;
         }
-        // Don't preserve archives — they'll be rewritten below from this session's data
+        // Clear EVERYTHING except buildTranslations — wipe all stale data
         await idbClearExcept(["buildTranslations"]);
         await idbSet("originalTexts", originalTextsMap);
       } else {
@@ -266,16 +270,12 @@ export default function MsbtProcess() {
       });
       await idbSet("editorGame", config.id);
 
-      // Re-store SARC archives from THIS session (they were cleared above)
-      // The archives were already appended during handleFileSelect into state,
-      // but IDB was cleared — re-read from current msbtFiles' SARC processing
-      // Actually the SARC data was stored during handleFileSelect before extraction,
-      // and idbClearExcept wiped it. We need to re-store it from the current state.
-      // Since handleFileSelect already stored archives, we need to re-read and re-store with sessionId.
-      const currentArchives = (await idbGet<any[]>("editorSarcArchives")) || [];
-      if (currentArchives.length === 0) {
-        // Archives were cleared — they were stored during handleFileSelect but wiped by idbClearExcept
-        // We need to NOT clear them. Let's store them before clearing and restore after.
+      // Restore SARC archives from THIS session (saved before clear)
+      if (sarcArchivesBefore && sarcArchivesBefore.length > 0) {
+        await idbSet("editorSarcArchives", sarcArchivesBefore);
+      }
+      if (sarcArchiveBefore) {
+        await idbSet("editorSarcArchive", sarcArchiveBefore);
       }
 
       try {
