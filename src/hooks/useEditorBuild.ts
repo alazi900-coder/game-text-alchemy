@@ -187,6 +187,10 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     try {
       const msbtFiles = await idbGet<Record<string, ArrayBuffer>>("editorMsbtFiles");
       const msbtFileNames = await idbGet<string[]>("editorMsbtFileNames");
+      const extractionSessionId = await idbGet<string>("extractionSessionId");
+
+      console.log('[BUILD] Session ID:', extractionSessionId);
+      console.log('[BUILD] MSBT files in IDB:', msbtFileNames?.length ?? 0, msbtFileNames);
 
       if (!msbtFiles || !msbtFileNames || msbtFileNames.length === 0) {
         setBuildProgress("❌ لا توجد ملفات MSBT. يرجى العودة لصفحة المعالجة وإعادة رفع الملفات.");
@@ -200,6 +204,9 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           .filter((name): name is string => !!name)
       );
       const fileNamesToBuild = msbtFileNames.filter(name => activeMsbtFileSet.has(name));
+
+      console.log('[BUILD] Active MSBT files from editor entries:', [...activeMsbtFileSet]);
+      console.log('[BUILD] Files to build (intersection):', fileNamesToBuild);
 
       if (fileNamesToBuild.length === 0) {
         setBuildProgress("❌ لا توجد ملفات مطابقة لهذه الجلسة. أعد الاستخراج من صفحة الرفع.");
