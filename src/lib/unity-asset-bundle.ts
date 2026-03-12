@@ -335,11 +335,12 @@ export function extractAssets(decompressedData: Uint8Array, info: UnityBundleInf
       const parsed = parseSerializedFile(entryData, ei, entryOffset);
       assets.push(...parsed);
     } catch {
-      assets.push({
-        name: entry.name, data: entryData, type: "raw", pathId: BigInt(0),
-        entryIndex: ei, absoluteDataOffset: entryOffset, objectByteSize: size,
-        textAssetDataLenOffset: -1, textAssetDataBytesOffset: -1,
-      });
+      assets.push(createRawOrEmbeddedMsbtAsset(entryData, {
+        name: entry.name || `entry_${ei}`,
+        entryIndex: ei,
+        absoluteDataOffset: entryOffset,
+        objectByteSize: size,
+      }));
     }
   }
 
@@ -357,11 +358,12 @@ function parseSerializedFile(data: Uint8Array, entryIndex: number, entryAbsolute
   const dataOffset = r.readU32();
 
   if (version < 9 || version > 50) {
-    return [{
-      name: "unknown", data, type: "raw", pathId: BigInt(0),
-      entryIndex, absoluteDataOffset: entryAbsoluteOffset, objectByteSize: data.length,
-      textAssetDataLenOffset: -1, textAssetDataBytesOffset: -1,
-    }];
+    return [createRawOrEmbeddedMsbtAsset(data, {
+      name: `entry_${entryIndex}`,
+      entryIndex,
+      absoluteDataOffset: entryAbsoluteOffset,
+      objectByteSize: data.length,
+    })];
   }
 
   if (version >= 9) {
