@@ -46,7 +46,7 @@ export default function UpdateBanner() {
     document.addEventListener("visibilitychange", handleVisibility);
 
     // Periodic check every 2 minutes
-    const interval = setInterval(checkForUpdate, 2 * 60 * 1000);
+    const interval = setInterval(checkForUpdate, 30 * 1000);
 
     return () => {
       clearInterval(interval);
