@@ -74,37 +74,61 @@ function getMsbtTagLabel(group: number, type: number): string {
  *  Control tags (0x0E/0x0F) are converted to [MSBT:label] placeholders. */
 function decodeUtf16(bytes: Uint8Array, le: boolean): string {
   const chars: string[] = [];
+
   for (let i = 0; i + 1 < bytes.length; i += 2) {
-    const code = le ? (bytes[i] | (bytes[i + 1] << 8)) : ((bytes[i] << 8) | bytes[i + 1]);
+    const code = readCodeUnit(bytes, i, le);
     if (code === 0) break;
+
     if (code === 0x0E) {
-      let group = 0, type = 0, paramSize = 0;
-      if (i + 3 < bytes.length) { i += 2; group = le ? (bytes[i] | (bytes[i + 1] << 8)) : ((bytes[i] << 8) | bytes[i + 1]); }
-      if (i + 3 < bytes.length) { i += 2; type = le ? (bytes[i] | (bytes[i + 1] << 8)) : ((bytes[i] << 8) | bytes[i + 1]); }
-      if (i + 3 < bytes.length) { i += 2; paramSize = le ? (bytes[i] | (bytes[i + 1] << 8)) : ((bytes[i] << 8) | bytes[i + 1]); i += paramSize; }
+      let p = i + 2;
+      if (p + 5 >= bytes.length) {
+        chars.push("[MSBT:G0T0]");
+        break;
+      }
+
+      const group = readCodeUnit(bytes, p, le); p += 2;
+      const type = readCodeUnit(bytes, p, le); p += 2;
+      const paramSize = readCodeUnit(bytes, p, le); p += 2;
+
+      p += paramSize;
+      if ((p & 1) !== 0) p += 1; // keep UTF-16 alignment when param size is odd
+      if (p > bytes.length) p = bytes.length - (bytes.length % 2);
+
       chars.push(`[MSBT:${getMsbtTagLabel(group, type)}]`);
+      i = p - 2;
       continue;
     }
+
     if (code === 0x0F) {
-      let group = 0, type = 0;
-      if (i + 3 < bytes.length) { i += 2; group = le ? (bytes[i] | (bytes[i + 1] << 8)) : ((bytes[i] << 8) | bytes[i + 1]); }
-      if (i + 3 < bytes.length) { i += 2; type = le ? (bytes[i] | (bytes[i + 1] << 8)) : ((bytes[i] << 8) | bytes[i + 1]); }
+      let p = i + 2;
+      if (p + 3 >= bytes.length) {
+        chars.push("[/MSBT:G0T0]");
+        break;
+      }
+
+      const group = readCodeUnit(bytes, p, le); p += 2;
+      const type = readCodeUnit(bytes, p, le); p += 2;
+
       chars.push(`[/MSBT:${getMsbtTagLabel(group, type)}]`);
+      i = p - 2;
       continue;
     }
+
     if (code >= 0xD800 && code <= 0xDBFF) {
       if (i + 3 < bytes.length) {
-        const low = le ? (bytes[i + 2] | (bytes[i + 3] << 8)) : ((bytes[i + 2] << 8) | bytes[i + 3]);
+        const low = readCodeUnit(bytes, i + 2, le);
         chars.push(String.fromCharCode(code, low));
         i += 2;
         continue;
       }
     }
+
     chars.push(String.fromCharCode(code));
   }
+
   // Normalize Presentation Forms (U+FB50–U+FDFF, U+FE70–U+FEFF) to standard Arabic
-  const raw = chars.join('');
-  return raw.normalize('NFKC');
+  const raw = chars.join("");
+  return raw.normalize("NFKC");
 }
 
 /** Encode string to UTF-16LE with null terminator */
