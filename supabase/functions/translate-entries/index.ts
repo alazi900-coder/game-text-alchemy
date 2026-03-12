@@ -1046,7 +1046,10 @@ Input texts (as JSON object — translate each value and return with the SAME ke
 ${textsBlock}
 }`;
 
+  const normalizedAiModel = aiModel?.trim() || 'gemini-2.5-flash';
+  const supportsDirectGemini = normalizedAiModel === 'gemini-2.5-pro' || normalizedAiModel === 'gemini-2.5-flash';
   const effectiveKey = userApiKey?.trim() || Deno.env.get('GEMINI_API_KEY') || '';
+  const shouldUseDirectGemini = supportsDirectGemini && !!effectiveKey;
   
   /** Detect if the AI response was truncated */
   function detectTruncation(text: string): boolean {
@@ -1191,9 +1194,9 @@ ${textsBlock}
     return result;
   };
 
-  if (effectiveKey) {
-    // Map model names for direct Gemini API; only gemini models work with personal key
-    const geminiModelName = (aiModel === 'gemini-2.5-pro') ? 'gemini-2.5-pro' : (aiModel === 'gemini-2.5-flash') ? 'gemini-2.5-flash' : 'gemini-2.0-flash';
+  if (shouldUseDirectGemini) {
+    // Direct Gemini is only for Gemini models with an available Gemini key
+    const geminiModelName = normalizedAiModel === 'gemini-2.5-pro' ? 'gemini-2.5-pro' : 'gemini-2.5-flash';
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModelName}:generateContent?key=${effectiveKey}`;
     const geminiResponse = await fetch(geminiUrl, {
       method: 'POST',
@@ -1234,17 +1237,30 @@ ${textsBlock}
     if (!apiKey) throw new Error('Missing LOVABLE_API_KEY');
 
     const callLovableAI = async (aiPrompt: string, count: number): Promise<Record<string, string>> => {
+      const gatewayModel = normalizedAiModel === 'gpt-5'
+        ? 'openai/gpt-5'
+        : normalizedAiModel === 'gemini-2.5-pro'
+          ? 'google/gemini-2.5-pro'
+          : normalizedAiModel === 'gemini-3.1-pro-preview'
+            ? 'google/gemini-3.1-pro-preview'
+            : 'google/gemini-2.5-flash';
+
+      const gatewayPayload: Record<string, unknown> = {
+        model: gatewayModel,
+        messages: [
+          { role: 'system', content: 'You are a Xenoblade Chronicles 3 game text translator. Output ONLY a valid JSON object with keys like K0, K1, K2... and Arabic translation values. Never modify ⟪T#⟫ placeholders. ALWAYS use glossary terms exactly. ALWAYS maintain consistency with previously translated texts — same English word = same Arabic translation. CRITICAL: Never use unescaped double quotes inside translation values. Use single quotes or escaped quotes (\") instead. Ensure the JSON is complete and valid.' },
+          { role: 'user', content: aiPrompt },
+        ],
+      };
+
+      if (normalizedAiModel !== 'gpt-5') {
+        gatewayPayload.temperature = 0.3;
+      }
+
       const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: aiModel === 'gpt-5' ? 'openai/gpt-5' : aiModel === 'gemini-2.5-pro' ? 'google/gemini-2.5-pro' : aiModel === 'gemini-3.1-pro-preview' ? 'google/gemini-3.1-pro-preview' : 'google/gemini-2.5-flash',
-          messages: [
-            { role: 'system', content: 'You are a Xenoblade Chronicles 3 game text translator. Output ONLY a valid JSON object with keys like K0, K1, K2... and Arabic translation values. Never modify ⟪T#⟫ placeholders. ALWAYS use glossary terms exactly. ALWAYS maintain consistency with previously translated texts — same English word = same Arabic translation. CRITICAL: Never use unescaped double quotes inside translation values. Use single quotes or escaped quotes (\\\") instead. Ensure the JSON is complete and valid.' },
-            { role: 'user', content: aiPrompt },
-          ],
-          temperature: 0.3,
-        }),
+        body: JSON.stringify(gatewayPayload),
       });
 
       if (!response.ok) {
