@@ -313,9 +313,9 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         } else {
           const JSZip = (await import("jszip")).default;
           const outputZip = new JSZip();
-          for (let ai = 0; ai < allArchives.length; ai++) {
-            const sarcMeta = allArchives[ai];
-            setBuildProgress(`إعادة بناء ${ai + 1}/${allArchives.length}: ${sarcMeta.originalFileName}...`);
+          for (let ai = 0; ai < scopedArchives.length; ai++) {
+            const sarcMeta = scopedArchives[ai];
+            setBuildProgress(`إعادة بناء ${ai + 1}/${scopedArchives.length}: ${sarcMeta.originalFileName}...`);
             const sarcEntries: { name: string; data: Uint8Array }[] = [];
             for (const entry of sarcMeta.nonMsbtEntries) {
               sarcEntries.push({ name: entry.name, data: new Uint8Array(entry.data) });
