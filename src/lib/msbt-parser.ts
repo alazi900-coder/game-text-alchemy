@@ -34,6 +34,10 @@ function readU16(dv: DataView, offset: number, le: boolean): number {
   return dv.getUint16(offset, le);
 }
 
+function readCodeUnit(bytes: Uint8Array, offset: number, le: boolean): number {
+  return le ? (bytes[offset] | (bytes[offset + 1] << 8)) : ((bytes[offset] << 8) | bytes[offset + 1]);
+}
+
 function readU32(dv: DataView, offset: number, le: boolean): number {
   return dv.getUint32(offset, le);
 }
