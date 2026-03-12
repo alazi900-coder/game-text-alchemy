@@ -77,6 +77,7 @@ export default function MsbtProcess() {
 
   const handleFileSelect = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return;
+    cancelRef.current = false;
     const total = files.length;
     setFileLoadProgress({ current: 0, total });
 
