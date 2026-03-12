@@ -107,6 +107,7 @@ export default function MsbtProcess() {
       for (let i = start; i < end; i++) {
         const f = files[i];
         const lower = f.name.toLowerCase();
+        if (cancelRef.current) break;
         if (lower.endsWith('.msbt')) {
           try {
             const buf = await f.arrayBuffer();
