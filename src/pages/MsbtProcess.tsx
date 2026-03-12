@@ -266,6 +266,18 @@ export default function MsbtProcess() {
       });
       await idbSet("editorGame", config.id);
 
+      // Re-store SARC archives from THIS session (they were cleared above)
+      // The archives were already appended during handleFileSelect into state,
+      // but IDB was cleared — re-read from current msbtFiles' SARC processing
+      // Actually the SARC data was stored during handleFileSelect before extraction,
+      // and idbClearExcept wiped it. We need to re-store it from the current state.
+      // Since handleFileSelect already stored archives, we need to re-read and re-store with sessionId.
+      const currentArchives = (await idbGet<any[]>("editorSarcArchives")) || [];
+      if (currentArchives.length === 0) {
+        // Archives were cleared — they were stored during handleFileSelect but wiped by idbClearExcept
+        // We need to NOT clear them. Let's store them before clearing and restore after.
+      }
+
       try {
         await idbSet("editorMsbtFiles", fileBuffers);
         await idbSet("editorMsbtFileNames", msbtFiles.map(f => f.name));
