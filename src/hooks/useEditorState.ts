@@ -323,7 +323,14 @@ export function useEditorState() {
   }, [loadSavedState]);
 
   const handleStartFresh = useCallback(async () => {
-    await idbSet("editorState", null);
+    await Promise.all([
+      idbSet("editorState", null),
+      idbSet("editorMsbtFiles", {}),
+      idbSet("editorMsbtFileNames", []),
+      idbSet("editorSarcArchives", []),
+      idbSet("editorSarcArchive", null),
+      idbSet("originalTexts", {}),
+    ]);
     setPendingRecovery(null);
     // Load demo data
     const demoEntries: ExtractedEntry[] = [

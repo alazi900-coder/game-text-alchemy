@@ -194,6 +194,19 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         return;
       }
 
+      const activeMsbtFileSet = new Set(
+        currentState.entries
+          .map(entry => entry.msbtFile.match(/^msbt:([^:]+):/)?.[1])
+          .filter((name): name is string => !!name)
+      );
+      const fileNamesToBuild = msbtFileNames.filter(name => activeMsbtFileSet.has(name));
+
+      if (fileNamesToBuild.length === 0) {
+        setBuildProgress("❌ لا توجد ملفات مطابقة لهذه الجلسة. أعد الاستخراج من صفحة الرفع.");
+        setBuilding(false);
+        return;
+      }
+
       // Collect non-empty translations
       const nonEmptyTranslations: Record<string, string> = {};
       for (const [k, v] of Object.entries(currentState.translations)) {
@@ -221,11 +234,11 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       let modifiedCount = 0;
       const rebuiltMsbtFiles: Record<string, Uint8Array> = {};
 
-      for (let fi = 0; fi < msbtFileNames.length; fi++) {
-        const fileName = msbtFileNames[fi];
+      for (let fi = 0; fi < fileNamesToBuild.length; fi++) {
+        const fileName = fileNamesToBuild[fi];
         const buf = msbtFiles[fileName];
         if (!buf) continue;
-        setBuildProgress(`معالجة ${fi + 1}/${msbtFileNames.length}: ${fileName}...`);
+        setBuildProgress(`معالجة ${fi + 1}/${fileNamesToBuild.length}: ${fileName}...`);
 
         const msbt = parseMsbtFile(new Uint8Array(buf));
 
@@ -264,11 +277,16 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         ? sarcArchives
         : (legacySingle && legacySingle.msbtEntryNames.length > 0 ? [legacySingle] : []);
 
-      if (allArchives.length > 0) {
+      const fileNamesToBuildSet = new Set(fileNamesToBuild);
+      const scopedArchives = allArchives.filter(archive =>
+        archive.msbtEntryNames.some(msbtName => fileNamesToBuildSet.has(msbtName.replace(/.*[/\\]/, "")))
+      );
+
+      if (scopedArchives.length > 0) {
         const { buildSarcZs } = await import("@/lib/sarc-parser");
 
-        if (allArchives.length === 1) {
-          const sarcMeta = allArchives[0];
+        if (scopedArchives.length === 1) {
+          const sarcMeta = scopedArchives[0];
           setBuildProgress("إعادة بناء أرشيف SARC.ZS...");
           const sarcEntries: { name: string; data: Uint8Array }[] = [];
           for (const entry of sarcMeta.nonMsbtEntries) {
@@ -295,9 +313,9 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         } else {
           const JSZip = (await import("jszip")).default;
           const outputZip = new JSZip();
-          for (let ai = 0; ai < allArchives.length; ai++) {
-            const sarcMeta = allArchives[ai];
-            setBuildProgress(`إعادة بناء ${ai + 1}/${allArchives.length}: ${sarcMeta.originalFileName}...`);
+          for (let ai = 0; ai < scopedArchives.length; ai++) {
+            const sarcMeta = scopedArchives[ai];
+            setBuildProgress(`إعادة بناء ${ai + 1}/${scopedArchives.length}: ${sarcMeta.originalFileName}...`);
             const sarcEntries: { name: string; data: Uint8Array }[] = [];
             for (const entry of sarcMeta.nonMsbtEntries) {
               sarcEntries.push({ name: entry.name, data: new Uint8Array(entry.data) });
@@ -322,7 +340,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           a.click();
           URL.revokeObjectURL(finalUrl);
         }
-        setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — ${allArchives.length} ملف SARC.ZS جاهز للعبة 🎮`);
+        setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — ${scopedArchives.length} ملف SARC.ZS جاهز للعبة 🎮`);
       } else {
         // No SARC archives — just export rebuilt MSBT files as ZIP
         const JSZip = (await import("jszip")).default;
@@ -483,9 +501,10 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       msbtEntryNames: string[];
     };
     const sarcArchivesCheck = await idbGet<SarcMetaCheck[]>("editorSarcArchives");
-    const hasSarcArchives = sarcArchivesCheck && sarcArchivesCheck.length > 0;
+    const hasMsbtEntries = currentState.entries.some(entry => entry.msbtFile.startsWith("msbt:"));
+    const hasSarcArchives = !!(hasMsbtEntries && sarcArchivesCheck && sarcArchivesCheck.length > 0);
     
-    if (isXenoblade || hasSarcArchives) {
+    if (isXenoblade || hasMsbtEntries || hasSarcArchives) {
       return handleBuildXenoblade();
     }
     
@@ -581,16 +600,24 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       const allArchives: SarcMeta[] = sarcArchives && sarcArchives.length > 0 
         ? sarcArchives 
         : (legacySingle && legacySingle.msbtEntryNames.length > 0 ? [legacySingle] : []);
+      const activeMsbtFileSet = new Set(
+        currentState.entries
+          .map(entry => entry.msbtFile.match(/^msbt:([^:]+):/)?.[1])
+          .filter((name): name is string => !!name)
+      );
+      const scopedArchives = allArchives.filter(archive =>
+        archive.msbtEntryNames.some(msbtName => activeMsbtFileSet.has(msbtName.replace(/.*[/\\]/, "")))
+      );
 
-      if (allArchives.length > 0) {
+      if (scopedArchives.length > 0) {
         const JSZip = (await import("jszip")).default;
         const { buildSarcZs } = await import("@/lib/sarc-parser");
         const serverZip = await JSZip.loadAsync(blob);
         const msbtFilesFromIdb = await idbGet<Record<string, ArrayBuffer>>("editorMsbtFiles");
 
-        if (allArchives.length === 1) {
+        if (scopedArchives.length === 1) {
           // Single SARC — download directly as .zs file
-          const sarcMeta = allArchives[0];
+          const sarcMeta = scopedArchives[0];
           setBuildProgress("إعادة بناء أرشيف SARC.ZS...");
           const sarcEntries: { name: string; data: Uint8Array }[] = [];
           for (const entry of sarcMeta.nonMsbtEntries) {
@@ -618,9 +645,9 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         } else {
           // Multiple SARC files — rebuild each and pack into a ZIP
           const outputZip = new JSZip();
-          for (let ai = 0; ai < allArchives.length; ai++) {
-            const sarcMeta = allArchives[ai];
-            setBuildProgress(`إعادة بناء ${ai + 1}/${allArchives.length}: ${sarcMeta.originalFileName}...`);
+          for (let ai = 0; ai < scopedArchives.length; ai++) {
+            const sarcMeta = scopedArchives[ai];
+            setBuildProgress(`إعادة بناء ${ai + 1}/${scopedArchives.length}: ${sarcMeta.originalFileName}...`);
             const sarcEntries: { name: string; data: Uint8Array }[] = [];
             for (const entry of sarcMeta.nonMsbtEntries) {
               sarcEntries.push({ name: entry.name, data: new Uint8Array(entry.data) });
@@ -648,7 +675,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           URL.revokeObjectURL(finalUrl);
         }
         const expandedMsg = expandedCount > 0 ? ` (${expandedCount} تم توسيعها 📐)` : '';
-        setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص${expandedMsg} — ${allArchives.length} ملف SARC.ZS جاهز للعبة 🎮`);
+        setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص${expandedMsg} — ${scopedArchives.length} ملف SARC.ZS جاهز للعبة 🎮`);
       } else {
         const a = document.createElement("a");
         a.href = blobUrl;
