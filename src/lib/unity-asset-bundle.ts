@@ -202,6 +202,7 @@ function createRawOrEmbeddedMsbtAsset(
   };
 }
 
+const COMPRESSION_NONE = 0;
 const COMPRESSION_LZMA = 1;
 const COMPRESSION_LZ4 = 2;
 const COMPRESSION_LZ4HC = 3;
