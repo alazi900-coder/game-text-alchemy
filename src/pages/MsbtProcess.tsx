@@ -239,18 +239,29 @@ export default function MsbtProcess() {
       }
 
       // Save to IDB
-      const { idbSet, idbClearExcept } = await import("@/lib/idb-storage");
+      const { idbSet, idbGet, idbClearExcept } = await import("@/lib/idb-storage");
+
+      // Generate a session ID to link extraction ↔ build
+      const sessionId = crypto.randomUUID();
+
+      // Save SARC archives from handleFileSelect BEFORE clearing IDB
+      const sarcArchivesBefore = await idbGet<any[]>("editorSarcArchives");
+      const sarcArchiveBefore = await idbGet<any>("editorSarcArchive");
       
       if (!isReUploadedBuild) {
         const originalTextsMap: Record<string, string> = {};
         for (const entry of allEntries) {
           originalTextsMap[`${entry.msbtFile}:${entry.index}`] = entry.original;
         }
-        await idbClearExcept(["buildTranslations", "editorSarcArchives", "editorSarcArchive"]);
+        // Clear EVERYTHING except buildTranslations — wipe all stale data
+        await idbClearExcept(["buildTranslations"]);
         await idbSet("originalTexts", originalTextsMap);
       } else {
-        await idbClearExcept(["originalTexts", "buildTranslations", "editorSarcArchives", "editorSarcArchive"]);
+        await idbClearExcept(["originalTexts", "buildTranslations"]);
       }
+
+      // Store session ID so the build step can verify it matches
+      await idbSet("extractionSessionId", sessionId);
 
       await idbSet("editorState", {
         entries: allEntries,
@@ -258,6 +269,14 @@ export default function MsbtProcess() {
         freshExtraction: true,
       });
       await idbSet("editorGame", config.id);
+
+      // Restore SARC archives from THIS session (saved before clear)
+      if (sarcArchivesBefore && sarcArchivesBefore.length > 0) {
+        await idbSet("editorSarcArchives", sarcArchivesBefore);
+      }
+      if (sarcArchiveBefore) {
+        await idbSet("editorSarcArchive", sarcArchiveBefore);
+      }
 
       try {
         await idbSet("editorMsbtFiles", fileBuffers);

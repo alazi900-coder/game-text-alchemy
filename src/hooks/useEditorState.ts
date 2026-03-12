@@ -330,6 +330,7 @@ export function useEditorState() {
       idbSet("editorSarcArchives", []),
       idbSet("editorSarcArchive", null),
       idbSet("originalTexts", {}),
+      idbSet("extractionSessionId", null),
     ]);
     setPendingRecovery(null);
     // Load demo data
