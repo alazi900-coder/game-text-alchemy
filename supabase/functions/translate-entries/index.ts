@@ -1046,7 +1046,10 @@ Input texts (as JSON object — translate each value and return with the SAME ke
 ${textsBlock}
 }`;
 
+  const normalizedAiModel = aiModel?.trim() || 'gemini-2.5-flash';
+  const supportsDirectGemini = normalizedAiModel === 'gemini-2.5-pro' || normalizedAiModel === 'gemini-2.5-flash';
   const effectiveKey = userApiKey?.trim() || Deno.env.get('GEMINI_API_KEY') || '';
+  const shouldUseDirectGemini = supportsDirectGemini && !!effectiveKey;
   
   /** Detect if the AI response was truncated */
   function detectTruncation(text: string): boolean {
