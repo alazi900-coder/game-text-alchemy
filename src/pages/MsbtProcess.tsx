@@ -127,6 +127,11 @@ export default function MsbtProcess() {
             const msbtAssets = assets.filter(a => isMsbt(a.data));
             bundleCount++;
 
+            // Log what was found inside the bundle for debugging
+            const typesSummary = assets.reduce((acc, a) => { acc[a.type] = (acc[a.type] || 0) + 1; return acc; }, {} as Record<string, number>);
+            const typesStr = Object.entries(typesSummary).map(([t, c]) => `${t}:${c}`).join(', ');
+            addLog(`🔍 ${f.name}: ${assets.length} عنصر (${typesStr || 'فارغ'})${info.entries.length > 0 ? ` — ${info.entries.length} ملف داخلي` : ''}`);
+
             if (msbtAssets.length === 0) {
               setBundleProgress(prev => prev ? { ...prev, current: bundleCount } : null);
             } else {
