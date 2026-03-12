@@ -145,7 +145,7 @@ export default function MsbtProcess() {
       await new Promise(r => setTimeout(r, 0));
     }
 
-    if (newMsbt.length > 0) setMsbtFiles(prev => [...prev, ...newMsbt]);
+    if (newMsbt.length > 0) setMsbtFiles(newMsbt);
     setFileLoadProgress(null);
     addLog(`📂 تم تحميل ${newMsbt.length} ملف MSBT`);
   }, []);
