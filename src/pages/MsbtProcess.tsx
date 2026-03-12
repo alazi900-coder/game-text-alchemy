@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Upload, FileText, ArrowRight, Loader2, CheckCircle2, Clock, Pencil, Sparkles, Download, FolderOpen, XCircle } from "lucide-react";
+import { Upload, FileText, ArrowRight, Loader2, CheckCircle2, Clock, Pencil, Sparkles, Download, FolderOpen, XCircle, Timer } from "lucide-react";
 
 type ProcessingStage = "idle" | "uploading" | "extracting" | "done" | "error";
 
