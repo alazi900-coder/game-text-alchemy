@@ -340,7 +340,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           a.click();
           URL.revokeObjectURL(finalUrl);
         }
-        setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — ${allArchives.length} ملف SARC.ZS جاهز للعبة 🎮`);
+        setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — ${scopedArchives.length} ملف SARC.ZS جاهز للعبة 🎮`);
       } else {
         // No SARC archives — just export rebuilt MSBT files as ZIP
         const JSZip = (await import("jszip")).default;
