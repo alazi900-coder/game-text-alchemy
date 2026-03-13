@@ -9,6 +9,13 @@ import {
 import { Button } from "@/components/ui/button";
 import { FileDown, Loader2, AlertTriangle, CheckCircle2, Info } from "lucide-react";
 
+export interface BundleDiagnostic {
+  bundleName: string;
+  totalKeys: number;
+  matchedTranslations: number;
+  msbtFiles: { name: string; keys: number; translated: number }[];
+}
+
 export interface BuildPreview {
   totalTranslations: number;
   protectedCount: number;
@@ -21,6 +28,7 @@ export interface BuildPreview {
   hasBdatFiles?: boolean;
   isDemo?: boolean;
   affectedFileCount?: number;
+  bundleDiagnostics?: BundleDiagnostic[];
 }
 
 interface BuildConfirmDialogProps {
