@@ -206,7 +206,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           .map(entry => entry.msbtFile.match(/^msbt:([^:]+):/)?.[1])
           .filter((name): name is string => !!name)
       );
-      const fileNamesToBuild = msbtFileNames.filter(name => activeMsbtFileSet.has(name));
+      const fileNamesToBuild = Array.from(new Set(msbtFileNames.filter(name => activeMsbtFileSet.has(name))));
 
       console.log('[BUILD] Active MSBT files from editor entries:', [...activeMsbtFileSet]);
       console.log('[BUILD] Files to build (intersection):', fileNamesToBuild);
@@ -282,6 +282,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         endian: "big" | "little";
         nonMsbtEntries: { name: string; data: number[] }[];
         msbtEntryNames: string[];
+        scopedMsbtNames?: { entryName: string; extractedName: string }[];
       };
       const sarcArchives = await idbGet<SarcMeta[]>("editorSarcArchives");
       const legacySingle = await idbGet<SarcMeta>("editorSarcArchive");
@@ -290,9 +291,32 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         : (legacySingle && legacySingle.msbtEntryNames.length > 0 ? [legacySingle] : []);
 
       const fileNamesToBuildSet = new Set(fileNamesToBuild);
-      const scopedArchives = allArchives.filter(archive =>
-        archive.msbtEntryNames.some(msbtName => fileNamesToBuildSet.has(msbtName.replace(/.*[/\\]/, "")))
-      );
+      const scopedArchives = allArchives.filter((archive) => {
+        const scopedNames = archive.scopedMsbtNames?.map(item => item.extractedName) ?? [];
+        if (scopedNames.length > 0) {
+          return scopedNames.some(name => fileNamesToBuildSet.has(name));
+        }
+        return archive.msbtEntryNames.some(msbtName => fileNamesToBuildSet.has(msbtName.replace(/.*[/\\]/, "")));
+      });
+
+      const resolveSarcLookupName = (sarcMeta: SarcMeta, msbtName: string): string => {
+        const scoped = sarcMeta.scopedMsbtNames?.find(item => item.entryName === msbtName)?.extractedName;
+        return scoped || msbtName.replace(/.*[/\\]/, '');
+      };
+
+      const makeAssetReplacementKey = (asset: any) => {
+        const pathId = typeof asset.pathId === 'bigint'
+          ? asset.pathId.toString()
+          : String(asset.pathId ?? asset.entryIndex ?? '0');
+        return `${asset.name}#${pathId}`;
+      };
+
+      const resolveBundleLookupName = (meta: any, asset: any) => {
+        const key = makeAssetReplacementKey(asset);
+        const scoped = meta?.scopedMsbtByAssetKey?.[key];
+        if (scoped) return scoped;
+        return asset.name.endsWith('.msbt') ? asset.name : `${asset.name}.msbt`;
+      };
 
       // Check for Unity bundle meta (Fire Emblem flow)
       const bundleMeta = await idbGet<any[]>("editorBundleMeta");
@@ -311,10 +335,12 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           const replacements = new Map<string, Uint8Array>();
 
           for (const asset of meta.assets) {
-            if (!isMsbt(new Uint8Array(asset.data))) continue;
-            const assetName = asset.name.endsWith('.msbt') ? asset.name : `${asset.name}.msbt`;
-            if (rebuiltMsbtFiles[assetName]) {
-              replacements.set(asset.name, rebuiltMsbtFiles[assetName]);
+            const assetData = asset.data instanceof Uint8Array ? asset.data : new Uint8Array(asset.data);
+            if (!isMsbt(assetData)) continue;
+            const lookupName = resolveBundleLookupName(meta, asset);
+            const rebuiltData = rebuiltMsbtFiles[lookupName];
+            if (rebuiltData) {
+              replacements.set(makeAssetReplacementKey(asset), rebuiltData);
             }
           }
 
@@ -340,10 +366,12 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
             const replacements = new Map<string, Uint8Array>();
 
             for (const asset of meta.assets) {
-              if (!isMsbt(new Uint8Array(asset.data))) continue;
-              const assetName = asset.name.endsWith('.msbt') ? asset.name : `${asset.name}.msbt`;
-              if (rebuiltMsbtFiles[assetName]) {
-                replacements.set(asset.name, rebuiltMsbtFiles[assetName]);
+              const assetData = asset.data instanceof Uint8Array ? asset.data : new Uint8Array(asset.data);
+              if (!isMsbt(assetData)) continue;
+              const lookupName = resolveBundleLookupName(meta, asset);
+              const rebuiltData = rebuiltMsbtFiles[lookupName];
+              if (rebuiltData) {
+                replacements.set(makeAssetReplacementKey(asset), rebuiltData);
               }
             }
 
@@ -372,11 +400,14 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
             sarcEntries.push({ name: entry.name, data: new Uint8Array(entry.data) });
           }
           for (const msbtName of sarcMeta.msbtEntryNames) {
-            const shortName = msbtName.replace(/.*[/\\]/, '');
-            if (rebuiltMsbtFiles[shortName]) {
-              sarcEntries.push({ name: msbtName, data: rebuiltMsbtFiles[shortName] });
-            } else if (msbtFiles[shortName]) {
-              sarcEntries.push({ name: msbtName, data: new Uint8Array(msbtFiles[shortName]) });
+            const lookupName = resolveSarcLookupName(sarcMeta, msbtName);
+            const fallbackLegacyName = msbtName.replace(/.*[/\\]/, '');
+            if (rebuiltMsbtFiles[lookupName]) {
+              sarcEntries.push({ name: msbtName, data: rebuiltMsbtFiles[lookupName] });
+            } else if (msbtFiles[lookupName]) {
+              sarcEntries.push({ name: msbtName, data: new Uint8Array(msbtFiles[lookupName]) });
+            } else if (msbtFiles[fallbackLegacyName]) {
+              sarcEntries.push({ name: msbtName, data: new Uint8Array(msbtFiles[fallbackLegacyName]) });
             }
           }
           setBuildProgress(`تجميع ${sarcEntries.length} ملف في SARC وضغط ZS...`);
@@ -400,11 +431,14 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
               sarcEntries.push({ name: entry.name, data: new Uint8Array(entry.data) });
             }
             for (const msbtName of sarcMeta.msbtEntryNames) {
-              const shortName = msbtName.replace(/.*[/\\]/, '');
-              if (rebuiltMsbtFiles[shortName]) {
-                sarcEntries.push({ name: msbtName, data: rebuiltMsbtFiles[shortName] });
-              } else if (msbtFiles[shortName]) {
-                sarcEntries.push({ name: msbtName, data: new Uint8Array(msbtFiles[shortName]) });
+              const lookupName = resolveSarcLookupName(sarcMeta, msbtName);
+              const fallbackLegacyName = msbtName.replace(/.*[/\\]/, '');
+              if (rebuiltMsbtFiles[lookupName]) {
+                sarcEntries.push({ name: msbtName, data: rebuiltMsbtFiles[lookupName] });
+              } else if (msbtFiles[lookupName]) {
+                sarcEntries.push({ name: msbtName, data: new Uint8Array(msbtFiles[lookupName]) });
+              } else if (msbtFiles[fallbackLegacyName]) {
+                sarcEntries.push({ name: msbtName, data: new Uint8Array(msbtFiles[fallbackLegacyName]) });
               }
             }
             const compressed = await buildSarcZs(sarcEntries, sarcMeta.endian);
