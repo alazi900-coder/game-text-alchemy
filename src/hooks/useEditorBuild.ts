@@ -480,6 +480,25 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         await new Promise(r => setTimeout(r, 500));
       }
 
+      // Auto-fix tags before MSBT rebuild
+      let tagFixCount = 0;
+      let tagOkCount = 0;
+      for (const entry of currentState.entries) {
+        if (!hasTechnicalTags(entry.original)) continue;
+        const key = `${entry.msbtFile}:${entry.index}`;
+        const trans = nonEmptyTranslations[key];
+        if (!trans?.trim()) continue;
+        const origTagCount = (entry.original.match(/[\uFFF9-\uFFFC\uE000-\uE0FF]/g) || []).length;
+        const transTagCount = (trans.match(/[\uFFF9-\uFFFC\uE000-\uE0FF]/g) || []).length;
+        if (transTagCount < origTagCount) {
+          nonEmptyTranslations[key] = restoreTagsLocally(entry.original, trans);
+          tagFixCount++;
+        } else {
+          tagOkCount++;
+        }
+      }
+      if (tagFixCount > 0) console.log(`[BUILD-TAGS] Fixed: ${tagFixCount}, OK: ${tagOkCount}`);
+
       // Import MSBT parser + rebuilder
       const { parseMsbtFile, rebuildMsbt } = await import("@/lib/msbt-parser");
 
