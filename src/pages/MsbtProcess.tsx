@@ -384,21 +384,18 @@ export default function MsbtProcess() {
       // Generate a session ID to link extraction ↔ build
       const sessionId = crypto.randomUUID();
 
-      // Save SARC archives AND bundle meta from handleFileSelect BEFORE clearing IDB
-      const sarcArchivesBefore = await idbGet<any[]>("editorSarcArchives");
-      const sarcArchiveBefore = await idbGet<any>("editorSarcArchive");
-      const bundleMetaBefore = await idbGet<any[]>("editorBundleMeta");
+      // Keys that must survive the clear (written by handleFileSelect)
+      const preserveKeys = ["buildTranslations", "editorBundleMeta", "editorSarcArchives", "editorSarcArchive"];
       
       if (!isReUploadedBuild) {
         const originalTextsMap: Record<string, string> = {};
         for (const entry of allEntries) {
           originalTextsMap[`${entry.msbtFile}:${entry.index}`] = entry.original;
         }
-        // Clear EVERYTHING except buildTranslations — wipe all stale data
-        await idbClearExcept(["buildTranslations"]);
+        await idbClearExcept(preserveKeys);
         await idbSet("originalTexts", originalTextsMap);
       } else {
-        await idbClearExcept(["originalTexts", "buildTranslations"]);
+        await idbClearExcept([...preserveKeys, "originalTexts"]);
       }
 
       // Store session ID so the build step can verify it matches
@@ -411,15 +408,14 @@ export default function MsbtProcess() {
       });
       await idbSet("editorGame", config.id);
 
-      // Restore SARC archives AND bundle meta from THIS session (saved before clear)
-      if (sarcArchivesBefore && sarcArchivesBefore.length > 0) {
-        await idbSet("editorSarcArchives", sarcArchivesBefore);
+      // Verify bundle/sarc metadata survived the clear
+      const bundleMetaCheck = await idbGet<any[]>("editorBundleMeta");
+      const sarcCheck = await idbGet<any[]>("editorSarcArchives");
+      if (bundleMetaCheck && bundleMetaCheck.length > 0) {
+        addLog(`📦 بيانات ${bundleMetaCheck.length} Bundle محفوظة للبناء`);
       }
-      if (sarcArchiveBefore) {
-        await idbSet("editorSarcArchive", sarcArchiveBefore);
-      }
-      if (bundleMetaBefore && bundleMetaBefore.length > 0) {
-        await idbSet("editorBundleMeta", bundleMetaBefore);
+      if (sarcCheck && sarcCheck.length > 0) {
+        addLog(`📦 بيانات ${sarcCheck.length} أرشيف SARC محفوظة للبناء`);
       }
 
       try {
