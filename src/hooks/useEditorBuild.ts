@@ -5,6 +5,7 @@ import { processArabicText, hasArabicChars as hasArabicCharsProcessing, hasArabi
 import { EditorState, hasTechnicalTags, restoreTagsLocally } from "@/components/editor/types";
 import { BuildPreview, BundleDiagnostic } from "@/components/editor/BuildConfirmDialog";
 import type { MutableRefObject } from "react";
+import { normalizeMsbtTranslations, extractShortMsbtName } from "@/lib/msbt-key-normalizer";
 
 export interface BuildStats {
   modifiedCount: number;
@@ -144,47 +145,15 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
   const normalizeTranslationsForBuild = (
     translations: Record<string, string>,
     validEntryKeySet: Set<string>,
-    keyByMsbtNameAndIndex: Map<string, Map<number, string>>,
+    _keyByMsbtNameAndIndex: Map<string, Map<number, string>>,
   ) => {
-    const normalized: Record<string, string> = {};
-    let remapped = 0;
-    let dropped = 0;
-
-    for (const [rawKey, rawValue] of Object.entries(translations)) {
-      const trimmed = rawValue?.trim();
-      if (!trimmed) continue;
-
-      if (validEntryKeySet.has(rawKey)) {
-        normalized[rawKey] = trimmed;
-        continue;
-      }
-
-      let mappedKey: string | undefined;
-      if (rawKey.startsWith("msbt:")) {
-        const payload = rawKey.slice(5);
-        const lastColon = payload.lastIndexOf(":");
-
-        if (lastColon !== -1) {
-          const indexPart = payload.slice(lastColon + 1);
-          if (/^\d+$/.test(indexPart)) {
-            const msbtMatch = payload.match(/^(.+?\.msbt)(?::.*)?$/i);
-            const msbtName = msbtMatch?.[1] || payload.slice(0, lastColon);
-            const indexMap = keyByMsbtNameAndIndex.get(msbtName);
-            const idx = Number(indexPart);
-            mappedKey = indexMap?.get(idx);
-          }
-        }
-      }
-
-      if (mappedKey) {
-        normalized[mappedKey] = trimmed;
-        remapped++;
-      } else {
-        dropped++;
-      }
-    }
-
-    return { normalized, remapped, dropped };
+    // Use central normalizer for MSBT keys
+    const result = normalizeMsbtTranslations(translations, validEntryKeySet);
+    return {
+      normalized: result.normalized,
+      remapped: result.remapped,
+      dropped: result.dropped + result.ambiguous,
+    };
   };
 
   const handlePreBuild = async () => {

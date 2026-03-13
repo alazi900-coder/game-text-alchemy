@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { CheckCircle2, AlertTriangle, XCircle, Loader2, Stethoscope } from "lucide-react";
 import { idbGet } from "@/lib/idb-storage";
 import type { EditorState } from "@/components/editor/types";
+import { normalizeMsbtTranslations } from "@/lib/msbt-key-normalizer";
 
 interface DiagnosticCheck {
   label: string;
@@ -64,23 +65,27 @@ const PreBuildDiagnostic = ({ open, onOpenChange, state, onProceedToBuild }: Pre
       : { label: "مصدر البيانات", status: "pass", detail: "ملفات حقيقية" };
     setChecks([...results]);
 
-    // 2. Translation count
-    const nonEmpty = Object.entries(state.translations).filter(([, v]) => v?.trim());
-    const translatedCount = nonEmpty.length;
+    // 2. Translation count — use normalizer to count only matched translations
+    const validKeys = new Set(state.entries.map(e => `${e.msbtFile}:${e.index}`));
+    const normalizeResult = normalizeMsbtTranslations(state.translations, validKeys);
+    const translatedCount = Object.keys(normalizeResult.normalized).filter(k => validKeys.has(k) && normalizeResult.normalized[k]?.trim()).length;
     const totalEntries = state.entries.length;
     const pct = totalEntries > 0 ? Math.round((translatedCount / totalEntries) * 100) : 0;
+    const extraInfo = normalizeResult.remapped > 0 ? ` (${normalizeResult.remapped} أُعيد ربطها)` : '';
+    const droppedInfo = normalizeResult.dropped > 0 ? ` ⚠️ ${normalizeResult.dropped} مفتاح غير مطابق` : '';
     results[1] = translatedCount === 0
-      ? { label: "عدد الترجمات", status: "fail", detail: "لا توجد ترجمات!" }
+      ? { label: "عدد الترجمات", status: "fail", detail: `لا توجد ترجمات مطابقة!${droppedInfo}` }
       : pct < 10
-        ? { label: "عدد الترجمات", status: "warn", detail: `${translatedCount} / ${totalEntries} (${pct}%) — قليلة جداً` }
-        : { label: "عدد الترجمات", status: "pass", detail: `${translatedCount} / ${totalEntries} (${pct}%)` };
+        ? { label: "عدد الترجمات", status: "warn", detail: `${translatedCount} / ${totalEntries} (${pct}%) — قليلة جداً${extraInfo}${droppedInfo}` }
+        : { label: "عدد الترجمات", status: "pass", detail: `${translatedCount} / ${totalEntries} (${pct}%)${extraInfo}${droppedInfo}` };
     setChecks([...results]);
 
     // 3. Unprocessed Arabic
     const arabicRegex = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/;
     const formsRegex = /[\uFB50-\uFDFF\uFE70-\uFEFF]/;
     let unprocessedCount = 0;
-    for (const [, value] of nonEmpty) {
+    const matchedEntries = Object.entries(normalizeResult.normalized).filter(([k, v]) => validKeys.has(k) && v?.trim());
+    for (const [, value] of matchedEntries) {
       if (arabicRegex.test(value) && !formsRegex.test(value)) unprocessedCount++;
     }
     results[2] = unprocessedCount === 0
