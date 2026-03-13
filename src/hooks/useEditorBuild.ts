@@ -54,6 +54,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
   const [checkingIntegrity, setCheckingIntegrity] = useState(false);
   const [buildVerification, setBuildVerification] = useState<BuildVerificationResult | null>(null);
   const [showBuildVerification, setShowBuildVerification] = useState(false);
+  const [lastBuildLog, setLastBuildLog] = useState<string[]>([]);
 
   const handleApplyArabicProcessing = () => {
     const currentState = stateRef.current;
