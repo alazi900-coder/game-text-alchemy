@@ -850,7 +850,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       log(`[BUILD] Output: ${filesBuilt} files, ${outputSizeBytes} bytes`);
       if (originalSizeBytes > 0) log(`[BUILD] Original: ${originalSizeBytes} bytes, ratio: ${(outputSizeBytes / originalSizeBytes * 100).toFixed(0)}%`);
 
-      // Store build log for debugging
+      // Store build log for debugging + expose to UI
+      setLastBuildLog([...buildLog]);
       try {
         const { idbSet } = await import("@/lib/idb-storage");
         await idbSet("lastBuildLog", buildLog);
