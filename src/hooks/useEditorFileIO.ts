@@ -635,6 +635,20 @@ export function useEditorFileIO({ state, setState, setLastSaved, filteredEntries
       }
     }
 
+    // ── MSBT key remapping: unscoped → scoped using central normalizer ──
+    let msbtRemapped = 0;
+    if ((state?.entries || []).length > 0) {
+      const hasMsbtKeys = Object.keys(cleanedImported).some(k => k.startsWith("msbt:"));
+      if (hasMsbtKeys) {
+        const result = normalizeMsbtTranslations(cleanedImported, entryKeySet);
+        if (result.remapped > 0) {
+          console.log(`🔄 Import: remapped ${result.remapped} MSBT keys (unscoped→scoped), ${result.ambiguous} ambiguous, ${result.dropped} dropped`);
+          cleanedImported = result.normalized;
+          msbtRemapped = result.remapped;
+        }
+      }
+    }
+
     let matchedCount = Object.keys(cleanedImported).filter(k => entryKeySet.has(k)).length;
     let unmatchedCount = Object.keys(cleanedImported).length - matchedCount;
     const noEntriesLoaded = (state?.entries || []).length === 0;
