@@ -396,10 +396,14 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         return;
       }
 
-      // Collect non-empty translations
-      const nonEmptyTranslations: Record<string, string> = {};
-      for (const [k, v] of Object.entries(currentState.translations)) {
-        if (v.trim()) nonEmptyTranslations[k] = v;
+      const { normalized: nonEmptyTranslations, remapped, dropped } = normalizeTranslationsForBuild(
+        currentState.translations,
+        validEntryKeySet,
+        keyByMsbtNameAndIndex,
+      );
+
+      if (remapped > 0 || dropped > 0) {
+        console.log(`[BUILD] Normalized translations before build: remapped=${remapped}, dropped=${dropped}`);
       }
 
       // Auto Arabic processing before build
