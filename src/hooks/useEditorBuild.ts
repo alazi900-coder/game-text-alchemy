@@ -52,7 +52,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
   const [integrityResult, setIntegrityResult] = useState<IntegrityCheckResult | null>(null);
   const [showIntegrityDialog, setShowIntegrityDialog] = useState(false);
   const [checkingIntegrity, setCheckingIntegrity] = useState(false);
-
+  const [buildVerification, setBuildVerification] = useState<BuildVerificationResult | null>(null);
+  const [showBuildVerification, setShowBuildVerification] = useState(false);
 
   const handleApplyArabicProcessing = () => {
     const currentState = stateRef.current;
