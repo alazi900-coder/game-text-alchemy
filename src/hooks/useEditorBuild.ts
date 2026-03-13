@@ -1263,6 +1263,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     buildVerification,
     showBuildVerification,
     setShowBuildVerification,
+    lastBuildLog,
   };
 }
 
