@@ -259,7 +259,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
 
     const { validEntryKeySet, entriesByMsbtName, keyByMsbtNameAndIndex } = buildEntryLookupMaps(currentState.entries);
     const { normalized: nonEmptyTranslations, remapped, dropped } = normalizeTranslationsForBuild(
-      currentState.translations,
+      sanitizeTranslations(currentState.translations, 'preBuild'),
       validEntryKeySet,
       keyByMsbtNameAndIndex,
     );
