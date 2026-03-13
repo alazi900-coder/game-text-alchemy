@@ -948,6 +948,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     const dictBuf = await idbGet<ArrayBuffer>("editorDictFile");
     const langFileName = (await idbGet<string>("editorLangFileName")) || "output.zs";
     if (!langBuf) { setBuildProgress("❌ ملف اللغة غير موجود. يرجى العودة لصفحة المعالجة وإعادة رفع الملفات."); return; }
+    const buildStartTime = Date.now();
     setBuilding(true); setBuildProgress("تجهيز الترجمات...");
     try {
       const formData = new FormData();
