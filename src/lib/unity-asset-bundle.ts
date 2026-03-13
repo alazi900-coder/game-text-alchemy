@@ -209,6 +209,21 @@ const COMPRESSION_LZ4HC = 3;
 
 const COMPRESSION_ZSTD = 4;
 
+/** Compress data using LZ4 block compression */
+function compressLz4(input: Uint8Array): Uint8Array {
+  // lz4js.compressBlock needs a pre-allocated output buffer
+  // Max compressed size is input.length + (input.length / 255) + 16 (worst case)
+  const maxOut = Math.max(64, input.length + Math.ceil(input.length / 255) + 16);
+  const output = new Uint8Array(maxOut);
+  const written = lz4.compressBlock(input, output, 0, input.length, 0);
+  if (written <= 0) {
+    // Compression failed or didn't help — return uncompressed
+    console.warn("[compressLz4] compression returned 0, falling back to uncompressed");
+    return input;
+  }
+  return output.slice(0, written);
+}
+
 async function decompressBlock(compressed: Uint8Array, decompressedSize: number, compressionType: number): Promise<Uint8Array> {
   switch (compressionType) {
     case COMPRESSION_NONE:
