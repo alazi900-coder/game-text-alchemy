@@ -881,11 +881,12 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       console.error('[BUILD] ❌ Build failed:', err);
       console.error('[BUILD] Stack:', errStack);
       console.log('[BUILD] Log up to failure:', buildLog.join('\n'));
-      // Store error log
+      // Store error log + expose to UI
+      buildLog.push(`❌ ERROR: ${errMsg}`);
+      if (errStack) buildLog.push(`STACK: ${errStack}`);
+      setLastBuildLog([...buildLog]);
       try {
         const { idbSet } = await import("@/lib/idb-storage");
-        buildLog.push(`❌ ERROR: ${errMsg}`);
-        if (errStack) buildLog.push(`STACK: ${errStack}`);
         await idbSet("lastBuildLog", buildLog);
       } catch {}
       setBuildProgress(`❌ ${errMsg}`);
