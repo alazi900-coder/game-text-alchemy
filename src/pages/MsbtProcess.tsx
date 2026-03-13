@@ -331,9 +331,10 @@ export default function MsbtProcess() {
       // Generate a session ID to link extraction ↔ build
       const sessionId = crypto.randomUUID();
 
-      // Save SARC archives from handleFileSelect BEFORE clearing IDB
+      // Save SARC archives AND bundle meta from handleFileSelect BEFORE clearing IDB
       const sarcArchivesBefore = await idbGet<any[]>("editorSarcArchives");
       const sarcArchiveBefore = await idbGet<any>("editorSarcArchive");
+      const bundleMetaBefore = await idbGet<any[]>("editorBundleMeta");
       
       if (!isReUploadedBuild) {
         const originalTextsMap: Record<string, string> = {};
