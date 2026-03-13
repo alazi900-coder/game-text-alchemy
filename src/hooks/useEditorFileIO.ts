@@ -3,6 +3,8 @@ import type { ImportConflict } from "@/components/editor/ImportConflictDialog";
 import { removeArabicPresentationForms } from "@/lib/arabic-processing";
 import type { EditorState } from "@/components/editor/types";
 import { ExtractedEntry, hasArabicChars, unReverseBidi, isTechnicalText } from "@/components/editor/types";
+import { normalizeMsbtTranslations } from "@/lib/msbt-key-normalizer";
+import { ExtractedEntry, hasArabicChars, unReverseBidi, isTechnicalText } from "@/components/editor/types";
 /** Simple murmur3 hash stub for key normalization */
 function murmur3_32(key: string): number {
   let h = 0;
