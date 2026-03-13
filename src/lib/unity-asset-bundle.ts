@@ -682,10 +682,21 @@ export function repackBundle(
 
   const result = w.toUint8Array();
 
+  // CRITICAL: ensure output buffer is exactly the declared size (no trailing zeros)
+  const outputBuffer = result.buffer.byteLength === result.byteLength
+    ? result.buffer as ArrayBuffer
+    : result.slice(0).buffer as ArrayBuffer;
+
+  // Assertion: declared header size must match actual buffer size
+  if (outputBuffer.byteLength !== totalFileSize) {
+    throw new Error(
+      `[repackBundle] Size mismatch: header declares ${totalFileSize} bytes but buffer is ${outputBuffer.byteLength} bytes. ` +
+      `This would cause a game crash (trailing zeros / truncated data).`
+    );
+  }
+
   return {
-    buffer: result.buffer.byteLength === result.byteLength
-      ? result.buffer as ArrayBuffer
-      : result.slice(0).buffer as ArrayBuffer,
+    buffer: outputBuffer,
     replacedCount,
     newSize: totalFileSize,
     originalSize: originalBuffer.byteLength,
