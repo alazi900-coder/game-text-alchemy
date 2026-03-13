@@ -7,6 +7,7 @@ import { BuildPreview, BundleDiagnostic } from "@/components/editor/BuildConfirm
 import type { BuildVerificationResult, VerificationCheck } from "@/components/editor/BuildVerificationDialog";
 import type { MutableRefObject } from "react";
 import { normalizeMsbtTranslations, extractShortMsbtName } from "@/lib/msbt-key-normalizer";
+import { sanitizeTranslations } from "@/lib/sanitize-translations";
 
 export interface BuildStats {
   modifiedCount: number;
