@@ -91,18 +91,120 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     setTimeout(() => setLastSaved(""), 5000);
   };
 
+  type EditorEntry = EditorState["entries"][number];
+
+  const extractMsbtFileName = (msbtFile: string): string | null => {
+    if (!msbtFile.startsWith("msbt:")) return null;
+    const payload = msbtFile.slice(5);
+    const match = payload.match(/^(.+?\.msbt)(?::|$)/i);
+    if (match?.[1]) return match[1];
+    const firstColon = payload.indexOf(":");
+    return firstColon === -1 ? payload : payload.slice(0, firstColon);
+  };
+
+  const buildEntryLookupMaps = (entries: EditorEntry[]) => {
+    const validEntryKeySet = new Set<string>();
+    const entriesByMsbtName = new Map<string, EditorEntry[]>();
+    const keyByMsbtNameAndIndex = new Map<string, Map<number, string>>();
+
+    for (const entry of entries) {
+      const key = `${entry.msbtFile}:${entry.index}`;
+      validEntryKeySet.add(key);
+
+      const msbtName = extractMsbtFileName(entry.msbtFile);
+      if (!msbtName) continue;
+
+      const list = entriesByMsbtName.get(msbtName) ?? [];
+      list.push(entry);
+      entriesByMsbtName.set(msbtName, list);
+
+      const indexMap = keyByMsbtNameAndIndex.get(msbtName) ?? new Map<number, string>();
+      if (!indexMap.has(entry.index)) {
+        indexMap.set(entry.index, key);
+      }
+      keyByMsbtNameAndIndex.set(msbtName, indexMap);
+    }
+
+    return { validEntryKeySet, entriesByMsbtName, keyByMsbtNameAndIndex };
+  };
+
+  const resolveEntriesForLookup = (entriesByMsbtName: Map<string, EditorEntry[]>, lookupName: string): EditorEntry[] => {
+    const exact = entriesByMsbtName.get(lookupName);
+    if (exact) return exact;
+
+    for (const [msbtName, list] of entriesByMsbtName.entries()) {
+      if (msbtName.endsWith(`__${lookupName}`) || msbtName.endsWith(lookupName)) {
+        return list;
+      }
+    }
+
+    return [];
+  };
+
+  const normalizeTranslationsForBuild = (
+    translations: Record<string, string>,
+    validEntryKeySet: Set<string>,
+    keyByMsbtNameAndIndex: Map<string, Map<number, string>>,
+  ) => {
+    const normalized: Record<string, string> = {};
+    let remapped = 0;
+    let dropped = 0;
+
+    for (const [rawKey, rawValue] of Object.entries(translations)) {
+      const trimmed = rawValue?.trim();
+      if (!trimmed) continue;
+
+      if (validEntryKeySet.has(rawKey)) {
+        normalized[rawKey] = trimmed;
+        continue;
+      }
+
+      let mappedKey: string | undefined;
+      if (rawKey.startsWith("msbt:")) {
+        const payload = rawKey.slice(5);
+        const lastColon = payload.lastIndexOf(":");
+
+        if (lastColon !== -1) {
+          const indexPart = payload.slice(lastColon + 1);
+          if (/^\d+$/.test(indexPart)) {
+            const msbtMatch = payload.match(/^(.+?\.msbt)(?::.*)?$/i);
+            const msbtName = msbtMatch?.[1] || payload.slice(0, lastColon);
+            const indexMap = keyByMsbtNameAndIndex.get(msbtName);
+            const idx = Number(indexPart);
+            mappedKey = indexMap?.get(idx);
+          }
+        }
+      }
+
+      if (mappedKey) {
+        normalized[mappedKey] = trimmed;
+        remapped++;
+      } else {
+        dropped++;
+      }
+    }
+
+    return { normalized, remapped, dropped };
+  };
+
   const handlePreBuild = async () => {
     const currentState = stateRef.current;
     if (!currentState) return;
-    
+
     // Force-save before preview too
     if (forceSaveRef?.current) {
       await forceSaveRef.current();
     }
 
-    const nonEmptyTranslations: Record<string, string> = {};
-    for (const [k, v] of Object.entries(currentState.translations)) {
-      if (v.trim()) nonEmptyTranslations[k] = v;
+    const { validEntryKeySet, entriesByMsbtName, keyByMsbtNameAndIndex } = buildEntryLookupMaps(currentState.entries);
+    const { normalized: nonEmptyTranslations, remapped, dropped } = normalizeTranslationsForBuild(
+      currentState.translations,
+      validEntryKeySet,
+      keyByMsbtNameAndIndex,
+    );
+
+    if (remapped > 0 || dropped > 0) {
+      console.log(`[BUILD-PREVIEW] Normalized translations: remapped=${remapped}, dropped=${dropped}`);
     }
 
     const protectedCount = Array.from(currentState.protectedEntries || []).filter(k => nonEmptyTranslations[k]).length;
