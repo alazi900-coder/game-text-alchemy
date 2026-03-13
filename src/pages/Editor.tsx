@@ -2033,6 +2033,11 @@ const Editor = () => {
           state={editor.state}
           onProceedToBuild={() => { setShowDiagnostic(false); editor.handlePreBuild(); }}
         />
+        <BuildVerificationDialog
+          open={editor.showBuildVerification}
+          onOpenChange={editor.setShowBuildVerification}
+          result={editor.buildVerification}
+        />
         <CompareEnginesDialog
           open={!!compareEntry}
           onOpenChange={(open) => { if (!open) setCompareEntry(null); }}
