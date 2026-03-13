@@ -823,6 +823,44 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           setBuildProgress(`تجميع ${sarcEntries.length} ملف في SARC وضغط ZS...`);
           const compressed = await buildSarcZs(sarcEntries, sarcMeta.endian);
           log(`[BUILD] SARC.ZS output: ${compressed.byteLength} bytes`);
+
+          // === BINARY VALIDATION for SARC before download ===
+          setBuildProgress("فحص ثنائي لأرشيف SARC...");
+          const { parseSarc } = await import("@/lib/sarc-parser");
+          let sarcValidationBuffer: ArrayBuffer;
+          try {
+            const decompressed = await parseSarc(compressed);
+            sarcValidationBuffer = decompressed.rawBuffer || compressed;
+          } catch {
+            sarcValidationBuffer = compressed;
+          }
+          const sarcValidation = validateSarc(sarcValidationBuffer);
+          for (const c of sarcValidation.checks) {
+            log(`[BUILD] [SARC-BINARY] ${c.status === 'pass' ? '✅' : c.status === 'warn' ? '⚠️' : '❌'} ${c.label}: ${c.detail}`);
+          }
+          if (sarcValidation.hasCritical) {
+            log('[BUILD] ❌ SARC BINARY VALIDATION FAILED — download blocked');
+            setLastBuildLog([...buildLog]);
+            const failChecks: VerificationCheck[] = sarcValidation.checks.map(c => ({
+              label: c.label, status: c.status, detail: c.detail,
+            }));
+            setBuildVerification({
+              checks: failChecks,
+              outputSizeBytes: compressed.byteLength,
+              originalSizeBytes: 0,
+              translationsApplied: modifiedCount,
+              translationsExpected: Object.keys(nonEmptyTranslations).length,
+              autoProcessedArabic: autoProcessedCount,
+              tagsFixed: tagFixCount, tagsOk: tagOkCount,
+              filesBuilt: 0,
+              buildDurationMs: Date.now() - buildStartTime,
+            });
+            setShowBuildVerification(true);
+            setBuildProgress("❌ فشل الفحص الثنائي لأرشيف SARC — التنزيل ممنوع");
+            setBuilding(false);
+            return;
+          }
+
           const sarcBlob = new Blob([new Uint8Array(compressed) as BlobPart], { type: "application/octet-stream" });
           const sarcUrl = URL.createObjectURL(sarcBlob);
           const a = document.createElement("a");
