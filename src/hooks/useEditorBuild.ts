@@ -54,6 +54,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
   const [checkingIntegrity, setCheckingIntegrity] = useState(false);
   const [buildVerification, setBuildVerification] = useState<BuildVerificationResult | null>(null);
   const [showBuildVerification, setShowBuildVerification] = useState(false);
+  const [lastBuildLog, setLastBuildLog] = useState<string[]>([]);
 
   const handleApplyArabicProcessing = () => {
     const currentState = stateRef.current;
@@ -849,7 +850,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       log(`[BUILD] Output: ${filesBuilt} files, ${outputSizeBytes} bytes`);
       if (originalSizeBytes > 0) log(`[BUILD] Original: ${originalSizeBytes} bytes, ratio: ${(outputSizeBytes / originalSizeBytes * 100).toFixed(0)}%`);
 
-      // Store build log for debugging
+      // Store build log for debugging + expose to UI
+      setLastBuildLog([...buildLog]);
       try {
         const { idbSet } = await import("@/lib/idb-storage");
         await idbSet("lastBuildLog", buildLog);
@@ -879,11 +881,12 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       console.error('[BUILD] ❌ Build failed:', err);
       console.error('[BUILD] Stack:', errStack);
       console.log('[BUILD] Log up to failure:', buildLog.join('\n'));
-      // Store error log
+      // Store error log + expose to UI
+      buildLog.push(`❌ ERROR: ${errMsg}`);
+      if (errStack) buildLog.push(`STACK: ${errStack}`);
+      setLastBuildLog([...buildLog]);
       try {
         const { idbSet } = await import("@/lib/idb-storage");
-        buildLog.push(`❌ ERROR: ${errMsg}`);
-        if (errStack) buildLog.push(`STACK: ${errStack}`);
         await idbSet("lastBuildLog", buildLog);
       } catch {}
       setBuildProgress(`❌ ${errMsg}`);
@@ -1260,6 +1263,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     buildVerification,
     showBuildVerification,
     setShowBuildVerification,
+    lastBuildLog,
   };
 }
 
