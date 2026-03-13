@@ -107,6 +107,11 @@ export function normalizeMsbtTranslations(
   translations: Record<string, string>,
   validKeys: Set<string>,
 ): NormalizeResult {
+  // Defensive: if translations is not a proper object, return empty
+  if (!translations || typeof translations !== 'object' || Array.isArray(translations)) {
+    console.warn('[NORMALIZER] translations is not an object:', typeof translations);
+    return { normalized: {}, matched: 0, remapped: 0, ambiguous: 0, dropped: 0 };
+  }
   const normalized: Record<string, string> = {};
   let matched = 0, remapped = 0, ambiguous = 0, dropped = 0;
 
