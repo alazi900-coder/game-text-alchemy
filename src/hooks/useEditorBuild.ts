@@ -307,11 +307,11 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         for (const msbtName of (archive.msbtEntryNames || [])) {
           const shortName = msbtName.replace(/.*[/\\]/, '');
           const scoped = archive.scopedMsbtNames?.find((s: any) => s.entryName === msbtName)?.extractedName || shortName;
-          const entriesForFile = currentState.entries.filter(e => e.msbtFile === scoped || e.msbtFile.includes(scoped));
+          const entriesForFile = resolveEntriesForLookup(entriesByMsbtName, scoped);
           const keys = entriesForFile.length;
           const translated = entriesForFile.filter(e => {
             const k = `${e.msbtFile}:${e.index}`;
-            return nonEmptyTranslations[k];
+            return !!nonEmptyTranslations[k];
           }).length;
 
           if (keys > 0) {
