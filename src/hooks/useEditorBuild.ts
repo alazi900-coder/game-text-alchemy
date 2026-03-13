@@ -261,7 +261,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       const extractionSessionId = await idbGet<string>("extractionSessionId");
 
       console.log('[BUILD] Session ID:', extractionSessionId);
-      console.log('[BUILD] MSBT files in IDB:', msbtFileNames?.length ?? 0, msbtFileNames);
+      console.log('[BUILD] MSBT files in IDB:', msbtFileNames?.length ?? 0);
+      console.log('[BUILD] MSBT file keys in buffer map:', msbtFiles ? Object.keys(msbtFiles).length : 0);
 
       if (!msbtFiles || !msbtFileNames || msbtFileNames.length === 0) {
         setBuildProgress("❌ لا توجد ملفات MSBT. يرجى العودة لصفحة المعالجة وإعادة رفع الملفات.");
@@ -269,15 +270,30 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         return;
       }
 
-      const activeMsbtFileSet = new Set(
-        currentState.entries
-          .map(entry => entry.msbtFile.match(/^msbt:([^:]+):/)?.[1])
-          .filter((name): name is string => !!name)
-      );
-      const fileNamesToBuild = Array.from(new Set(msbtFileNames.filter(name => activeMsbtFileSet.has(name))));
+      // Extract unique MSBT file names from editor entries
+      const activeMsbtFileSet = new Set<string>();
+      for (const entry of currentState.entries) {
+        // entry.msbtFile format: "msbt:scopedName:label"
+        const parts = entry.msbtFile.split(':');
+        if (parts.length >= 3 && parts[0] === 'msbt') {
+          activeMsbtFileSet.add(parts[1]);
+        }
+      }
+      
+      // Match against stored file names — try exact match first, then fallback to contains
+      let fileNamesToBuild = Array.from(new Set(msbtFileNames.filter(name => activeMsbtFileSet.has(name))));
+      
+      // Fallback: if no exact matches, try matching stored names against active set more loosely
+      if (fileNamesToBuild.length === 0 && activeMsbtFileSet.size > 0) {
+        console.warn('[BUILD] No exact match between msbtFileNames and activeMsbtFileSet. Trying fallback...');
+        console.log('[BUILD] activeMsbtFileSet sample:', [...activeMsbtFileSet].slice(0, 5));
+        console.log('[BUILD] msbtFileNames sample:', msbtFileNames.slice(0, 5));
+        // Use all stored files as fallback
+        fileNamesToBuild = [...msbtFileNames];
+      }
 
-      console.log('[BUILD] Active MSBT files from editor entries:', [...activeMsbtFileSet]);
-      console.log('[BUILD] Files to build (intersection):', fileNamesToBuild);
+      console.log('[BUILD] Active MSBT files from entries:', activeMsbtFileSet.size);
+      console.log('[BUILD] Files to build:', fileNamesToBuild.length);
 
       if (fileNamesToBuild.length === 0) {
         setBuildProgress("❌ لا توجد ملفات مطابقة لهذه الجلسة. أعد الاستخراج من صفحة الرفع.");
@@ -388,6 +404,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
 
       // Check for Unity bundle meta (Fire Emblem flow)
       const bundleMeta = await idbGet<any[]>("editorBundleMeta");
+      console.log('[BUILD] Bundle meta:', bundleMeta ? `${bundleMeta.length} bundles` : 'NONE');
+      console.log('[BUILD] SARC archives:', allArchives.length > 0 ? `${allArchives.length} archives` : 'NONE');
 
       if (bundleMeta && bundleMeta.length > 0) {
         // === BUNDLE REPACK FLOW ===

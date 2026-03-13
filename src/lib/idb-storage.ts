@@ -44,16 +44,28 @@ export async function idbClear(): Promise<void> {
 }
 
 export async function idbClearExcept(keepKeys: string[]): Promise<void> {
-  // Read values to preserve
-  const preserved: Record<string, unknown> = {};
-  for (const key of keepKeys) {
-    const val = await idbGet(key);
-    if (val !== undefined) preserved[key] = val;
-  }
-  // Clear everything
-  await idbClear();
-  // Restore preserved keys
-  for (const [key, val] of Object.entries(preserved)) {
-    await idbSet(key, val);
-  }
+  const db = await openDB();
+  const keepSet = new Set(keepKeys);
+  
+  // Get all existing keys
+  const allKeys = await new Promise<IDBValidKey[]>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readonly");
+    const req = tx.objectStore(STORE_NAME).getAllKeys();
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  
+  // Delete only keys NOT in keepSet
+  const keysToDelete = allKeys.filter(k => !keepSet.has(String(k)));
+  if (keysToDelete.length === 0) return;
+  
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, "readwrite");
+    const store = tx.objectStore(STORE_NAME);
+    for (const key of keysToDelete) {
+      store.delete(key);
+    }
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
 }
