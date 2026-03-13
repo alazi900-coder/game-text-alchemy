@@ -2099,7 +2099,47 @@ const Editor = () => {
           </AlertDialogContent>
         </AlertDialog>
 
-        {/* Arabic Processing Confirmation */}
+        {/* Cache Reset Confirmation */}
+        <AlertDialog open={showCacheResetConfirm} onOpenChange={setShowCacheResetConfirm}>
+          <AlertDialogContent dir="rtl">
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2 font-display">
+                <RotateCcw className="w-5 h-5 text-destructive" />
+                ⚠️ إعادة تعيين الكاش المحلي
+              </AlertDialogTitle>
+              <AlertDialogDescription className="text-right">
+                سيتم مسح سجل الترجمة المحلي (translation-history) وبيانات الجلسة المخزنة في IndexedDB.
+                <br /><br />
+                ⚠️ هذا لن يمسح الترجمات الحالية في المحرر، لكنه سيمسح الكاش والبيانات التالفة التي قد تسبب أخطاء.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="flex-row-reverse gap-2">
+              <AlertDialogCancel className="font-display">إلغاء</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={async () => {
+                  try {
+                    localStorage.removeItem("translation-history-v1");
+                    localStorage.removeItem("editor-settings");
+                    const { idbClear } = await import("@/lib/idb-storage");
+                    await idbClear();
+                    const { toast } = await import("@/hooks/use-toast");
+                    toast({ title: "✅ تم مسح الكاش المحلي بنجاح", description: "تم حذف سجل الترجمة وبيانات الجلسة." });
+                  } catch (e) {
+                    console.error("[CACHE-RESET]", e);
+                    const { toast } = await import("@/hooks/use-toast");
+                    toast({ title: "❌ فشل مسح الكاش", description: String(e), variant: "destructive" });
+                  }
+                  setShowCacheResetConfirm(false);
+                }}
+              >
+                🧹 نعم، امسح الكاش
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+
         <AlertDialog open={showArabicProcessConfirm} onOpenChange={setShowArabicProcessConfirm}>
           <AlertDialogContent dir="rtl">
             <AlertDialogHeader>
