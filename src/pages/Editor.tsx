@@ -381,7 +381,7 @@ const Editor = () => {
                 <Package className="w-4 h-4 md:w-5 md:h-5 text-accent" />
                 <div>
                   <p className="text-base md:text-lg font-display font-bold">
-                    {new Set((editor.state?.entries || []).map(e => { const p = e.msbtFile.split(':'); return p[0] === 'bdat-bin' ? p[1] : e.msbtFile; })).size}
+                    {countUniqueMsbtFiles(editor.state?.entries || [])}
                   </p>
                   <p className="text-[10px] md:text-xs text-muted-foreground">{gameConfig.fileLabel}</p>
                 </div>
