@@ -80,7 +80,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     const currentState = stateRef.current;
     if (!currentState) return;
     setApplyingArabic(true);
-    const newTranslations = { ...currentState.translations };
+    const newTranslations = { ...sanitizeTranslations(currentState.translations, 'undoArabic') };
     let revertedCount = 0;
     for (const [key, value] of Object.entries(newTranslations)) {
       if (!value?.trim()) continue;
