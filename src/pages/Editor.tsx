@@ -86,6 +86,7 @@ const AdvancedTranslationPanel = React.lazy(() => import("@/components/editor/Ad
 const TranslationProgressDashboard = React.lazy(() => import("@/components/editor/TranslationProgressDashboard"));
 const ConsistencyCheckPanel = React.lazy(() => import("@/components/editor/ConsistencyCheckPanel"));
 import ToolHelpDialog, { ToolType } from "@/components/editor/ToolHelpDialog";
+import { countUniqueMsbtFiles } from "@/lib/msbt-key-normalizer";
 
 type GameId = "animal-crossing" | "fire-emblem";
 
