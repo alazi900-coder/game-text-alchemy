@@ -366,9 +366,8 @@ export function useEditorState() {
 
       const stored = await idbGet<EditorState>("editorState");
       // Defensive: ensure translations is always an object
-      if (stored && stored.translations && (typeof stored.translations !== 'object' || Array.isArray(stored.translations))) {
-        console.warn('[EDITOR] stored.translations was not an object, resetting to {}');
-        stored.translations = {};
+      if (stored) {
+        stored.translations = sanitizeTranslations(stored.translations, 'loadState/IDB');
       }
       if (stored && stored.entries && stored.entries.length > 0) {
         const isFreshExtraction = !!(stored as any).freshExtraction;

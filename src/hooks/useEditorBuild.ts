@@ -1033,7 +1033,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       formData.append("langFile", new File([new Uint8Array(langBuf)], langFileName));
       if (dictBuf) formData.append("dictFile", new File([new Uint8Array(dictBuf)], (await idbGet<string>("editorDictFileName")) || "ZsDic.pack.zs"));
       const nonEmptyTranslations: Record<string, string> = {};
-      for (const [k, v] of Object.entries(currentState.translations)) { if (v.trim()) nonEmptyTranslations[k] = v; }
+      const safeTranslations = sanitizeTranslations(currentState.translations, 'serverBuild');
+      for (const [k, v] of Object.entries(safeTranslations)) { if (v.trim()) nonEmptyTranslations[k] = v; }
 
       // Auto-fix damaged tags before build
       let tagFixCount = 0;
