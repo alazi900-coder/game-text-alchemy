@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -6,20 +6,47 @@ export default function UpdateBanner() {
   const [showUpdate, setShowUpdate] = useState(false);
   const [updating, setUpdating] = useState(false);
 
+  const forceUpdate = useCallback(() => {
+    setUpdating(true);
+    navigator.serviceWorker?.getRegistration().then((reg) => {
+      if (reg?.waiting) {
+        reg.waiting.postMessage({ type: "SKIP_WAITING" });
+      } else {
+        // No waiting SW — hard reload bypassing cache
+        window.location.reload();
+      }
+    });
+  }, []);
+
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
-    const checkForUpdate = () => {
-      navigator.serviceWorker.getRegistration().then((reg) => reg?.update()).catch(() => {});
+    const checkForUpdate = async () => {
+      try {
+        const reg = await navigator.serviceWorker.getRegistration();
+        if (!reg) return;
+        await reg.update();
+        // If waiting SW exists after update check, show banner
+        if (reg.waiting) {
+          setShowUpdate(true);
+        }
+      } catch {
+        // Network error during check — ignore
+      }
     };
 
+    // Listen for new SW installation
     navigator.serviceWorker.getRegistration().then((reg) => {
-      if (reg?.waiting) {
+      if (!reg) return;
+
+      if (reg.waiting) {
         setShowUpdate(true);
       }
-      reg?.addEventListener("updatefound", () => {
+
+      reg.addEventListener("updatefound", () => {
         const newSW = reg.installing;
-        newSW?.addEventListener("statechange", () => {
+        if (!newSW) return;
+        newSW.addEventListener("statechange", () => {
           if (newSW.state === "installed" && navigator.serviceWorker.controller) {
             setShowUpdate(true);
           }
@@ -36,35 +63,28 @@ export default function UpdateBanner() {
       }
     });
 
-    // Check immediately on load
+    // Check immediately
     checkForUpdate();
 
-    // Check on visibility change (when user returns to tab/app)
+    // Check on visibility change (user returns to tab/app)
     const handleVisibility = () => {
       if (document.visibilityState === "visible") checkForUpdate();
     };
     document.addEventListener("visibilitychange", handleVisibility);
 
-    // Periodic check every 2 minutes
-    const interval = setInterval(checkForUpdate, 30 * 1000);
+    // Check on network reconnect
+    const handleOnline = () => checkForUpdate();
+    window.addEventListener("online", handleOnline);
+
+    // Periodic check every 15 seconds
+    const interval = setInterval(checkForUpdate, 15_000);
 
     return () => {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("online", handleOnline);
     };
   }, []);
-
-  const handleUpdate = () => {
-    setUpdating(true);
-    navigator.serviceWorker?.getRegistration().then((reg) => {
-      if (reg?.waiting) {
-        reg.waiting.postMessage({ type: "SKIP_WAITING" });
-      } else {
-        // No waiting SW, just hard reload
-        window.location.reload();
-      }
-    });
-  };
 
   if (!showUpdate) return null;
 
@@ -76,7 +96,7 @@ export default function UpdateBanner() {
       </div>
       <Button
         size="sm"
-        onClick={handleUpdate}
+        onClick={forceUpdate}
         disabled={updating}
         className="gap-1.5 h-7 text-xs bg-background/20 hover:bg-background/30 text-primary-foreground border-border/30 border"
       >
