@@ -166,6 +166,62 @@ const BuildConfirmDialog = ({ open, onOpenChange, preview, onConfirm, building }
               <p className="text-xs text-muted-foreground font-body">تأكد من أنك أدخلت ترجمات في المحرر</p>
             </div>
           )}
+
+          {/* Bundle Diagnostics */}
+          {preview.bundleDiagnostics && preview.bundleDiagnostics.length > 0 && (
+            <div className="space-y-1">
+              <button
+                onClick={() => setShowDiagnostics(!showDiagnostics)}
+                className="flex items-center gap-1 text-xs font-display font-bold text-muted-foreground hover:text-foreground transition-colors w-full"
+              >
+                <Package className="w-3.5 h-3.5" />
+                <span>تشخيص الحِزم ({preview.bundleDiagnostics.length} حزمة)</span>
+                {showDiagnostics ? <ChevronUp className="w-3 h-3 mr-auto" /> : <ChevronDown className="w-3 h-3 mr-auto" />}
+              </button>
+
+              {showDiagnostics && (
+                <ScrollArea className="max-h-48">
+                  <div className="space-y-1.5 pr-2">
+                    {preview.bundleDiagnostics.map((diag) => {
+                      const isExpanded = expandedBundle === diag.bundleName;
+                      const matchPercent = diag.totalKeys > 0 ? Math.round((diag.matchedTranslations / diag.totalKeys) * 100) : 0;
+                      const isFull = matchPercent === 100;
+                      const isEmpty = diag.matchedTranslations === 0;
+
+                      return (
+                        <div key={diag.bundleName} className="rounded border border-border/50 bg-muted/30 overflow-hidden">
+                          <button
+                            onClick={() => setExpandedBundle(isExpanded ? null : diag.bundleName)}
+                            className="flex items-center gap-2 w-full text-xs font-body px-2 py-1.5 hover:bg-muted/60 transition-colors"
+                          >
+                            {isExpanded ? <ChevronUp className="w-3 h-3 shrink-0" /> : <ChevronDown className="w-3 h-3 shrink-0" />}
+                            <span className="truncate text-start flex-1">{diag.bundleName}</span>
+                            <span className={`font-bold shrink-0 ${isFull ? 'text-secondary' : isEmpty ? 'text-destructive' : 'text-primary'}`}>
+                              {diag.matchedTranslations}/{diag.totalKeys}
+                            </span>
+                            <span className="text-muted-foreground shrink-0">({matchPercent}%)</span>
+                          </button>
+
+                          {isExpanded && diag.msbtFiles.length > 0 && (
+                            <div className="border-t border-border/30 px-2 py-1 space-y-0.5 bg-background/50">
+                              {diag.msbtFiles.map((msbt) => (
+                                <div key={msbt.name} className="flex justify-between items-center text-[10px] font-body px-1 py-0.5">
+                                  <span className="truncate text-muted-foreground">{msbt.name}</span>
+                                  <span className={`font-bold shrink-0 ${msbt.translated === msbt.keys ? 'text-secondary' : msbt.translated === 0 ? 'text-muted-foreground' : 'text-primary'}`}>
+                                    {msbt.translated}/{msbt.keys}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              )}
+            </div>
+          )}
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
