@@ -177,3 +177,85 @@ export function validateBundle(buffer: ArrayBuffer): BinaryValidationResult {
   const hasCritical = checks.some(c => c.status === "fail");
   return { checks, hasCritical };
 }
+
+/**
+ * Validate rebuilt MSBT files destined for a SARC.ZS archive.
+ * Checks: MSBT signatures, BOM, TXT2, Arabic content presence.
+ */
+export function validateSarcMsbts(msbtBuffers: Uint8Array[]): BinaryValidationResult {
+  const checks: BinaryCheck[] = [];
+
+  if (msbtBuffers.length === 0) {
+    checks.push({ label: "ملفات MSBT", status: "warn", detail: "لا توجد ملفات MSBT للفحص" });
+    return { checks, hasCritical: false };
+  }
+
+  let bomOk = 0, bomBad = 0;
+  let txt2Found = 0;
+  let hasArabic = false;
+  let controlTagCount = 0;
+  let validMsbt = 0;
+
+  for (const data of msbtBuffers) {
+    // Check MsgStdBn signature
+    const positions = findAllMsbt(data);
+    if (positions.length === 0) continue;
+    validMsbt += positions.length;
+
+    for (const pos of positions) {
+      // BOM
+      if (pos + 10 <= data.length) {
+        const bom = data[pos + 8] | (data[pos + 9] << 8);
+        if (bom === 0xFEFF) bomOk++;
+        else bomBad++;
+      }
+
+      // TXT2
+      const searchEnd = Math.min(pos + 1024 * 1024, data.length - 4);
+      for (let s = pos + 16; s < searchEnd; s++) {
+        if (data[s] === 0x54 && data[s+1] === 0x58 && data[s+2] === 0x54 && data[s+3] === 0x32) {
+          txt2Found++;
+          const txt2Start = s + 16;
+          const txt2End = Math.min(s + 65536, data.length - 1);
+          for (let t = txt2Start; t < txt2End; t += 2) {
+            const cu = data[t] | (data[t+1] << 8);
+            if ((cu >= 0x0600 && cu <= 0x06FF) || (cu >= 0x0750 && cu <= 0x077F) ||
+                (cu >= 0x08A0 && cu <= 0x08FF) || (cu >= 0xFB50 && cu <= 0xFDFF) ||
+                (cu >= 0xFE70 && cu <= 0xFEFF)) {
+              hasArabic = true;
+            }
+            if (cu === 0x0E || cu === 0x0F) controlTagCount++;
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  checks.push({ label: "ملفات MSBT", status: validMsbt > 0 ? "pass" : "warn", detail: `${validMsbt} ملف MSBT صالح من ${msbtBuffers.length}` });
+
+  if (bomBad > 0) {
+    checks.push({ label: "MSBT BOM", status: "fail", detail: `${bomBad} ملف بـ BOM غير صالح` });
+  } else if (bomOk > 0) {
+    checks.push({ label: "MSBT BOM", status: "pass", detail: `${bomOk} ملف — BOM سليم (UTF-16LE) ✓` });
+  }
+
+  if (txt2Found > 0) {
+    checks.push({ label: "قسم TXT2", status: "pass", detail: `${txt2Found} قسم TXT2 ✓` });
+  } else {
+    checks.push({ label: "قسم TXT2", status: "warn", detail: "لم يُعثر على قسم TXT2" });
+  }
+
+  if (controlTagCount > 0) {
+    checks.push({ label: "وسوم التحكم", status: "pass", detail: `${controlTagCount} وسم تحكم ✓` });
+  }
+
+  if (hasArabic) {
+    checks.push({ label: "نصوص عربية", status: "pass", detail: "تم اكتشاف نصوص عربية ✓" });
+  } else {
+    checks.push({ label: "نصوص عربية", status: "fail", detail: "لم يُعثر على نصوص عربية — الترجمة لم تُحقن!" });
+  }
+
+  const hasCritical = checks.some(c => c.status === "fail");
+  return { checks, hasCritical };
+}
