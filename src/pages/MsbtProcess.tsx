@@ -103,7 +103,41 @@ export default function MsbtProcess() {
       endian: "big" | "little";
       nonMsbtEntries: { name: string; data: number[] }[];
       msbtEntryNames: string[];
+      scopedMsbtNames?: { entryName: string; extractedName: string }[];
     }> = [];
+
+    const normalizeMsbtName = (name: string) => name.toLowerCase().endsWith('.msbt') ? name : `${name}.msbt`;
+    const sanitizeScope = (value: string) => value.replace(/[\\/:*?"<>|]/g, '_');
+    const uniqueMsbtNames = new Set<string>();
+    const ensureUniqueMsbtName = (baseName: string) => {
+      if (!uniqueMsbtNames.has(baseName)) {
+        uniqueMsbtNames.add(baseName);
+        return baseName;
+      }
+      const extMatch = baseName.match(/\.msbt$/i);
+      const stem = extMatch ? baseName.slice(0, -5) : baseName;
+      const ext = extMatch ? '.msbt' : '';
+      let n = 2;
+      let candidate = `${stem}__dup${n}${ext}`;
+      while (uniqueMsbtNames.has(candidate)) {
+        n++;
+        candidate = `${stem}__dup${n}${ext}`;
+      }
+      uniqueMsbtNames.add(candidate);
+      return candidate;
+    };
+
+    const makeBundleScopedMsbtName = (bundleName: string, assetName: string, assetPathId: bigint | number | string) => {
+      const safeBundle = sanitizeScope(bundleName);
+      const safeAsset = sanitizeScope(normalizeMsbtName(assetName));
+      return `bundle__${safeBundle}__${String(assetPathId)}__${safeAsset}`;
+    };
+
+    const makeSarcScopedMsbtName = (archiveName: string, entryName: string, entryIndex: number) => {
+      const safeArchive = sanitizeScope(archiveName);
+      const safeEntry = sanitizeScope(normalizeMsbtName(entryName.replace(/.*[/\\]/, '')));
+      return `sarc__${safeArchive}__${entryIndex}__${safeEntry}`;
+    };
 
     // Count total bundles for progress
     let totalBundles = 0;
@@ -120,7 +154,8 @@ export default function MsbtProcess() {
       if (lower.endsWith('.msbt')) {
         try {
           const buf = await f.arrayBuffer();
-          newMsbt.push({ name: f.name, size: buf.byteLength, data: buf });
+          const uniqueName = ensureUniqueMsbtName(normalizeMsbtName(f.name));
+          newMsbt.push({ name: uniqueName, size: buf.byteLength, data: buf });
         } catch (err) {
           addLog(`⚠️ فشل قراءة ${f.name}: ${err instanceof Error ? err.message : 'خطأ'}`);
         }
@@ -152,6 +187,20 @@ export default function MsbtProcess() {
             setBundleProgress(prev => prev ? { ...prev, current: bundleCount } : null);
           } else {
             addLog(`✅ ${f.name}: ${msbtAssets.length} ملف MSBT`);
+            const scopedMsbtByAssetKey: Record<string, string> = {};
+
+            for (const asset of msbtAssets) {
+              const assetName = normalizeMsbtName(asset.name);
+              const assetPathId = typeof asset.pathId === 'bigint' ? asset.pathId.toString() : String(asset.pathId ?? asset.entryIndex);
+              const assetKey = `${asset.name}#${assetPathId}`;
+              const scopedName = ensureUniqueMsbtName(makeBundleScopedMsbtName(f.name, assetName, assetPathId));
+              const assetCopy = new Uint8Array(asset.data);
+
+              scopedMsbtByAssetKey[assetKey] = scopedName;
+              newMsbt.push({ name: scopedName, size: assetCopy.length, data: assetCopy.buffer as ArrayBuffer });
+              totalMsbtFromBundles++;
+              setBundleProgress(prev => prev ? { ...prev, current: bundleCount, msbtFound: totalMsbtFromBundles, lastMsbt: assetName } : null);
+            }
 
             pendingBundleMeta.push({
               originalFileName: f.name,
@@ -159,14 +208,8 @@ export default function MsbtProcess() {
               assets,
               decompressedData: decompressedData.buffer,
               originalBuffer: buf,
+              scopedMsbtByAssetKey,
             });
-
-            for (const asset of msbtAssets) {
-              const assetName = asset.name.endsWith('.msbt') ? asset.name : `${asset.name}.msbt`;
-              newMsbt.push({ name: assetName, size: asset.data.length, data: asset.data.buffer as ArrayBuffer });
-              totalMsbtFromBundles++;
-              setBundleProgress(prev => prev ? { ...prev, current: bundleCount, msbtFound: totalMsbtFromBundles, lastMsbt: assetName } : null);
-            }
           }
         } catch (err) {
           bundleCount++;
@@ -182,6 +225,8 @@ export default function MsbtProcess() {
           const msbtEntries = extractMsbtFromSarc(archive);
           addLog(`✅ ${f.name}: ${archive.entries.length} ملف داخلي — ${msbtEntries.length} ملف MSBT`);
 
+          const scopedMsbtNames: { entryName: string; extractedName: string }[] = [];
+
           pendingSarcArchives.push({
             originalFileName: f.name,
             endian: archive.endian,
@@ -189,11 +234,15 @@ export default function MsbtProcess() {
               .filter(e => !e.name.toLowerCase().endsWith(".msbt"))
               .map(e => ({ name: e.name, data: Array.from(e.data) })),
             msbtEntryNames: msbtEntries.map(e => e.name),
+            scopedMsbtNames,
           });
 
-          for (const entry of msbtEntries) {
-            const entryBuf = new Uint8Array(entry.data).buffer;
-            newMsbt.push({ name: entry.name.replace(/.*[/\\]/, ''), size: entry.data.length, data: entryBuf });
+          for (let entryIndex = 0; entryIndex < msbtEntries.length; entryIndex++) {
+            const entry = msbtEntries[entryIndex];
+            const extractedName = ensureUniqueMsbtName(makeSarcScopedMsbtName(f.name, entry.name, entryIndex));
+            const entryBuf = new Uint8Array(entry.data);
+            scopedMsbtNames.push({ entryName: entry.name, extractedName });
+            newMsbt.push({ name: extractedName, size: entryBuf.length, data: entryBuf.buffer as ArrayBuffer });
           }
         } catch (err) {
           addLog(`⚠️ فشل فك ${f.name}: ${err instanceof Error ? err.message : 'خطأ'}`);
