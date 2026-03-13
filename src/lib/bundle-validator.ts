@@ -177,3 +177,118 @@ export function validateBundle(buffer: ArrayBuffer): BinaryValidationResult {
   const hasCritical = checks.some(c => c.status === "fail");
   return { checks, hasCritical };
 }
+
+/**
+ * Validate a built SARC.ZS buffer (decompressed SARC archive).
+ * Checks: SARC signature, endian BOM, file count, MSBT presence, Arabic content.
+ */
+export function validateSarc(buffer: ArrayBuffer): BinaryValidationResult {
+  const checks: BinaryCheck[] = [];
+  const data = new Uint8Array(buffer);
+
+  // 1. Check SARC signature (first 4 bytes = "SARC")
+  if (data.length < 20) {
+    checks.push({ label: "حجم الأرشيف", status: "fail", detail: `الملف صغير جداً (${data.length} بايت) — ليس أرشيف SARC صالح` });
+    return { checks, hasCritical: true };
+  }
+
+  const sig = String.fromCharCode(data[0], data[1], data[2], data[3]);
+  if (sig !== "SARC") {
+    checks.push({ label: "توقيع SARC", status: "fail", detail: `التوقيع غير صحيح: "${sig}" — متوقع "SARC"` });
+    return { checks, hasCritical: true };
+  }
+  checks.push({ label: "توقيع SARC", status: "pass", detail: "SARC ✓" });
+
+  // 2. Header length & BOM
+  const headerLen = data[4] | (data[5] << 8);
+  const bom = (data[6] << 8) | data[7];
+  const isLE = bom === 0xFFFE;
+  const isBE = bom === 0xFEFF;
+  if (!isLE && !isBE) {
+    checks.push({ label: "ترتيب البايتات", status: "warn", detail: `BOM غير معروف: 0x${bom.toString(16).toUpperCase()}` });
+  } else {
+    checks.push({ label: "ترتيب البايتات", status: "pass", detail: `${isLE ? 'Little-Endian' : 'Big-Endian'} ✓` });
+  }
+
+  // 3. Read file size from header and compare
+  const view = new DataView(buffer);
+  const declaredFileSize = isLE ? view.getUint32(12, true) : view.getUint32(12, false);
+  if (declaredFileSize !== buffer.byteLength) {
+    const diff = buffer.byteLength - declaredFileSize;
+    if (Math.abs(diff) > 16) {
+      checks.push({ label: "حجم SARC", status: "fail", detail: `مصرح: ${declaredFileSize}، فعلي: ${buffer.byteLength} (فرق ${diff} بايت)` });
+    } else {
+      checks.push({ label: "حجم SARC", status: "warn", detail: `فرق بسيط: ${diff} بايت (padding محتمل)` });
+    }
+  } else {
+    checks.push({ label: "حجم SARC", status: "pass", detail: `${declaredFileSize} بايت — مطابق ✓` });
+  }
+
+  // 4. Find SFNT section (file name table)
+  let sfntPos = -1;
+  for (let i = headerLen; i < Math.min(data.length - 4, 1024); i++) {
+    if (data[i] === 0x53 && data[i+1] === 0x46 && data[i+2] === 0x4E && data[i+3] === 0x54) {
+      sfntPos = i;
+      break;
+    }
+  }
+
+  // 5. Find SFAT section for file count
+  let fileCount = 0;
+  for (let i = headerLen; i < Math.min(data.length - 4, 512); i++) {
+    if (data[i] === 0x53 && data[i+1] === 0x46 && data[i+2] === 0x41 && data[i+3] === 0x54) {
+      // SFAT node count at offset +6 (2 bytes)
+      if (i + 8 <= data.length) {
+        fileCount = isLE ? (data[i+6] | (data[i+7] << 8)) : ((data[i+6] << 8) | data[i+7]);
+      }
+      break;
+    }
+  }
+
+  if (fileCount > 0) {
+    checks.push({ label: "عدد الملفات", status: "pass", detail: `${fileCount} ملف داخل الأرشيف ✓` });
+  } else {
+    checks.push({ label: "عدد الملفات", status: "warn", detail: "تعذر قراءة عدد الملفات من SFAT" });
+  }
+
+  // 6. Scan for MSBT signatures inside the SARC data
+  const msbtPositions = findAllMsbt(data);
+  if (msbtPositions.length === 0) {
+    checks.push({ label: "ملفات MSBT", status: "warn", detail: "لم يُعثر على ملفات MSBT داخل الأرشيف" });
+  } else {
+    checks.push({ label: "ملفات MSBT", status: "pass", detail: `${msbtPositions.length} ملف MSBT مكتشف ✓` });
+
+    // 7. Check for Arabic content in MSBT TXT2 sections
+    let hasArabic = false;
+    for (const pos of msbtPositions) {
+      const searchEnd = Math.min(pos + 1024 * 1024, data.length - 4);
+      for (let s = pos + 16; s < searchEnd; s++) {
+        if (data[s] === 0x54 && data[s+1] === 0x58 && data[s+2] === 0x54 && data[s+3] === 0x32) {
+          const txt2Start = s + 16;
+          const txt2End = Math.min(s + 65536, data.length - 1);
+          for (let t = txt2Start; t < txt2End; t += 2) {
+            const cu = data[t] | (data[t+1] << 8);
+            if ((cu >= 0x0600 && cu <= 0x06FF) || (cu >= 0x0750 && cu <= 0x077F) ||
+                (cu >= 0x08A0 && cu <= 0x08FF) || (cu >= 0xFB50 && cu <= 0xFDFF) ||
+                (cu >= 0xFE70 && cu <= 0xFEFF)) {
+              hasArabic = true;
+              break;
+            }
+          }
+          if (hasArabic) break;
+          break;
+        }
+      }
+      if (hasArabic) break;
+    }
+
+    if (hasArabic) {
+      checks.push({ label: "نصوص عربية", status: "pass", detail: "تم اكتشاف نصوص عربية في MSBT ✓" });
+    } else {
+      checks.push({ label: "نصوص عربية", status: "fail", detail: "لم يُعثر على نصوص عربية — الترجمة لم تُحقن!" });
+    }
+  }
+
+  const hasCritical = checks.some(c => c.status === "fail");
+  return { checks, hasCritical };
+}
