@@ -885,6 +885,33 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
               }
             }
             const compressed = await buildSarcZs(sarcEntries, sarcMeta.endian);
+
+            // Validate MSBT files in this SARC
+            const msbtBuffers = sarcEntries.filter(e => e.name.endsWith('.msbt')).map(e => e.data);
+            const sarcVal = validateSarcMsbts(msbtBuffers);
+            for (const c of sarcVal.checks) {
+              log(`[BUILD] [SARC-BINARY ${ai + 1}] ${c.status === 'pass' ? '✅' : c.status === 'warn' ? '⚠️' : '❌'} ${c.label}: ${c.detail}`);
+            }
+            if (sarcVal.hasCritical) {
+              log(`[BUILD] ❌ SARC ${sarcMeta.originalFileName} BINARY VALIDATION FAILED — download blocked`);
+              setLastBuildLog([...buildLog]);
+              setBuildVerification({
+                checks: sarcVal.checks.map(c => ({ label: c.label, status: c.status, detail: c.detail })),
+                outputSizeBytes: compressed.byteLength,
+                originalSizeBytes: 0,
+                translationsApplied: modifiedCount,
+                translationsExpected: Object.keys(nonEmptyTranslations).length,
+                autoProcessedArabic: autoProcessedCount,
+                tagsFixed: tagFixCount, tagsOk: tagOkCount,
+                filesBuilt: 0,
+                buildDurationMs: Date.now() - buildStartTime,
+              });
+              setShowBuildVerification(true);
+              setBuildProgress(`❌ فشل الفحص الثنائي لـ ${sarcMeta.originalFileName}`);
+              setBuilding(false);
+              return;
+            }
+
             outputZip.file(sarcMeta.originalFileName, compressed);
           }
           setBuildProgress("ضغط جميع ملفات SARC.ZS في ZIP...");
