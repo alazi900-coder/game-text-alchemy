@@ -475,7 +475,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       // Defensive: ensure translations is an object — auto-heal if corrupted
       if (!currentState.translations || typeof currentState.translations !== 'object' || Array.isArray(currentState.translations)) {
         log(`[BUILD] ⚠️ translations was ${typeof currentState.translations} — auto-healing to {}`);
-        currentState = { ...currentState, translations: {} };
+        (currentState as any).translations = {};
       }
 
       const { normalized: nonEmptyTranslations, remapped, dropped } = normalizeTranslationsForBuild(
