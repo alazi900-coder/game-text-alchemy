@@ -331,9 +331,10 @@ export default function MsbtProcess() {
       // Generate a session ID to link extraction ↔ build
       const sessionId = crypto.randomUUID();
 
-      // Save SARC archives from handleFileSelect BEFORE clearing IDB
+      // Save SARC archives AND bundle meta from handleFileSelect BEFORE clearing IDB
       const sarcArchivesBefore = await idbGet<any[]>("editorSarcArchives");
       const sarcArchiveBefore = await idbGet<any>("editorSarcArchive");
+      const bundleMetaBefore = await idbGet<any[]>("editorBundleMeta");
       
       if (!isReUploadedBuild) {
         const originalTextsMap: Record<string, string> = {};
@@ -357,12 +358,15 @@ export default function MsbtProcess() {
       });
       await idbSet("editorGame", config.id);
 
-      // Restore SARC archives from THIS session (saved before clear)
+      // Restore SARC archives AND bundle meta from THIS session (saved before clear)
       if (sarcArchivesBefore && sarcArchivesBefore.length > 0) {
         await idbSet("editorSarcArchives", sarcArchivesBefore);
       }
       if (sarcArchiveBefore) {
         await idbSet("editorSarcArchive", sarcArchiveBefore);
+      }
+      if (bundleMetaBefore && bundleMetaBefore.length > 0) {
+        await idbSet("editorBundleMeta", bundleMetaBefore);
       }
 
       try {
