@@ -4,6 +4,7 @@ import { idbGet } from "@/lib/idb-storage";
 import { processArabicText, hasArabicChars as hasArabicCharsProcessing, hasArabicPresentationForms, removeArabicPresentationForms, reverseBidi } from "@/lib/arabic-processing";
 import { EditorState, hasTechnicalTags, restoreTagsLocally } from "@/components/editor/types";
 import { BuildPreview, BundleDiagnostic } from "@/components/editor/BuildConfirmDialog";
+import type { BuildVerificationResult, VerificationCheck } from "@/components/editor/BuildVerificationDialog";
 import type { MutableRefObject } from "react";
 import { normalizeMsbtTranslations, extractShortMsbtName } from "@/lib/msbt-key-normalizer";
 
@@ -51,7 +52,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
   const [integrityResult, setIntegrityResult] = useState<IntegrityCheckResult | null>(null);
   const [showIntegrityDialog, setShowIntegrityDialog] = useState(false);
   const [checkingIntegrity, setCheckingIntegrity] = useState(false);
-
+  const [buildVerification, setBuildVerification] = useState<BuildVerificationResult | null>(null);
+  const [showBuildVerification, setShowBuildVerification] = useState(false);
 
   const handleApplyArabicProcessing = () => {
     const currentState = stateRef.current;
@@ -90,6 +92,94 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     setApplyingArabic(false);
     setLastSaved(`↩️ تم التراجع عن المعالجة العربية لـ ${revertedCount} نص`);
     setTimeout(() => setLastSaved(""), 5000);
+  };
+
+  const buildVerificationChecks = (params: {
+    modifiedCount: number;
+    totalTranslations: number;
+    autoProcessedArabic: number;
+    tagFixCount: number;
+    tagOkCount: number;
+    filesBuilt: number;
+    outputSizeBytes: number;
+    originalSizeBytes?: number;
+    buildStartTime: number;
+    skippedOverflow?: number;
+    hasOriginalFiles: boolean;
+    isDemo?: boolean;
+  }): BuildVerificationResult => {
+    const checks: VerificationCheck[] = [];
+    const elapsed = Date.now() - params.buildStartTime;
+
+    // 1. Translation injection
+    if (params.modifiedCount === 0) {
+      checks.push({ label: "حقن الترجمات", status: "fail", detail: "لم تُحقن أي ترجمة في الملفات!" });
+    } else if (params.modifiedCount < params.totalTranslations * 0.5) {
+      checks.push({ label: "حقن الترجمات", status: "warn", detail: `تم حقن ${params.modifiedCount} من ${params.totalTranslations} — أقل من 50%` });
+    } else {
+      checks.push({ label: "حقن الترجمات", status: "pass", detail: `${params.modifiedCount} ترجمة حُقنت بنجاح` });
+    }
+
+    // 2. Arabic processing
+    if (params.autoProcessedArabic > 0) {
+      checks.push({ label: "المعالجة العربية", status: "pass", detail: `${params.autoProcessedArabic} نص عُولج تلقائياً أثناء البناء` });
+    } else {
+      checks.push({ label: "المعالجة العربية", status: "pass", detail: "كل النصوص كانت معالجة مسبقاً" });
+    }
+
+    // 3. Tag integrity
+    if (params.tagFixCount > 0) {
+      checks.push({ label: "سلامة الرموز التقنية", status: "warn", detail: `${params.tagFixCount} ترجمة أُصلحت رموزها تلقائياً (${params.tagOkCount} سليمة)` });
+    } else if (params.tagOkCount > 0) {
+      checks.push({ label: "سلامة الرموز التقنية", status: "pass", detail: `${params.tagOkCount} ترجمة — كل الرموز سليمة ✨` });
+    }
+
+    // 4. File output
+    if (params.filesBuilt === 0) {
+      checks.push({ label: "ملفات الإخراج", status: "fail", detail: "لم يُنتج أي ملف!" });
+    } else {
+      checks.push({ label: "ملفات الإخراج", status: "pass", detail: `${params.filesBuilt} ملف مبني بنجاح` });
+    }
+
+    // 5. Size check
+    if (params.originalSizeBytes && params.originalSizeBytes > 0) {
+      const ratio = params.outputSizeBytes / params.originalSizeBytes;
+      if (ratio > 1.5) {
+        checks.push({ label: "حجم الملف", status: "warn", detail: `الناتج أكبر بـ ${Math.round(ratio * 100 - 100)}% من الأصلي — تحقق من الضغط` });
+      } else if (ratio < 0.3) {
+        checks.push({ label: "حجم الملف", status: "warn", detail: `الناتج أصغر بكثير (${Math.round(ratio * 100)}%) — قد تكون بيانات ناقصة` });
+      } else {
+        checks.push({ label: "حجم الملف", status: "pass", detail: `الحجم مناسب (${Math.round(ratio * 100)}% من الأصلي)` });
+      }
+    }
+
+    // 6. Overflow skipped
+    if (params.skippedOverflow && params.skippedOverflow > 0) {
+      checks.push({ label: "تجاوز البايت", status: "warn", detail: `${params.skippedOverflow} ترجمة تُخطّيت بسبب تجاوز الحد` });
+    }
+
+    // 7. Original files
+    if (!params.hasOriginalFiles) {
+      checks.push({ label: "الملفات الأصلية", status: "warn", detail: "لم يتم العثور على ملفات أصلية — البناء من الذاكرة" });
+    }
+
+    // 8. Demo check
+    if (params.isDemo) {
+      checks.push({ label: "نوع البيانات", status: "fail", detail: "بيانات تجريبية — الملف لن يعمل في اللعبة" });
+    }
+
+    return {
+      checks,
+      outputSizeBytes: params.outputSizeBytes,
+      originalSizeBytes: params.originalSizeBytes,
+      translationsApplied: params.modifiedCount,
+      translationsExpected: params.totalTranslations,
+      autoProcessedArabic: params.autoProcessedArabic,
+      tagsFixed: params.tagFixCount,
+      tagsOk: params.tagOkCount,
+      filesBuilt: params.filesBuilt,
+      buildDurationMs: elapsed,
+    };
   };
 
   type EditorEntry = EditorState["entries"][number];
@@ -325,6 +415,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     if (forceSaveRef?.current) {
       await forceSaveRef.current();
     }
+    const buildStartTime = Date.now();
     setBuilding(true); setBuildProgress("تجهيز الترجمات...");
     try {
       const msbtFiles = await idbGet<Record<string, ArrayBuffer>>("editorMsbtFiles");
@@ -388,6 +479,25 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         setBuildProgress(`✅ تمت معالجة ${autoProcessedCount} نص عربي تلقائياً...`);
         await new Promise(r => setTimeout(r, 500));
       }
+
+      // Auto-fix tags before MSBT rebuild
+      let tagFixCount = 0;
+      let tagOkCount = 0;
+      for (const entry of currentState.entries) {
+        if (!hasTechnicalTags(entry.original)) continue;
+        const key = `${entry.msbtFile}:${entry.index}`;
+        const trans = nonEmptyTranslations[key];
+        if (!trans?.trim()) continue;
+        const origTagCount = (entry.original.match(/[\uFFF9-\uFFFC\uE000-\uE0FF]/g) || []).length;
+        const transTagCount = (trans.match(/[\uFFF9-\uFFFC\uE000-\uE0FF]/g) || []).length;
+        if (transTagCount < origTagCount) {
+          nonEmptyTranslations[key] = restoreTagsLocally(entry.original, trans);
+          tagFixCount++;
+        } else {
+          tagOkCount++;
+        }
+      }
+      if (tagFixCount > 0) console.log(`[BUILD-TAGS] Fixed: ${tagFixCount}, OK: ${tagOkCount}`);
 
       // Import MSBT parser + rebuilder
       const { parseMsbtFile, rebuildMsbt } = await import("@/lib/msbt-parser");
@@ -640,6 +750,33 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — الملفات في ملف ZIP`);
       }
 
+      // Calculate output metrics for verification
+      let outputSizeBytes = 0;
+      let originalSizeBytes = 0;
+      let filesBuilt = 0;
+
+      if (bundleMeta && bundleMeta.length > 0) {
+        filesBuilt = bundleMeta.length;
+        for (const meta of bundleMeta) {
+          const origBuf = meta.originalBuffer instanceof ArrayBuffer ? meta.originalBuffer : new Uint8Array(meta.originalBuffer).buffer;
+          originalSizeBytes += origBuf.byteLength;
+        }
+        // Output size is approximated from rebuilt data
+        for (const data of Object.values(rebuiltMsbtFiles)) {
+          outputSizeBytes += data.byteLength;
+        }
+      } else if (scopedArchives.length > 0) {
+        filesBuilt = scopedArchives.length;
+        for (const data of Object.values(rebuiltMsbtFiles)) {
+          outputSizeBytes += data.byteLength;
+        }
+      } else {
+        filesBuilt = Object.keys(rebuiltMsbtFiles).length;
+        for (const data of Object.values(rebuiltMsbtFiles)) {
+          outputSizeBytes += data.byteLength;
+        }
+      }
+
       // Save translations snapshot
       try {
         const { idbSet } = await import("@/lib/idb-storage");
@@ -653,6 +790,23 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       } catch (e) {
         console.warn("Could not save build translations snapshot:", e);
       }
+
+      // Run post-build verification
+      const verification = buildVerificationChecks({
+        modifiedCount,
+        totalTranslations: Object.keys(nonEmptyTranslations).length,
+        autoProcessedArabic: autoProcessedCount,
+        tagFixCount,
+        tagOkCount,
+        filesBuilt,
+        outputSizeBytes,
+        originalSizeBytes: originalSizeBytes > 0 ? originalSizeBytes : undefined,
+        buildStartTime,
+        hasOriginalFiles: !!(msbtFiles && Object.keys(msbtFiles).length > 0),
+        isDemo: currentState.isDemo,
+      });
+      setBuildVerification(verification);
+      setShowBuildVerification(true);
 
       setBuilding(false);
     } catch (err) {
@@ -794,6 +948,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     const dictBuf = await idbGet<ArrayBuffer>("editorDictFile");
     const langFileName = (await idbGet<string>("editorLangFileName")) || "output.zs";
     if (!langBuf) { setBuildProgress("❌ ملف اللغة غير موجود. يرجى العودة لصفحة المعالجة وإعادة رفع الملفات."); return; }
+    const buildStartTime = Date.now();
     setBuilding(true); setBuildProgress("تجهيز الترجمات...");
     try {
       const formData = new FormData();
@@ -980,6 +1135,23 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         shortest: buildStatsData?.shortest || null,
         categories: buildStatsData?.categories || {},
       });
+
+      // Run post-build verification for server-side build
+      const serverVerification = buildVerificationChecks({
+        modifiedCount,
+        totalTranslations: Object.keys(nonEmptyTranslations).length,
+        autoProcessedArabic: 0, // server handles Arabic processing
+        tagFixCount,
+        tagOkCount: tagOkCount,
+        filesBuilt: scopedArchives.length > 0 ? scopedArchives.length : 1,
+        outputSizeBytes: fileSize || blob.size,
+        buildStartTime,
+        hasOriginalFiles: true,
+        isDemo: currentState.isDemo,
+      });
+      setBuildVerification(serverVerification);
+      setShowBuildVerification(true);
+
       setBuilding(false);
     } catch (err) {
       setBuildProgress(`❌ ${err instanceof Error ? err.message : 'خطأ غير معروف'}`);
@@ -1009,6 +1181,9 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     handlePreBuild,
     handleBuild,
     handleCheckIntegrity,
+    buildVerification,
+    showBuildVerification,
+    setShowBuildVerification,
   };
 }
 

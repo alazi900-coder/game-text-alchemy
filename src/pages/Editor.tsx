@@ -54,6 +54,7 @@ const BuildConfirmDialog = React.lazy(() => import("@/components/editor/BuildCon
 const ConsistencyResultsPanel = React.lazy(() => import("@/components/editor/ConsistencyResultsPanel"));
 const IntegrityCheckDialog = React.lazy(() => import("@/components/editor/IntegrityCheckDialog"));
 const PreBuildDiagnostic = React.lazy(() => import("@/components/editor/PreBuildDiagnostic"));
+const BuildVerificationDialog = React.lazy(() => import("@/components/editor/BuildVerificationDialog"));
 const CompareEnginesDialog = React.lazy(() => import("@/components/editor/CompareEnginesDialog"));
 const SentenceSplitPanel = React.lazy(() => import("@/components/editor/SentenceSplitPanel"));
 const NewlineCleanPanel = React.lazy(() => import("@/components/editor/NewlineCleanPanel"));
@@ -2031,6 +2032,11 @@ const Editor = () => {
           onOpenChange={setShowDiagnostic}
           state={editor.state}
           onProceedToBuild={() => { setShowDiagnostic(false); editor.handlePreBuild(); }}
+        />
+        <BuildVerificationDialog
+          open={editor.showBuildVerification}
+          onOpenChange={editor.setShowBuildVerification}
+          result={editor.buildVerification}
         />
         <CompareEnginesDialog
           open={!!compareEntry}

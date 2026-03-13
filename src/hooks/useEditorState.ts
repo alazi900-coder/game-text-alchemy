@@ -104,7 +104,7 @@ export function useEditorState() {
   const { isTranslationTooShort, isTranslationTooLong, hasStuckChars, isMixedLanguage, needsImprovement, qualityStats, needsImproveCount, categoryProgress, translatedCount } = quality;
 
   const build = useEditorBuild({ state, setState, setLastSaved, arabicNumerals, mirrorPunctuation, gameType: currentGameType, forceSaveRef });
-  const { building, buildProgress, dismissBuildProgress, applyingArabic, buildStats, setBuildStats, buildPreview, showBuildConfirm, setShowBuildConfirm, bdatFileStats, integrityResult, showIntegrityDialog, setShowIntegrityDialog, checkingIntegrity, handleApplyArabicProcessing, handleUndoArabicProcessing, handlePreBuild, handleBuild, handleCheckIntegrity } = build;
+  const { building, buildProgress, dismissBuildProgress, applyingArabic, buildStats, setBuildStats, buildPreview, showBuildConfirm, setShowBuildConfirm, bdatFileStats, integrityResult, showIntegrityDialog, setShowIntegrityDialog, checkingIntegrity, handleApplyArabicProcessing, handleUndoArabicProcessing, handlePreBuild, handleBuild, handleCheckIntegrity, buildVerification, showBuildVerification, setShowBuildVerification } = build;
 
 
   // === Protection handlers ===
@@ -3406,7 +3406,7 @@ export function useEditorState() {
     handleGlossaryCompliance, handleApplyGlossaryFix, handleApplyAllGlossaryFixes,
     handleAcceptFuzzy, handleRejectFuzzy, handleAcceptAllFuzzy, handleRejectAllFuzzy,
     handleCloudSave, handleCloudLoad,
-    handleApplyArabicProcessing, handleUndoArabicProcessing, handlePreBuild, handleBuild, handleBulkReplace, loadDemoBdatData, loadGameEnglishTexts, handleCheckIntegrity, handleRestoreOriginals, handleRemoveAllDiacritics,
+    handleApplyArabicProcessing, handleUndoArabicProcessing, handlePreBuild, handleBuild, handleBulkReplace, loadDemoBdatData, loadGameEnglishTexts, handleCheckIntegrity, handleRestoreOriginals, handleRemoveAllDiacritics, buildVerification, showBuildVerification, setShowBuildVerification,
     handleScanMergedSentences, handleApplySentenceSplit, handleRejectSentenceSplit, handleApplyAllSentenceSplits,
     handleScanNewlines, handleApplyNewlineClean, handleRejectNewlineClean, handleApplyAllNewlineCleans,
     handleScanDiacritics, handleApplyDiacriticsClean, handleRejectDiacriticsClean, handleApplyAllDiacriticsCleans,
