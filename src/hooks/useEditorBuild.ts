@@ -404,6 +404,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
 
       // Check for Unity bundle meta (Fire Emblem flow)
       const bundleMeta = await idbGet<any[]>("editorBundleMeta");
+      console.log('[BUILD] Bundle meta:', bundleMeta ? `${bundleMeta.length} bundles` : 'NONE');
+      console.log('[BUILD] SARC archives:', allArchives.length > 0 ? `${allArchives.length} archives` : 'NONE');
 
       if (bundleMeta && bundleMeta.length > 0) {
         // === BUNDLE REPACK FLOW ===
