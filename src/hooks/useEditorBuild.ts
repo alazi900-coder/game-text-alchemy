@@ -158,6 +158,9 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     const sampleKeys = Object.keys(nonEmptyTranslations).slice(0, 10);
 
     console.log('[BUILD-PREVIEW] Total translations:', Object.keys(nonEmptyTranslations).length);
+    console.log('[BUILD-PREVIEW] Total entries in state:', currentState.entries.length);
+    console.log('[BUILD-PREVIEW] Total keys in state.translations:', Object.keys(currentState.translations).length);
+    console.log('[BUILD-PREVIEW] Non-empty translations:', Object.values(currentState.translations).filter(v => v && v.trim()).length);
     console.log('[BUILD-PREVIEW] Overflow:', overflowCount, 'Unprocessed Arabic:', unprocessedArabicCount);
     console.log('[BUILD-PREVIEW] BDAT files:', affectedFileCount, 'isDemo:', isDemo);
 
