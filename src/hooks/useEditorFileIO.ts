@@ -784,6 +784,7 @@ export function useEditorFileIO({ state, setState, setLastSaved, filteredEntries
     if (directMatchCount > 0) statsDetails.push(`${directMatchCount} مباشرة`);
     if (legacyConverted > 0) statsDetails.push(`${legacyConverted} محوّلة من صيغة قديمة 🔑`);
     if (fpRemappedTotal > 0) statsDetails.push(`${fpRemappedTotal} عبر البصمة 🔄`);
+    if (msbtRemapped > 0) statsDetails.push(`${msbtRemapped} MSBT أُعيد ربطها 🔗`);
     const statsInfo = statsDetails.length > 0 ? ` (${statsDetails.join(' + ')})` : '';
     let msg: string;
     if (isDemo) {
