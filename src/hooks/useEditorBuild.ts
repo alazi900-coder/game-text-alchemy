@@ -750,6 +750,33 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — الملفات في ملف ZIP`);
       }
 
+      // Calculate output metrics for verification
+      let outputSizeBytes = 0;
+      let originalSizeBytes = 0;
+      let filesBuilt = 0;
+
+      if (bundleMeta && bundleMeta.length > 0) {
+        filesBuilt = bundleMeta.length;
+        for (const meta of bundleMeta) {
+          const origBuf = meta.originalBuffer instanceof ArrayBuffer ? meta.originalBuffer : new Uint8Array(meta.originalBuffer).buffer;
+          originalSizeBytes += origBuf.byteLength;
+        }
+        // Output size is approximated from rebuilt data
+        for (const data of Object.values(rebuiltMsbtFiles)) {
+          outputSizeBytes += data.byteLength;
+        }
+      } else if (scopedArchives.length > 0) {
+        filesBuilt = scopedArchives.length;
+        for (const data of Object.values(rebuiltMsbtFiles)) {
+          outputSizeBytes += data.byteLength;
+        }
+      } else {
+        filesBuilt = Object.keys(rebuiltMsbtFiles).length;
+        for (const data of Object.values(rebuiltMsbtFiles)) {
+          outputSizeBytes += data.byteLength;
+        }
+      }
+
       // Save translations snapshot
       try {
         const { idbSet } = await import("@/lib/idb-storage");
@@ -763,6 +790,23 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       } catch (e) {
         console.warn("Could not save build translations snapshot:", e);
       }
+
+      // Run post-build verification
+      const verification = buildVerificationChecks({
+        modifiedCount,
+        totalTranslations: Object.keys(nonEmptyTranslations).length,
+        autoProcessedArabic: autoProcessedCount,
+        tagFixCount,
+        tagOkCount,
+        filesBuilt,
+        outputSizeBytes,
+        originalSizeBytes: originalSizeBytes > 0 ? originalSizeBytes : undefined,
+        buildStartTime,
+        hasOriginalFiles: !!(msbtFiles && Object.keys(msbtFiles).length > 0),
+        isDemo: currentState.isDemo,
+      });
+      setBuildVerification(verification);
+      setShowBuildVerification(true);
 
       setBuilding(false);
     } catch (err) {
