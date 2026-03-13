@@ -826,15 +826,13 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
 
           // === BINARY VALIDATION for SARC before download ===
           setBuildProgress("فحص ثنائي لأرشيف SARC...");
-          const { parseSarc } = await import("@/lib/sarc-parser");
-          let sarcValidationBuffer: ArrayBuffer;
-          try {
-            const decompressed = await parseSarc(compressed);
-            sarcValidationBuffer = decompressed.rawBuffer || compressed;
-          } catch {
-            sarcValidationBuffer = compressed;
-          }
-          const sarcValidation = validateSarc(sarcValidationBuffer);
+          // Validate rebuilt MSBT data within the SARC entries
+          const sarcMsbtData = sarcEntries.filter(e => e.name.endsWith('.msbt')).map(e => e.data);
+          const combinedLen = sarcMsbtData.reduce((s, d) => s + d.byteLength, 0);
+          const combinedBuf = new Uint8Array(combinedLen);
+          let offset = 0;
+          for (const d of sarcMsbtData) { combinedBuf.set(d, offset); offset += d.byteLength; }
+          const sarcValidation = validateSarc(combinedBuf.buffer as ArrayBuffer);
           for (const c of sarcValidation.checks) {
             log(`[BUILD] [SARC-BINARY] ${c.status === 'pass' ? '✅' : c.status === 'warn' ? '⚠️' : '❌'} ${c.label}: ${c.detail}`);
           }
