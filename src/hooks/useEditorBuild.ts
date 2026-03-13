@@ -8,7 +8,7 @@ import type { BuildVerificationResult, VerificationCheck } from "@/components/ed
 import type { MutableRefObject } from "react";
 import { normalizeMsbtTranslations, extractShortMsbtName } from "@/lib/msbt-key-normalizer";
 import { sanitizeTranslations } from "@/lib/sanitize-translations";
-import { validateBundle, validateSarc } from "@/lib/bundle-validator";
+import { validateBundle, validateSarcMsbts } from "@/lib/bundle-validator";
 
 export interface BuildStats {
   modifiedCount: number;
