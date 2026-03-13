@@ -1,10 +1,13 @@
+import { useState } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, AlertTriangle, XCircle, Loader2, ShieldCheck, FileDown } from "lucide-react";
+import { CheckCircle2, AlertTriangle, XCircle, ShieldCheck, Copy, ChevronDown, ChevronUp } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { toast } from "@/hooks/use-toast";
 
 export interface VerificationCheck {
   label: string;
@@ -29,6 +32,7 @@ interface BuildVerificationDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   result: BuildVerificationResult | null;
+  buildLog?: string[];
 }
 
 const StatusIcon = ({ status }: { status: VerificationCheck["status"] }) => {
@@ -45,7 +49,17 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-const BuildVerificationDialog = ({ open, onOpenChange, result }: BuildVerificationDialogProps) => {
+function getLogLineColor(line: string): string {
+  if (line.includes("❌") || line.includes("ERROR") || line.includes("fail")) return "text-destructive";
+  if (line.includes("⚠️") || line.includes("WARN") || line.includes("تحذير")) return "text-yellow-500";
+  if (line.includes("✅") || line.includes("اكتمل") || line.includes("بنجاح")) return "text-secondary";
+  if (line.includes("═══")) return "text-primary font-bold";
+  return "text-muted-foreground";
+}
+
+const BuildVerificationDialog = ({ open, onOpenChange, result, buildLog }: BuildVerificationDialogProps) => {
+  const [logOpen, setLogOpen] = useState(false);
+
   if (!result) return null;
 
   const failCount = result.checks.filter(c => c.status === "fail").length;
@@ -58,6 +72,13 @@ const BuildVerificationDialog = ({ open, onOpenChange, result }: BuildVerificati
   const sizeRatio = result.originalSizeBytes && result.originalSizeBytes > 0
     ? (result.outputSizeBytes / result.originalSizeBytes * 100).toFixed(0)
     : null;
+
+  const handleCopyLog = () => {
+    if (!buildLog?.length) return;
+    navigator.clipboard.writeText(buildLog.join("\n")).then(() => {
+      toast({ title: "✅ تم نسخ السجل", description: `${buildLog.length} سطر` });
+    });
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -134,6 +155,33 @@ const BuildVerificationDialog = ({ open, onOpenChange, result }: BuildVerificati
              `⚠️ ${warnCount} تحذير — قد يعمل الملف`}
           </p>
         </div>
+
+        {/* Build Log (Collapsible) */}
+        {buildLog && buildLog.length > 0 && (
+          <Collapsible open={logOpen} onOpenChange={setLogOpen}>
+            <div className="flex items-center gap-2">
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="flex-1 font-display text-xs gap-1.5">
+                  {logOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  سجل البناء ({buildLog.length} سطر)
+                </Button>
+              </CollapsibleTrigger>
+              <Button variant="ghost" size="sm" className="text-xs gap-1" onClick={handleCopyLog}>
+                <Copy className="w-3.5 h-3.5" />
+                نسخ
+              </Button>
+            </div>
+            <CollapsibleContent>
+              <ScrollArea className="max-h-52 mt-1.5 rounded border border-border bg-muted/30 p-2">
+                <div className="space-y-0.5 font-mono text-[10px] leading-relaxed" dir="ltr">
+                  {buildLog.map((line, i) => (
+                    <p key={i} className={getLogLineColor(line)}>{line}</p>
+                  ))}
+                </div>
+              </ScrollArea>
+            </CollapsibleContent>
+          </Collapsible>
+        )}
 
         <DialogFooter>
           <Button onClick={() => onOpenChange(false)} className="font-display font-bold w-full">

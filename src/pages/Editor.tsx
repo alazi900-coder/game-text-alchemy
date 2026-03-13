@@ -2037,6 +2037,7 @@ const Editor = () => {
           open={editor.showBuildVerification}
           onOpenChange={editor.setShowBuildVerification}
           result={editor.buildVerification}
+          buildLog={editor.lastBuildLog}
         />
         <CompareEnginesDialog
           open={!!compareEntry}
