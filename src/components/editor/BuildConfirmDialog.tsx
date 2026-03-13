@@ -42,6 +42,9 @@ interface BuildConfirmDialogProps {
 }
 
 const BuildConfirmDialog = ({ open, onOpenChange, preview, onConfirm, building }: BuildConfirmDialogProps) => {
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [expandedBundle, setExpandedBundle] = useState<string | null>(null);
+
   if (!preview) return null;
 
   const hasWarnings = (preview.overflowCount || 0) > 0 || (preview.unprocessedArabicCount || 0) > 0 || preview.isDemo;
