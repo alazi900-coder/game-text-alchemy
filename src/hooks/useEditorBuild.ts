@@ -588,6 +588,56 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       log(`[BUILD] Files with no matches: ${filesWithNoMatch}/${fileNamesToBuild.length}`);
       log(`[BUILD] Rebuilt files: ${Object.keys(rebuiltMsbtFiles).length}`);
 
+      // === STRICT 100% POLICY: fail if ANY file has zero matches ===
+      if (filesWithNoMatch > 0) {
+        const unmatchedFiles = fileNamesToBuild.filter(fileName => {
+          const buf = msbtFiles[fileName];
+          if (!buf) return false;
+          let indexMap = keyByMsbtNameAndIndex.get(fileName);
+          if (!indexMap) {
+            const shortName = extractShortMsbtName(`msbt:${fileName}`);
+            if (shortName && shortName !== fileName) {
+              for (const [k, v] of keyByMsbtNameAndIndex.entries()) {
+                if (extractShortMsbtName(`msbt:${k}`) === shortName) { indexMap = v; break; }
+              }
+            }
+          }
+          if (!indexMap) return true;
+          // Check if at least one entry matched
+          for (const [, canonicalKey] of indexMap.entries()) {
+            if (nonEmptyTranslations[canonicalKey]?.trim()) return false;
+          }
+          return true;
+        });
+
+        log(`[BUILD] ❌ STRICT POLICY: ${filesWithNoMatch} files with 0% match — BUILD ABORTED`);
+        for (const f of unmatchedFiles) log(`[BUILD]   ⛔ ${f}`);
+
+        setLastBuildLog([...buildLog]);
+        const failChecks: VerificationCheck[] = [
+          { label: "سياسة المطابقة الصارمة", status: "fail", detail: `${filesWithNoMatch} ملف MSBT بدون أي ترجمة مطابقة — البناء مرفوض` },
+          ...unmatchedFiles.slice(0, 10).map(f => ({ label: f, status: "fail" as const, detail: "0% مطابقة — لم تُحقن أي ترجمة" })),
+        ];
+        if (unmatchedFiles.length > 10) {
+          failChecks.push({ label: "ملفات أخرى", status: "fail", detail: `و ${unmatchedFiles.length - 10} ملف آخر بنفس المشكلة` });
+        }
+        setBuildVerification({
+          checks: failChecks,
+          outputSizeBytes: 0,
+          translationsApplied: modifiedCount,
+          translationsExpected: Object.keys(nonEmptyTranslations).length,
+          autoProcessedArabic: autoProcessedCount,
+          tagsFixed: tagFixCount,
+          tagsOk: tagOkCount,
+          filesBuilt: 0,
+          buildDurationMs: Date.now() - buildStartTime,
+        });
+        setShowBuildVerification(true);
+        setBuildProgress("❌ فشل البناء — ملفات بدون ترجمات مطابقة");
+        setBuilding(false);
+        return;
+      }
+
       // Now repack into SARC.ZS if archives exist
       type SarcMeta = {
         originalFileName: string;
