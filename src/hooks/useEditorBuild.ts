@@ -1135,6 +1135,23 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         shortest: buildStatsData?.shortest || null,
         categories: buildStatsData?.categories || {},
       });
+
+      // Run post-build verification for server-side build
+      const serverVerification = buildVerificationChecks({
+        modifiedCount,
+        totalTranslations: Object.keys(nonEmptyTranslations).length,
+        autoProcessedArabic: 0, // server handles Arabic processing
+        tagFixCount,
+        tagOkCount: tagOkCount,
+        filesBuilt: scopedArchives.length > 0 ? scopedArchives.length : 1,
+        outputSizeBytes: fileSize || blob.size,
+        buildStartTime,
+        hasOriginalFiles: true,
+        isDemo: currentState.isDemo,
+      });
+      setBuildVerification(serverVerification);
+      setShowBuildVerification(true);
+
       setBuilding(false);
     } catch (err) {
       setBuildProgress(`❌ ${err instanceof Error ? err.message : 'خطأ غير معروف'}`);
