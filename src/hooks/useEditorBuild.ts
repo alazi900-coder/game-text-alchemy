@@ -372,15 +372,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         return;
       }
 
-      // Extract unique MSBT file names from editor entries
-      const activeMsbtFileSet = new Set<string>();
-      for (const entry of currentState.entries) {
-        // entry.msbtFile format: "msbt:scopedName:label"
-        const parts = entry.msbtFile.split(':');
-        if (parts.length >= 3 && parts[0] === 'msbt') {
-          activeMsbtFileSet.add(parts[1]);
-        }
-      }
+      const { validEntryKeySet, entriesByMsbtName, keyByMsbtNameAndIndex } = buildEntryLookupMaps(currentState.entries);
+      const activeMsbtFileSet = new Set<string>(entriesByMsbtName.keys());
       
       // Match against stored file names — try exact match first, then fallback to contains
       let fileNamesToBuild = Array.from(new Set(msbtFileNames.filter(name => activeMsbtFileSet.has(name))));
