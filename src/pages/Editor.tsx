@@ -1625,6 +1625,9 @@ const Editor = () => {
                   <DropdownMenuItem onClick={() => setShowClearConfirm(editor.isFilterActive ? 'filtered' : 'all')} disabled={editor.translatedCount === 0} className="text-destructive focus:text-destructive">
                     <Trash2 className="w-4 h-4" /> {editor.isFilterActive ? `مسح ترجمة القسم المحدد 🗑️` : `مسح جميع الترجمات 🗑️`}
                   </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setShowCacheResetConfirm(true)} className="text-destructive focus:text-destructive">
+                    <RotateCcw className="w-4 h-4" /> إعادة تعيين الكاش المحلي 🧹
+                  </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
