@@ -3,7 +3,7 @@ import type { IntegrityCheckResult } from "@/components/editor/IntegrityCheckDia
 import { idbGet } from "@/lib/idb-storage";
 import { processArabicText, hasArabicChars as hasArabicCharsProcessing, hasArabicPresentationForms, removeArabicPresentationForms, reverseBidi } from "@/lib/arabic-processing";
 import { EditorState, hasTechnicalTags, restoreTagsLocally } from "@/components/editor/types";
-import { BuildPreview } from "@/components/editor/BuildConfirmDialog";
+import { BuildPreview, BundleDiagnostic } from "@/components/editor/BuildConfirmDialog";
 import type { MutableRefObject } from "react";
 
 export interface BuildStats {
@@ -157,12 +157,79 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
 
     const sampleKeys = Object.keys(nonEmptyTranslations).slice(0, 10);
 
+    // Build bundle diagnostics
+    const bundleDiagnostics: BundleDiagnostic[] = [];
+    const bundleMeta = await idbGet<any[]>("editorBundleMeta");
+    const sarcArchives = await idbGet<any[]>("editorSarcArchives");
+
+    if (bundleMeta && bundleMeta.length > 0) {
+      for (const meta of bundleMeta) {
+        const msbtFilesInfo: BundleDiagnostic['msbtFiles'] = [];
+        let totalKeys = 0;
+        let matchedTranslations = 0;
+
+        const scopedMap: Record<string, string> = meta.scopedMsbtByAssetKey || {};
+        for (const asset of (meta.assets || [])) {
+          const pathId = typeof asset.pathId === 'bigint' ? asset.pathId.toString() : String(asset.pathId ?? asset.entryIndex ?? '0');
+          const assetKey = `${asset.name}#${pathId}`;
+          const lookupName = scopedMap[assetKey] || (asset.name.endsWith('.msbt') ? asset.name : `${asset.name}.msbt`);
+
+          // Count entries for this MSBT from state
+          const entriesForFile = currentState.entries.filter(e => e.msbtFile === lookupName || e.msbtFile.includes(lookupName));
+          const keys = entriesForFile.length;
+          const translated = entriesForFile.filter(e => {
+            const k = `${e.msbtFile}:${e.index}`;
+            return nonEmptyTranslations[k];
+          }).length;
+
+          if (keys > 0) {
+            msbtFilesInfo.push({ name: asset.name || lookupName, keys, translated });
+            totalKeys += keys;
+            matchedTranslations += translated;
+          }
+        }
+
+        bundleDiagnostics.push({
+          bundleName: meta.originalFileName || 'Unknown Bundle',
+          totalKeys,
+          matchedTranslations,
+          msbtFiles: msbtFilesInfo.sort((a, b) => b.keys - a.keys),
+        });
+      }
+    } else if (sarcArchives && sarcArchives.length > 0) {
+      for (const archive of sarcArchives) {
+        const msbtFilesInfo: BundleDiagnostic['msbtFiles'] = [];
+        let totalKeys = 0;
+        let matchedTranslations = 0;
+
+        for (const msbtName of (archive.msbtEntryNames || [])) {
+          const shortName = msbtName.replace(/.*[/\\]/, '');
+          const scoped = archive.scopedMsbtNames?.find((s: any) => s.entryName === msbtName)?.extractedName || shortName;
+          const entriesForFile = currentState.entries.filter(e => e.msbtFile === scoped || e.msbtFile.includes(scoped));
+          const keys = entriesForFile.length;
+          const translated = entriesForFile.filter(e => {
+            const k = `${e.msbtFile}:${e.index}`;
+            return nonEmptyTranslations[k];
+          }).length;
+
+          if (keys > 0) {
+            msbtFilesInfo.push({ name: shortName, keys, translated });
+            totalKeys += keys;
+            matchedTranslations += translated;
+          }
+        }
+
+        bundleDiagnostics.push({
+          bundleName: archive.originalFileName || 'Unknown SARC',
+          totalKeys,
+          matchedTranslations,
+          msbtFiles: msbtFilesInfo.sort((a, b) => b.keys - a.keys),
+        });
+      }
+    }
+
     console.log('[BUILD-PREVIEW] Total translations:', Object.keys(nonEmptyTranslations).length);
-    console.log('[BUILD-PREVIEW] Total entries in state:', currentState.entries.length);
-    console.log('[BUILD-PREVIEW] Total keys in state.translations:', Object.keys(currentState.translations).length);
-    console.log('[BUILD-PREVIEW] Non-empty translations:', Object.values(currentState.translations).filter(v => v && v.trim()).length);
-    console.log('[BUILD-PREVIEW] Overflow:', overflowCount, 'Unprocessed Arabic:', unprocessedArabicCount);
-    console.log('[BUILD-PREVIEW] BDAT files:', affectedFileCount, 'isDemo:', isDemo);
+    console.log('[BUILD-PREVIEW] Bundle diagnostics:', bundleDiagnostics);
 
     setBuildPreview({
       totalTranslations: Object.keys(nonEmptyTranslations).length,
@@ -175,6 +242,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       hasBdatFiles,
       isDemo,
       affectedFileCount,
+      bundleDiagnostics: bundleDiagnostics.length > 0 ? bundleDiagnostics : undefined,
     });
     setShowBuildConfirm(true);
   };
