@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { CheckCircle2, AlertTriangle, XCircle, Loader2, Stethoscope } from "lucide-react";
 import { idbGet } from "@/lib/idb-storage";
 import type { EditorState } from "@/components/editor/types";
+import { normalizeMsbtTranslations } from "@/lib/msbt-key-normalizer";
 
 interface DiagnosticCheck {
   label: string;
