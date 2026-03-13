@@ -526,7 +526,9 @@ export interface RepackResult {
 
 /**
  * Repack a bundle with modified assets.
- * `replacements` maps asset name → new Uint8Array data.
+ * `replacements` maps either:
+ *  - `${assetName}#${pathId}` → new Uint8Array data (preferred, disambiguates duplicates)
+ *  - assetName → new Uint8Array data (legacy fallback)
  * Only TextAssets with valid offset tracking can be replaced.
  */
 export function repackBundle(
@@ -562,7 +564,8 @@ export function repackBundle(
     // Check if any assets in this entry need replacement
     const entryReplacements: { asset: ExtractedAsset; newData: Uint8Array }[] = [];
     for (const a of entryAssets) {
-      const newData = replacements.get(a.name);
+      const replacementKey = `${a.name}#${a.pathId.toString()}`;
+      const newData = replacements.get(replacementKey) ?? replacements.get(a.name);
       if (newData && a.textAssetDataLenOffset >= 0 && a.textAssetDataBytesOffset >= 0) {
         entryReplacements.push({ asset: a, newData });
       }
