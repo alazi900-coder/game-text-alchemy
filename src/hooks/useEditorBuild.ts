@@ -3,7 +3,7 @@ import type { IntegrityCheckResult } from "@/components/editor/IntegrityCheckDia
 import { idbGet } from "@/lib/idb-storage";
 import { processArabicText, hasArabicChars as hasArabicCharsProcessing, hasArabicPresentationForms, removeArabicPresentationForms, reverseBidi } from "@/lib/arabic-processing";
 import { EditorState, hasTechnicalTags, restoreTagsLocally } from "@/components/editor/types";
-import { BuildPreview } from "@/components/editor/BuildConfirmDialog";
+import { BuildPreview, BundleDiagnostic } from "@/components/editor/BuildConfirmDialog";
 import type { MutableRefObject } from "react";
 
 export interface BuildStats {
