@@ -96,7 +96,7 @@ class BinaryWriter {
   patchU32(offset: number, value: number) { this.view.setUint32(offset, value, this.le); }
   patchU64(offset: number, value: bigint) { this.view.setBigUint64(offset, value, this.le); }
 
-  toUint8Array(): Uint8Array { return new Uint8Array(this.buf.buffer, 0, this.pos); }
+  toUint8Array(): Uint8Array { return this.buf.slice(0, this.pos); }
 }
 
 /* ───────── Types ───────── */
