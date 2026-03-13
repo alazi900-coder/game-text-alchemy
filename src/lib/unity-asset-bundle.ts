@@ -796,17 +796,22 @@ function rebuildSerializedFile(
 }
 
 /** Build block info buffer for the new bundle */
-function buildBlockInfoBuffer(dataSize: number, entries: DirectoryEntry[]): Uint8Array {
+function buildBlockInfoBuffer(
+  decompressedDataSize: number,
+  compressedDataSize: number,
+  blockCompression: number,
+  entries: DirectoryEntry[],
+): Uint8Array {
   const w = new BinaryWriter(4096);
 
   // Hash (16 zero bytes)
   for (let i = 0; i < 16; i++) w.writeU8(0);
 
-  // Block count = 1 (single uncompressed block)
+  // Block count = 1
   w.writeU32(1);
-  w.writeU32(dataSize); // decompressed size
-  w.writeU32(dataSize); // compressed size (same, no compression)
-  w.writeU16(0); // flags: no compression
+  w.writeU32(decompressedDataSize); // decompressed size
+  w.writeU32(compressedDataSize);   // compressed size
+  w.writeU16(blockCompression);     // flags: compression type
 
   // Directory entries
   w.writeU32(entries.length);
