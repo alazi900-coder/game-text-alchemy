@@ -133,6 +133,7 @@ const Editor = () => {
   const [compareEntry, setCompareEntry] = React.useState<import("@/components/editor/types").ExtractedEntry | null>(null);
   const [showClearConfirm, setShowClearConfirm] = React.useState<'all' | 'filtered' | null>(null);
   const [showTagRepair, setShowTagRepair] = React.useState(false);
+  const [showCacheResetConfirm, setShowCacheResetConfirm] = React.useState(false);
   const [showArabicProcessConfirm, setShowArabicProcessConfirm] = React.useState(false);
   const [showFontTest, setShowFontTest] = React.useState(false);
   const [fontTestWord, setFontTestWord] = React.useState("");
