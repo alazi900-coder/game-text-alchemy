@@ -407,7 +407,21 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         // Build translations map: label → translated text
         // Editor keys are "msbt:filename:label:index" where index is the entry's position
         const translationsForFile: Record<string, string> = {};
-        const indexMap = keyByMsbtNameAndIndex.get(fileName);
+        let indexMap = keyByMsbtNameAndIndex.get(fileName);
+        // Fallback: try matching by short MSBT name if scoped name didn't match
+        if (!indexMap) {
+          const shortName = extractShortMsbtName(`msbt:${fileName}`);
+          if (shortName && shortName !== fileName) {
+            for (const [k, v] of keyByMsbtNameAndIndex.entries()) {
+              const kShort = extractShortMsbtName(`msbt:${k}`);
+              if (kShort === shortName) {
+                indexMap = v;
+                console.log(`[BUILD] Fallback match: ${fileName} → ${k} (via short name ${shortName})`);
+                break;
+              }
+            }
+          }
+        }
         for (let ei = 0; ei < msbt.entries.length; ei++) {
           const entry = msbt.entries[ei];
           const canonicalKey = indexMap?.get(ei) || `msbt:${fileName}:${entry.label}:${ei}`;
