@@ -438,10 +438,11 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         // Build translations map: label → translated text
         // Editor keys are "msbt:filename:label:index" where index is the entry's position
         const translationsForFile: Record<string, string> = {};
+        const indexMap = keyByMsbtNameAndIndex.get(fileName);
         for (let ei = 0; ei < msbt.entries.length; ei++) {
           const entry = msbt.entries[ei];
-          const key = `msbt:${fileName}:${entry.label}:${ei}`;
-          const trans = nonEmptyTranslations[key];
+          const canonicalKey = indexMap?.get(ei) || `msbt:${fileName}:${entry.label}:${ei}`;
+          const trans = nonEmptyTranslations[canonicalKey];
           if (trans && trans.trim()) {
             translationsForFile[entry.label] = trans;
             modifiedCount++;
