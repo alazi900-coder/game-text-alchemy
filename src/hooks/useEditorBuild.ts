@@ -1181,6 +1181,9 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     handlePreBuild,
     handleBuild,
     handleCheckIntegrity,
+    buildVerification,
+    showBuildVerification,
+    setShowBuildVerification,
   };
 }
 
