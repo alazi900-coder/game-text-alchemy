@@ -416,17 +416,27 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       await forceSaveRef.current();
     }
     const buildStartTime = Date.now();
+    const buildLog: string[] = [];
+    const log = (msg: string) => { console.log(msg); buildLog.push(`${((Date.now() - buildStartTime) / 1000).toFixed(2)}s ${msg}`); };
+
     setBuilding(true); setBuildProgress("تجهيز الترجمات...");
     try {
+      log('[BUILD] ═══ بدء عملية البناء ═══');
+      log(`[BUILD] نوع اللعبة: ${gameType || 'غير محدد'}`);
+      log(`[BUILD] عدد المدخلات: ${currentState.entries.length}`);
+      log(`[BUILD] عدد الترجمات: ${Object.keys(currentState.translations || {}).length}`);
+      log(`[BUILD] translations type: ${typeof currentState.translations}`);
+
       const msbtFiles = await idbGet<Record<string, ArrayBuffer>>("editorMsbtFiles");
       const msbtFileNames = await idbGet<string[]>("editorMsbtFileNames");
       const extractionSessionId = await idbGet<string>("extractionSessionId");
 
-      console.log('[BUILD] Session ID:', extractionSessionId);
-      console.log('[BUILD] MSBT files in IDB:', msbtFileNames?.length ?? 0);
-      console.log('[BUILD] MSBT file keys in buffer map:', msbtFiles ? Object.keys(msbtFiles).length : 0);
+      log(`[BUILD] Session ID: ${extractionSessionId}`);
+      log(`[BUILD] MSBT files in IDB: ${msbtFileNames?.length ?? 0}`);
+      log(`[BUILD] MSBT file keys in buffer map: ${msbtFiles ? Object.keys(msbtFiles).length : 0}`);
 
       if (!msbtFiles || !msbtFileNames || msbtFileNames.length === 0) {
+        log('[BUILD] ❌ لا توجد ملفات MSBT');
         setBuildProgress("❌ لا توجد ملفات MSBT. يرجى العودة لصفحة المعالجة وإعادة رفع الملفات.");
         setBuilding(false);
         return;
@@ -435,23 +445,35 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       const { validEntryKeySet, entriesByMsbtName, keyByMsbtNameAndIndex } = buildEntryLookupMaps(currentState.entries);
       const activeMsbtFileSet = new Set<string>(entriesByMsbtName.keys());
       
+      log(`[BUILD] validEntryKeySet size: ${validEntryKeySet.size}`);
+      log(`[BUILD] entriesByMsbtName size: ${entriesByMsbtName.size}`);
+      log(`[BUILD] keyByMsbtNameAndIndex size: ${keyByMsbtNameAndIndex.size}`);
+
       // Match against stored file names — try exact match first, then fallback to contains
       let fileNamesToBuild = Array.from(new Set(msbtFileNames.filter(name => activeMsbtFileSet.has(name))));
       
       // Fallback: if no exact matches, try matching stored names against active set more loosely
       if (fileNamesToBuild.length === 0 && activeMsbtFileSet.size > 0) {
-        console.warn('[BUILD] No exact match between msbtFileNames and activeMsbtFileSet. Trying fallback...');
-        console.log('[BUILD] activeMsbtFileSet sample:', [...activeMsbtFileSet].slice(0, 5));
-        console.log('[BUILD] msbtFileNames sample:', msbtFileNames.slice(0, 5));
-        // Use all stored files as fallback
+        log('[BUILD] ⚠️ No exact match — using fallback');
+        log(`[BUILD] activeMsbtFileSet sample: ${[...activeMsbtFileSet].slice(0, 3).join(', ')}`);
+        log(`[BUILD] msbtFileNames sample: ${msbtFileNames.slice(0, 3).join(', ')}`);
         fileNamesToBuild = [...msbtFileNames];
       }
 
-      console.log('[BUILD] Active MSBT files from entries:', activeMsbtFileSet.size);
-      console.log('[BUILD] Files to build:', fileNamesToBuild.length);
+      log(`[BUILD] Active MSBT files from entries: ${activeMsbtFileSet.size}`);
+      log(`[BUILD] Files to build: ${fileNamesToBuild.length}`);
 
       if (fileNamesToBuild.length === 0) {
+        log('[BUILD] ❌ لا توجد ملفات مطابقة');
         setBuildProgress("❌ لا توجد ملفات مطابقة لهذه الجلسة. أعد الاستخراج من صفحة الرفع.");
+        setBuilding(false);
+        return;
+      }
+
+      // Defensive: ensure translations is an object
+      if (!currentState.translations || typeof currentState.translations !== 'object' || Array.isArray(currentState.translations)) {
+        log(`[BUILD] ❌ translations is not an object: ${typeof currentState.translations}`);
+        setBuildProgress("❌ خطأ: بيانات الترجمات تالفة. أعد تحميل الصفحة.");
         setBuilding(false);
         return;
       }
@@ -462,9 +484,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         keyByMsbtNameAndIndex,
       );
 
-      if (remapped > 0 || dropped > 0) {
-        console.log(`[BUILD] Normalized translations before build: remapped=${remapped}, dropped=${dropped}`);
-      }
+      log(`[BUILD] Normalized: ${Object.keys(nonEmptyTranslations).length} translations, remapped=${remapped}, dropped=${dropped}`);
 
       // Auto Arabic processing before build
       let autoProcessedCount = 0;
@@ -476,6 +496,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         autoProcessedCount++;
       }
       if (autoProcessedCount > 0) {
+        log(`[BUILD] Arabic auto-processed: ${autoProcessedCount}`);
         setBuildProgress(`✅ تمت معالجة ${autoProcessedCount} نص عربي تلقائياً...`);
         await new Promise(r => setTimeout(r, 500));
       }
@@ -497,7 +518,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           tagOkCount++;
         }
       }
-      if (tagFixCount > 0) console.log(`[BUILD-TAGS] Fixed: ${tagFixCount}, OK: ${tagOkCount}`);
+      log(`[BUILD] Tags — fixed: ${tagFixCount}, OK: ${tagOkCount}`);
 
       // Import MSBT parser + rebuilder
       const { parseMsbtFile, rebuildMsbt } = await import("@/lib/msbt-parser");
@@ -505,17 +526,22 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       // Rebuild each MSBT file locally with translations injected
       let modifiedCount = 0;
       const rebuiltMsbtFiles: Record<string, Uint8Array> = {};
+      let filesWithNoMatch = 0;
+      let totalMsbtEntries = 0;
 
       for (let fi = 0; fi < fileNamesToBuild.length; fi++) {
         const fileName = fileNamesToBuild[fi];
         const buf = msbtFiles[fileName];
-        if (!buf) continue;
+        if (!buf) {
+          log(`[BUILD] ⚠️ ${fileName}: buffer not found in IDB`);
+          continue;
+        }
         setBuildProgress(`معالجة ${fi + 1}/${fileNamesToBuild.length}: ${fileName}...`);
 
         const msbt = parseMsbtFile(new Uint8Array(buf));
+        totalMsbtEntries += msbt.entries.length;
 
         // Build translations map: label → translated text
-        // Editor keys are "msbt:filename:label:index" where index is the entry's position
         const translationsForFile: Record<string, string> = {};
         let indexMap = keyByMsbtNameAndIndex.get(fileName);
         // Fallback: try matching by short MSBT name if scoped name didn't match
@@ -526,7 +552,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
               const kShort = extractShortMsbtName(`msbt:${k}`);
               if (kShort === shortName) {
                 indexMap = v;
-                console.log(`[BUILD] Fallback match: ${fileName} → ${k} (via short name ${shortName})`);
+                log(`[BUILD] Fallback match: ${fileName} → ${k}`);
                 break;
               }
             }
@@ -542,16 +568,24 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           }
         }
 
-        console.log(`[BUILD] ${fileName}: ${Object.keys(translationsForFile).length} translations applied out of ${msbt.entries.length} entries`);
+        const applied = Object.keys(translationsForFile).length;
+        if (applied === 0) {
+          filesWithNoMatch++;
+          log(`[BUILD] ⚠️ ${fileName}: 0/${msbt.entries.length} translations matched`);
+        }
 
-        if (Object.keys(translationsForFile).length > 0) {
+        if (applied > 0) {
           rebuiltMsbtFiles[fileName] = rebuildMsbt(msbt, translationsForFile);
         } else {
-          // No translations for this file — keep original
-          console.warn(`[BUILD] ⚠️ ${fileName}: NO translations matched — file will be unchanged`);
           rebuiltMsbtFiles[fileName] = new Uint8Array(buf);
         }
       }
+
+      log(`[BUILD] ═══ MSBT rebuild complete ═══`);
+      log(`[BUILD] Modified entries: ${modifiedCount}`);
+      log(`[BUILD] Total MSBT entries parsed: ${totalMsbtEntries}`);
+      log(`[BUILD] Files with no matches: ${filesWithNoMatch}/${fileNamesToBuild.length}`);
+      log(`[BUILD] Rebuilt files: ${Object.keys(rebuiltMsbtFiles).length}`);
 
       // Now repack into SARC.ZS if archives exist
       type SarcMeta = {
@@ -597,17 +631,19 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
 
       // Check for Unity bundle meta (Fire Emblem flow)
       const bundleMeta = await idbGet<any[]>("editorBundleMeta");
-      console.log('[BUILD] Bundle meta:', bundleMeta ? `${bundleMeta.length} bundles` : 'NONE');
-      console.log('[BUILD] SARC archives:', allArchives.length > 0 ? `${allArchives.length} archives` : 'NONE');
+      log(`[BUILD] Bundle meta: ${bundleMeta ? `${bundleMeta.length} bundles` : 'NONE'}`);
+      log(`[BUILD] SARC archives: ${allArchives.length > 0 ? `${allArchives.length} archives` : 'NONE'}`);
 
       if (bundleMeta && bundleMeta.length > 0) {
         // === BUNDLE REPACK FLOW ===
+        log(`[BUILD] ═══ Bundle repack flow ═══`);
         const { repackBundle, isMsbt } = await import("@/lib/unity-asset-bundle");
         const JSZip = (await import("jszip")).default;
 
         if (bundleMeta.length === 1) {
           const meta = bundleMeta[0];
           setBuildProgress("إعادة بناء Bundle...");
+          log(`[BUILD] Single bundle: ${meta.originalFileName}, assets: ${meta.assets?.length}`);
 
           const originalBuffer = meta.originalBuffer instanceof ArrayBuffer ? meta.originalBuffer : new Uint8Array(meta.originalBuffer).buffer;
           const decompressedData = meta.decompressedData instanceof ArrayBuffer ? new Uint8Array(meta.decompressedData) : new Uint8Array(meta.decompressedData);
@@ -620,11 +656,14 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
             const rebuiltData = rebuiltMsbtFiles[lookupName];
             if (rebuiltData) {
               replacements.set(makeAssetReplacementKey(asset), rebuiltData);
+            } else {
+              log(`[BUILD] ⚠️ Bundle asset not found in rebuilt: ${lookupName}`);
             }
           }
 
-          console.log(`[BUILD] Bundle repack: ${replacements.size} MSBT replacements`);
+          log(`[BUILD] Bundle repack: ${replacements.size} MSBT replacements`);
           const result = repackBundle(originalBuffer, meta.info, decompressedData, meta.assets, replacements);
+          log(`[BUILD] Bundle output size: ${result.buffer.byteLength} bytes (original: ${originalBuffer.byteLength})`);
 
           const blob = new Blob([new Uint8Array(result.buffer)], { type: "application/octet-stream" });
           const url = URL.createObjectURL(blob);
@@ -639,6 +678,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           for (let bi = 0; bi < bundleMeta.length; bi++) {
             const meta = bundleMeta[bi];
             setBuildProgress(`إعادة بناء Bundle ${bi + 1}/${bundleMeta.length}: ${meta.originalFileName}...`);
+            log(`[BUILD] Bundle ${bi + 1}/${bundleMeta.length}: ${meta.originalFileName}`);
 
             const originalBuffer = meta.originalBuffer instanceof ArrayBuffer ? meta.originalBuffer : new Uint8Array(meta.originalBuffer).buffer;
             const decompressedData = meta.decompressedData instanceof ArrayBuffer ? new Uint8Array(meta.decompressedData) : new Uint8Array(meta.decompressedData);
@@ -654,6 +694,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
               }
             }
 
+            log(`[BUILD] Bundle ${meta.originalFileName}: ${replacements.size} replacements`);
             const result = repackBundle(originalBuffer, meta.info, decompressedData, meta.assets, replacements);
             outputZip.file(meta.originalFileName, new Uint8Array(result.buffer));
           }
@@ -669,28 +710,39 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — ${bundleMeta.length} ملف Bundle جاهز 🎮`);
         }
       } else if (scopedArchives.length > 0) {
+        log(`[BUILD] ═══ SARC repack flow (${scopedArchives.length} archives) ═══`);
         const { buildSarcZs } = await import("@/lib/sarc-parser");
 
         if (scopedArchives.length === 1) {
           const sarcMeta = scopedArchives[0];
           setBuildProgress("إعادة بناء أرشيف SARC.ZS...");
+          log(`[BUILD] Single SARC: ${sarcMeta.originalFileName}, MSBT entries: ${sarcMeta.msbtEntryNames.length}, non-MSBT: ${sarcMeta.nonMsbtEntries.length}`);
           const sarcEntries: { name: string; data: Uint8Array }[] = [];
           for (const entry of sarcMeta.nonMsbtEntries) {
             sarcEntries.push({ name: entry.name, data: new Uint8Array(entry.data) });
           }
+          let sarcMatched = 0, sarcMissed = 0;
           for (const msbtName of sarcMeta.msbtEntryNames) {
             const lookupName = resolveSarcLookupName(sarcMeta, msbtName);
             const fallbackLegacyName = msbtName.replace(/.*[/\\]/, '');
             if (rebuiltMsbtFiles[lookupName]) {
               sarcEntries.push({ name: msbtName, data: rebuiltMsbtFiles[lookupName] });
+              sarcMatched++;
             } else if (msbtFiles[lookupName]) {
               sarcEntries.push({ name: msbtName, data: new Uint8Array(msbtFiles[lookupName]) });
+              sarcMissed++;
             } else if (msbtFiles[fallbackLegacyName]) {
               sarcEntries.push({ name: msbtName, data: new Uint8Array(msbtFiles[fallbackLegacyName]) });
+              sarcMissed++;
+            } else {
+              log(`[BUILD] ⚠️ SARC entry missing: ${msbtName} (lookup: ${lookupName})`);
+              sarcMissed++;
             }
           }
+          log(`[BUILD] SARC entries: ${sarcEntries.length} total, ${sarcMatched} rebuilt, ${sarcMissed} original/missing`);
           setBuildProgress(`تجميع ${sarcEntries.length} ملف في SARC وضغط ZS...`);
           const compressed = await buildSarcZs(sarcEntries, sarcMeta.endian);
+          log(`[BUILD] SARC.ZS output: ${compressed.byteLength} bytes`);
           const sarcBlob = new Blob([new Uint8Array(compressed) as BlobPart], { type: "application/octet-stream" });
           const sarcUrl = URL.createObjectURL(sarcBlob);
           const a = document.createElement("a");
@@ -705,6 +757,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           for (let ai = 0; ai < scopedArchives.length; ai++) {
             const sarcMeta = scopedArchives[ai];
             setBuildProgress(`إعادة بناء ${ai + 1}/${scopedArchives.length}: ${sarcMeta.originalFileName}...`);
+            log(`[BUILD] SARC ${ai + 1}/${scopedArchives.length}: ${sarcMeta.originalFileName}`);
             const sarcEntries: { name: string; data: Uint8Array }[] = [];
             for (const entry of sarcMeta.nonMsbtEntries) {
               sarcEntries.push({ name: entry.name, data: new Uint8Array(entry.data) });
@@ -735,6 +788,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — ${scopedArchives.length} ملف SARC.ZS جاهز للعبة 🎮`);
       } else {
         // No SARC archives or bundles — just export rebuilt MSBT files as ZIP
+        log('[BUILD] ═══ Plain MSBT ZIP export ═══');
         const JSZip = (await import("jszip")).default;
         const zip = new JSZip();
         for (const [name, data] of Object.entries(rebuiltMsbtFiles)) {
@@ -761,7 +815,6 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           const origBuf = meta.originalBuffer instanceof ArrayBuffer ? meta.originalBuffer : new Uint8Array(meta.originalBuffer).buffer;
           originalSizeBytes += origBuf.byteLength;
         }
-        // Output size is approximated from rebuilt data
         for (const data of Object.values(rebuiltMsbtFiles)) {
           outputSizeBytes += data.byteLength;
         }
@@ -791,6 +844,17 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         console.warn("Could not save build translations snapshot:", e);
       }
 
+      const buildDuration = ((Date.now() - buildStartTime) / 1000).toFixed(1);
+      log(`[BUILD] ═══ اكتمل البناء في ${buildDuration} ثانية ═══`);
+      log(`[BUILD] Output: ${filesBuilt} files, ${outputSizeBytes} bytes`);
+      if (originalSizeBytes > 0) log(`[BUILD] Original: ${originalSizeBytes} bytes, ratio: ${(outputSizeBytes / originalSizeBytes * 100).toFixed(0)}%`);
+
+      // Store build log for debugging
+      try {
+        const { idbSet } = await import("@/lib/idb-storage");
+        await idbSet("lastBuildLog", buildLog);
+      } catch {}
+
       // Run post-build verification
       const verification = buildVerificationChecks({
         modifiedCount,
@@ -810,7 +874,19 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
 
       setBuilding(false);
     } catch (err) {
-      setBuildProgress(`❌ ${err instanceof Error ? err.message : 'خطأ غير معروف'}`);
+      const errMsg = err instanceof Error ? err.message : 'خطأ غير معروف';
+      const errStack = err instanceof Error ? err.stack : '';
+      console.error('[BUILD] ❌ Build failed:', err);
+      console.error('[BUILD] Stack:', errStack);
+      console.log('[BUILD] Log up to failure:', buildLog.join('\n'));
+      // Store error log
+      try {
+        const { idbSet } = await import("@/lib/idb-storage");
+        buildLog.push(`❌ ERROR: ${errMsg}`);
+        if (errStack) buildLog.push(`STACK: ${errStack}`);
+        await idbSet("lastBuildLog", buildLog);
+      } catch {}
+      setBuildProgress(`❌ ${errMsg}`);
       setBuilding(false);
     }
   };
