@@ -23,44 +23,80 @@ interface HistoryEntry {
   timestamp: number;
 }
 
+function sanitizeHistory(raw: unknown): Record<string, HistoryEntry[]> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+
+  const safe: Record<string, HistoryEntry[]> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (!Array.isArray(v)) continue;
+    const normalized = v
+      .filter((item): item is { value?: unknown; timestamp?: unknown } => !!item && typeof item === 'object' && !Array.isArray(item))
+      .map((item) => ({
+        value: typeof item.value === 'string' ? item.value : '',
+        timestamp: typeof item.timestamp === 'number' && Number.isFinite(item.timestamp) ? item.timestamp : Date.now(),
+      }))
+      .filter((item) => item.value.trim())
+      .slice(0, 10);
+
+    if (normalized.length > 0) safe[k] = normalized;
+  }
+
+  return safe;
+}
+
 function loadHistory(): Record<string, HistoryEntry[]> {
   try {
     const raw = localStorage.getItem(HISTORY_KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-    return parsed;
-  } catch { return {}; }
+    const safe = sanitizeHistory(parsed);
+
+    // Self-heal corrupted payloads (e.g. "0", null, malformed shape)
+    if (JSON.stringify(safe) !== JSON.stringify(parsed)) {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(safe));
+    }
+
+    return safe;
+  } catch {
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify({})); } catch {}
+    return {};
+  }
 }
 
 function saveHistory(history: Record<string, HistoryEntry[]>) {
   try {
+    const safeHistory = sanitizeHistory(history);
+
     // Keep only last 1000 entries to prevent storage bloat
-    const keys = Object.keys(history);
+    const keys = Object.keys(safeHistory);
     if (keys.length > 1000) {
       const sorted = keys.sort((a, b) => {
-        const aLast = history[a]?.[0]?.timestamp || 0;
-        const bLast = history[b]?.[0]?.timestamp || 0;
+        const aLast = safeHistory[a]?.[0]?.timestamp || 0;
+        const bLast = safeHistory[b]?.[0]?.timestamp || 0;
         return bLast - aLast;
       });
       const trimmed: Record<string, HistoryEntry[]> = {};
-      for (const k of sorted.slice(0, 1000)) trimmed[k] = history[k];
+      for (const k of sorted.slice(0, 1000)) trimmed[k] = safeHistory[k];
       localStorage.setItem(HISTORY_KEY, JSON.stringify(trimmed));
       return;
     }
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(safeHistory));
   } catch { }
 }
 
 export function addToHistory(key: string, value: string) {
   if (!value?.trim()) return;
+
   const history = loadHistory();
-  if (!history[key]) history[key] = [];
+  const bucket = Array.isArray(history[key]) ? history[key] : [];
+  history[key] = bucket;
+
   // Don't add duplicate of latest
-  if (history[key][0]?.value === value) return;
-  history[key].unshift({ value, timestamp: Date.now() });
-  // Keep max 10 versions per entry
-  history[key] = history[key].slice(0, 10);
+  if (bucket[0]?.value === value) return;
+
+  bucket.unshift({ value, timestamp: Date.now() });
+  history[key] = bucket.slice(0, 10);
   saveHistory(history);
 }
 
@@ -136,7 +172,8 @@ export default function TranslationToolsPanel({ state, currentEntry, currentTran
   const historyEntries = useMemo(() => {
     if (!isEnabled("translation_history") || !currentKey) return [];
     const history = loadHistory();
-    return history[currentKey] || [];
+    const entryHistory = history[currentKey];
+    return Array.isArray(entryHistory) ? entryHistory : [];
   }, [currentKey, isEnabled, currentTranslation]); // re-check when translation changes
 
   // Back translate handler
