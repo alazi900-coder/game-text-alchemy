@@ -7,7 +7,9 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { FileDown, Loader2, AlertTriangle, CheckCircle2, Info } from "lucide-react";
+import { FileDown, Loader2, AlertTriangle, CheckCircle2, Info, ChevronDown, ChevronUp, Package } from "lucide-react";
+import { useState } from "react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export interface BundleDiagnostic {
   bundleName: string;
