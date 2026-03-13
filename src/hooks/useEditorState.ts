@@ -3406,7 +3406,7 @@ export function useEditorState() {
     handleGlossaryCompliance, handleApplyGlossaryFix, handleApplyAllGlossaryFixes,
     handleAcceptFuzzy, handleRejectFuzzy, handleAcceptAllFuzzy, handleRejectAllFuzzy,
     handleCloudSave, handleCloudLoad,
-    handleApplyArabicProcessing, handleUndoArabicProcessing, handlePreBuild, handleBuild, handleBulkReplace, loadDemoBdatData, loadGameEnglishTexts, handleCheckIntegrity, handleRestoreOriginals, handleRemoveAllDiacritics,
+    handleApplyArabicProcessing, handleUndoArabicProcessing, handlePreBuild, handleBuild, handleBulkReplace, loadDemoBdatData, loadGameEnglishTexts, handleCheckIntegrity, handleRestoreOriginals, handleRemoveAllDiacritics, buildVerification, showBuildVerification, setShowBuildVerification,
     handleScanMergedSentences, handleApplySentenceSplit, handleRejectSentenceSplit, handleApplyAllSentenceSplits,
     handleScanNewlines, handleApplyNewlineClean, handleRejectNewlineClean, handleApplyAllNewlineCleans,
     handleScanDiacritics, handleApplyDiacriticsClean, handleRejectDiacriticsClean, handleApplyAllDiacriticsCleans,
