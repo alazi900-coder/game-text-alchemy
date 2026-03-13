@@ -94,6 +94,94 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     setTimeout(() => setLastSaved(""), 5000);
   };
 
+  const buildVerificationChecks = (params: {
+    modifiedCount: number;
+    totalTranslations: number;
+    autoProcessedArabic: number;
+    tagFixCount: number;
+    tagOkCount: number;
+    filesBuilt: number;
+    outputSizeBytes: number;
+    originalSizeBytes?: number;
+    buildStartTime: number;
+    skippedOverflow?: number;
+    hasOriginalFiles: boolean;
+    isDemo?: boolean;
+  }): BuildVerificationResult => {
+    const checks: VerificationCheck[] = [];
+    const elapsed = Date.now() - params.buildStartTime;
+
+    // 1. Translation injection
+    if (params.modifiedCount === 0) {
+      checks.push({ label: "حقن الترجمات", status: "fail", detail: "لم تُحقن أي ترجمة في الملفات!" });
+    } else if (params.modifiedCount < params.totalTranslations * 0.5) {
+      checks.push({ label: "حقن الترجمات", status: "warn", detail: `تم حقن ${params.modifiedCount} من ${params.totalTranslations} — أقل من 50%` });
+    } else {
+      checks.push({ label: "حقن الترجمات", status: "pass", detail: `${params.modifiedCount} ترجمة حُقنت بنجاح` });
+    }
+
+    // 2. Arabic processing
+    if (params.autoProcessedArabic > 0) {
+      checks.push({ label: "المعالجة العربية", status: "pass", detail: `${params.autoProcessedArabic} نص عُولج تلقائياً أثناء البناء` });
+    } else {
+      checks.push({ label: "المعالجة العربية", status: "pass", detail: "كل النصوص كانت معالجة مسبقاً" });
+    }
+
+    // 3. Tag integrity
+    if (params.tagFixCount > 0) {
+      checks.push({ label: "سلامة الرموز التقنية", status: "warn", detail: `${params.tagFixCount} ترجمة أُصلحت رموزها تلقائياً (${params.tagOkCount} سليمة)` });
+    } else if (params.tagOkCount > 0) {
+      checks.push({ label: "سلامة الرموز التقنية", status: "pass", detail: `${params.tagOkCount} ترجمة — كل الرموز سليمة ✨` });
+    }
+
+    // 4. File output
+    if (params.filesBuilt === 0) {
+      checks.push({ label: "ملفات الإخراج", status: "fail", detail: "لم يُنتج أي ملف!" });
+    } else {
+      checks.push({ label: "ملفات الإخراج", status: "pass", detail: `${params.filesBuilt} ملف مبني بنجاح` });
+    }
+
+    // 5. Size check
+    if (params.originalSizeBytes && params.originalSizeBytes > 0) {
+      const ratio = params.outputSizeBytes / params.originalSizeBytes;
+      if (ratio > 1.5) {
+        checks.push({ label: "حجم الملف", status: "warn", detail: `الناتج أكبر بـ ${Math.round(ratio * 100 - 100)}% من الأصلي — تحقق من الضغط` });
+      } else if (ratio < 0.3) {
+        checks.push({ label: "حجم الملف", status: "warn", detail: `الناتج أصغر بكثير (${Math.round(ratio * 100)}%) — قد تكون بيانات ناقصة` });
+      } else {
+        checks.push({ label: "حجم الملف", status: "pass", detail: `الحجم مناسب (${Math.round(ratio * 100)}% من الأصلي)` });
+      }
+    }
+
+    // 6. Overflow skipped
+    if (params.skippedOverflow && params.skippedOverflow > 0) {
+      checks.push({ label: "تجاوز البايت", status: "warn", detail: `${params.skippedOverflow} ترجمة تُخطّيت بسبب تجاوز الحد` });
+    }
+
+    // 7. Original files
+    if (!params.hasOriginalFiles) {
+      checks.push({ label: "الملفات الأصلية", status: "warn", detail: "لم يتم العثور على ملفات أصلية — البناء من الذاكرة" });
+    }
+
+    // 8. Demo check
+    if (params.isDemo) {
+      checks.push({ label: "نوع البيانات", status: "fail", detail: "بيانات تجريبية — الملف لن يعمل في اللعبة" });
+    }
+
+    return {
+      checks,
+      outputSizeBytes: params.outputSizeBytes,
+      originalSizeBytes: params.originalSizeBytes,
+      translationsApplied: params.modifiedCount,
+      translationsExpected: params.totalTranslations,
+      autoProcessedArabic: params.autoProcessedArabic,
+      tagsFixed: params.tagFixCount,
+      tagsOk: params.tagOkCount,
+      filesBuilt: params.filesBuilt,
+      buildDurationMs: elapsed,
+    };
+  };
+
   type EditorEntry = EditorState["entries"][number];
 
   const extractMsbtFileName = (msbtFile: string): string | null => {
