@@ -2035,7 +2035,11 @@ export function useEditorState() {
       const { data, error } = await supabase.from('translation_projects').select('translations').eq('user_id', user.id).order('updated_at', { ascending: false }).limit(1).maybeSingle();
       if (error) throw error;
       if (!data) { setCloudStatus("لا توجد ترجمات محفوظة في السحابة"); setTimeout(() => setCloudStatus(""), 3000); return; }
-      const cloudTranslations = data.translations as Record<string, string>;
+      const rawTranslations = data.translations;
+      const cloudTranslations: Record<string, string> = (rawTranslations && typeof rawTranslations === 'object' && !Array.isArray(rawTranslations))
+        ? rawTranslations as Record<string, string>
+        : {};
+      if (Object.keys(cloudTranslations).length === 0) { setCloudStatus("لا توجد ترجمات في المشروع السحابي"); setTimeout(() => setCloudStatus(""), 3000); return; }
       setState(prev => { if (!prev) return null; return { ...prev, translations: { ...prev.translations, ...cloudTranslations } }; });
       setCloudStatus(`☁️ تم تحميل ${Object.keys(cloudTranslations).length} ترجمة من السحابة`);
     } catch (err) { setCloudStatus(`❌ ${err instanceof Error ? err.message : 'خطأ في التحميل'}`); }
