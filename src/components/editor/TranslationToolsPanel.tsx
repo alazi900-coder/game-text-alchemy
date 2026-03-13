@@ -172,7 +172,8 @@ export default function TranslationToolsPanel({ state, currentEntry, currentTran
   const historyEntries = useMemo(() => {
     if (!isEnabled("translation_history") || !currentKey) return [];
     const history = loadHistory();
-    return history[currentKey] || [];
+    const entryHistory = history[currentKey];
+    return Array.isArray(entryHistory) ? entryHistory : [];
   }, [currentKey, isEnabled, currentTranslation]); // re-check when translation changes
 
   // Back translate handler
