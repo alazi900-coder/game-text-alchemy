@@ -5,6 +5,7 @@ import { processArabicText, hasArabicChars as hasArabicCharsProcessing, hasArabi
 import { EditorState, hasTechnicalTags, restoreTagsLocally } from "@/components/editor/types";
 import { BuildPreview, BundleDiagnostic } from "@/components/editor/BuildConfirmDialog";
 import type { MutableRefObject } from "react";
+import { normalizeMsbtTranslations, extractShortMsbtName } from "@/lib/msbt-key-normalizer";
 
 export interface BuildStats {
   modifiedCount: number;
