@@ -472,12 +472,10 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         return;
       }
 
-      // Defensive: ensure translations is an object
+      // Defensive: ensure translations is an object — auto-heal if corrupted
       if (!currentState.translations || typeof currentState.translations !== 'object' || Array.isArray(currentState.translations)) {
-        log(`[BUILD] ❌ translations is not an object: ${typeof currentState.translations}`);
-        setBuildProgress("❌ خطأ: بيانات الترجمات تالفة. أعد تحميل الصفحة.");
-        setBuilding(false);
-        return;
+        log(`[BUILD] ⚠️ translations was ${typeof currentState.translations} — auto-healing to {}`);
+        currentState = { ...currentState, translations: {} };
       }
 
       const { normalized: nonEmptyTranslations, remapped, dropped } = normalizeTranslationsForBuild(
