@@ -84,7 +84,8 @@ const PreBuildDiagnostic = ({ open, onOpenChange, state, onProceedToBuild }: Pre
     const arabicRegex = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/;
     const formsRegex = /[\uFB50-\uFDFF\uFE70-\uFEFF]/;
     let unprocessedCount = 0;
-    for (const [, value] of nonEmpty) {
+    const matchedEntries = Object.entries(normalizeResult.normalized).filter(([k, v]) => validKeys.has(k) && v?.trim());
+    for (const [, value] of matchedEntries) {
       if (arabicRegex.test(value) && !formsRegex.test(value)) unprocessedCount++;
     }
     results[2] = unprocessedCount === 0
