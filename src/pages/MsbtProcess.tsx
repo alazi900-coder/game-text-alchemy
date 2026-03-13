@@ -358,12 +358,15 @@ export default function MsbtProcess() {
       });
       await idbSet("editorGame", config.id);
 
-      // Restore SARC archives from THIS session (saved before clear)
+      // Restore SARC archives AND bundle meta from THIS session (saved before clear)
       if (sarcArchivesBefore && sarcArchivesBefore.length > 0) {
         await idbSet("editorSarcArchives", sarcArchivesBefore);
       }
       if (sarcArchiveBefore) {
         await idbSet("editorSarcArchive", sarcArchiveBefore);
+      }
+      if (bundleMetaBefore && bundleMetaBefore.length > 0) {
+        await idbSet("editorBundleMeta", bundleMetaBefore);
       }
 
       try {
