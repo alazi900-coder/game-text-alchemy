@@ -18,12 +18,15 @@ export interface NormalizeResult {
 export function extractShortMsbtName(key: string): string | null {
   if (!key.startsWith("msbt:")) return null;
   const payload = key.slice(5); // remove "msbt:"
-  // Match the .msbt filename which may be prefixed with scoped path using "__"
-  const match = payload.match(/(?:^|__)([^_][^:]*?\.msbt)(?::|$)/i);
-  if (match?.[1]) return match[1];
-  // Fallback: first segment before ":"
-  const firstColon = payload.indexOf(":");
-  return firstColon === -1 ? payload : payload.slice(0, firstColon);
+  // First extract the msbt file portion (before the label:index part)
+  const msbtMatch = payload.match(/^(.+?\.msbt)(?::|$)/i);
+  const msbtPart = msbtMatch?.[1] || payload.split(":")[0];
+  // Strip scoped prefix: "bundle__accessories__entry_0.msbt" → "entry_0.msbt"
+  const lastDunder = msbtPart.lastIndexOf("__");
+  if (lastDunder !== -1) {
+    return msbtPart.slice(lastDunder + 2);
+  }
+  return msbtPart;
 }
 
 /** Extract the index (last numeric segment) from an MSBT key */
