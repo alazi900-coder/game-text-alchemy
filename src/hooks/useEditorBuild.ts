@@ -277,11 +277,11 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           const lookupName = scopedMap[assetKey] || (asset.name.endsWith('.msbt') ? asset.name : `${asset.name}.msbt`);
 
           // Count entries for this MSBT from state
-          const entriesForFile = currentState.entries.filter(e => e.msbtFile === lookupName || e.msbtFile.includes(lookupName));
+          const entriesForFile = resolveEntriesForLookup(entriesByMsbtName, lookupName);
           const keys = entriesForFile.length;
           const translated = entriesForFile.filter(e => {
             const k = `${e.msbtFile}:${e.index}`;
-            return nonEmptyTranslations[k];
+            return !!nonEmptyTranslations[k];
           }).length;
 
           if (keys > 0) {
