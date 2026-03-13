@@ -716,6 +716,35 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           const result = repackBundle(originalBuffer, meta.info, decompressedData, meta.assets, replacements);
           log(`[BUILD] Bundle output size: ${result.buffer.byteLength} bytes (original: ${originalBuffer.byteLength})`);
 
+          // === BINARY VALIDATION before download ===
+          setBuildProgress("فحص ثنائي للملف الناتج...");
+          const binaryValidation = validateBundle(result.buffer);
+          for (const c of binaryValidation.checks) {
+            log(`[BUILD] [BINARY] ${c.status === 'pass' ? '✅' : c.status === 'warn' ? '⚠️' : '❌'} ${c.label}: ${c.detail}`);
+          }
+          if (binaryValidation.hasCritical) {
+            log('[BUILD] ❌ BINARY VALIDATION FAILED — download blocked');
+            setLastBuildLog([...buildLog]);
+            const failChecks: VerificationCheck[] = binaryValidation.checks.map(c => ({
+              label: c.label, status: c.status, detail: c.detail,
+            }));
+            setBuildVerification({
+              checks: failChecks,
+              outputSizeBytes: result.buffer.byteLength,
+              originalSizeBytes: originalBuffer.byteLength,
+              translationsApplied: modifiedCount,
+              translationsExpected: Object.keys(nonEmptyTranslations).length,
+              autoProcessedArabic: autoProcessedCount,
+              tagsFixed: tagFixCount, tagsOk: tagOkCount,
+              filesBuilt: 0,
+              buildDurationMs: Date.now() - buildStartTime,
+            });
+            setShowBuildVerification(true);
+            setBuildProgress("❌ فشل الفحص الثنائي — التنزيل ممنوع");
+            setBuilding(false);
+            return;
+          }
+
           const blob = new Blob([new Uint8Array(result.buffer)], { type: "application/octet-stream" });
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
