@@ -905,11 +905,12 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       const bdatBinaryFileNames = await idbGet<string[]>("editorBdatBinaryFileNames");
 
       // All translated (non-empty) keys
-      const allTransKeys = Object.keys(currentState.translations).filter(k => currentState.translations[k]?.trim());
+      const safeTranslationsMap = sanitizeTranslations(currentState.translations, 'integrity');
+      const allTransKeys = Object.keys(safeTranslationsMap).filter(k => safeTranslationsMap[k]?.trim());
       // All entry keys (including untranslated) — used to count total extracted strings per file
       const allEntryKeys = currentState.entries
         ? currentState.entries.map(e => `${e.msbtFile}:${e.index}`)
-        : Object.keys(currentState.translations);
+        : Object.keys(safeTranslationsMap);
 
       // Collect unique filenames from entry keys + translated keys
       const newFormatFiles = new Set<string>();
