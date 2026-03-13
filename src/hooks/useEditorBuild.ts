@@ -415,6 +415,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     if (forceSaveRef?.current) {
       await forceSaveRef.current();
     }
+    const buildStartTime = Date.now();
     setBuilding(true); setBuildProgress("تجهيز الترجمات...");
     try {
       const msbtFiles = await idbGet<Record<string, ArrayBuffer>>("editorMsbtFiles");
