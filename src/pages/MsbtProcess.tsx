@@ -336,14 +336,18 @@ export default function MsbtProcess() {
 
       if (!isReUploadedBuild) {
         for (const entry of allEntries) {
-          const stripped = entry.original.replace(/[\uE000-\uF8FF\uFFF9-\uFFFC\u0000-\u001F]/g, '').trim();
+          const stripped = entry.original.replace(/[\uE000-\uF8FF\uFFF9-\uFFFC\u0000-\u001F\[\]]/g, '').trim();
+          if (stripped.length < 6) continue; // skip very short entries (tags, IDs, etc.)
           const arabicCount = (stripped.match(arabicLetterRegex) || []).length;
           const eastAsianCount = (stripped.match(eastAsianRegex) || []).length;
           const latinCount = (stripped.match(/[A-Za-z]/g) || []).length;
+          const totalLetters = arabicCount + eastAsianCount + latinCount;
 
-          const looksLikeArabicText = arabicCount >= 3
-            && arabicCount >= eastAsianCount * 2
-            && (latinCount === 0 || arabicCount >= latinCount);
+          // Require Arabic to be dominant: ≥50% of all letters AND ≥5 Arabic chars
+          const looksLikeArabicText = totalLetters > 0
+            && arabicCount >= 5
+            && (arabicCount / totalLetters) >= 0.5
+            && arabicCount >= eastAsianCount * 2;
 
           if (looksLikeArabicText) {
             const key = `${entry.msbtFile}:${entry.index}`;
