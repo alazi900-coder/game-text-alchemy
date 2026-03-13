@@ -26,7 +26,10 @@ interface HistoryEntry {
 function loadHistory(): Record<string, HistoryEntry[]> {
   try {
     const raw = localStorage.getItem(HISTORY_KEY);
-    return raw ? JSON.parse(raw) : {};
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    return parsed;
   } catch { return {}; }
 }
 

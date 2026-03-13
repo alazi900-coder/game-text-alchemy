@@ -7,6 +7,7 @@ import { BuildPreview, BundleDiagnostic } from "@/components/editor/BuildConfirm
 import type { BuildVerificationResult, VerificationCheck } from "@/components/editor/BuildVerificationDialog";
 import type { MutableRefObject } from "react";
 import { normalizeMsbtTranslations, extractShortMsbtName } from "@/lib/msbt-key-normalizer";
+import { sanitizeTranslations } from "@/lib/sanitize-translations";
 
 export interface BuildStats {
   modifiedCount: number;
@@ -60,7 +61,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     const currentState = stateRef.current;
     if (!currentState) return;
     setApplyingArabic(true);
-    const newTranslations = { ...currentState.translations };
+    const newTranslations = { ...sanitizeTranslations(currentState.translations, 'applyArabic') };
     let processedCount = 0, skippedCount = 0;
     for (const [key, value] of Object.entries(newTranslations)) {
       if (!value?.trim()) continue;
@@ -79,7 +80,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     const currentState = stateRef.current;
     if (!currentState) return;
     setApplyingArabic(true);
-    const newTranslations = { ...currentState.translations };
+    const newTranslations = { ...sanitizeTranslations(currentState.translations, 'undoArabic') };
     let revertedCount = 0;
     for (const [key, value] of Object.entries(newTranslations)) {
       if (!value?.trim()) continue;
@@ -258,7 +259,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
 
     const { validEntryKeySet, entriesByMsbtName, keyByMsbtNameAndIndex } = buildEntryLookupMaps(currentState.entries);
     const { normalized: nonEmptyTranslations, remapped, dropped } = normalizeTranslationsForBuild(
-      currentState.translations,
+      sanitizeTranslations(currentState.translations, 'preBuild'),
       validEntryKeySet,
       keyByMsbtNameAndIndex,
     );
@@ -471,12 +472,10 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         return;
       }
 
-      // Defensive: ensure translations is an object
+      // Defensive: ensure translations is an object — auto-heal if corrupted
       if (!currentState.translations || typeof currentState.translations !== 'object' || Array.isArray(currentState.translations)) {
-        log(`[BUILD] ❌ translations is not an object: ${typeof currentState.translations}`);
-        setBuildProgress("❌ خطأ: بيانات الترجمات تالفة. أعد تحميل الصفحة.");
-        setBuilding(false);
-        return;
+        log(`[BUILD] ⚠️ translations was ${typeof currentState.translations} — auto-healing to {}`);
+        (currentState as any).translations = {};
       }
 
       const { normalized: nonEmptyTranslations, remapped, dropped } = normalizeTranslationsForBuild(
@@ -906,11 +905,12 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       const bdatBinaryFileNames = await idbGet<string[]>("editorBdatBinaryFileNames");
 
       // All translated (non-empty) keys
-      const allTransKeys = Object.keys(currentState.translations).filter(k => currentState.translations[k]?.trim());
+      const safeTranslationsMap = sanitizeTranslations(currentState.translations, 'integrity');
+      const allTransKeys = Object.keys(safeTranslationsMap).filter(k => safeTranslationsMap[k]?.trim());
       // All entry keys (including untranslated) — used to count total extracted strings per file
       const allEntryKeys = currentState.entries
         ? currentState.entries.map(e => `${e.msbtFile}:${e.index}`)
-        : Object.keys(currentState.translations);
+        : Object.keys(safeTranslationsMap);
 
       // Collect unique filenames from entry keys + translated keys
       const newFormatFiles = new Set<string>();
@@ -1034,7 +1034,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       formData.append("langFile", new File([new Uint8Array(langBuf)], langFileName));
       if (dictBuf) formData.append("dictFile", new File([new Uint8Array(dictBuf)], (await idbGet<string>("editorDictFileName")) || "ZsDic.pack.zs"));
       const nonEmptyTranslations: Record<string, string> = {};
-      for (const [k, v] of Object.entries(currentState.translations)) { if (v.trim()) nonEmptyTranslations[k] = v; }
+      const safeTranslations = sanitizeTranslations(currentState.translations, 'serverBuild');
+      for (const [k, v] of Object.entries(safeTranslations)) { if (v.trim()) nonEmptyTranslations[k] = v; }
 
       // Auto-fix damaged tags before build
       let tagFixCount = 0;
