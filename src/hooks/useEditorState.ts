@@ -64,7 +64,19 @@ export function useEditorState() {
   } = scanResults;
 
   // === Core state ===
-  const [state, setState] = useState<EditorState | null>(null);
+  const [state, rawSetState] = useState<EditorState | null>(null);
+
+  // Safe wrapper: ensures state.translations is ALWAYS an object, never a number/null/string
+  const setState: React.Dispatch<React.SetStateAction<EditorState | null>> = useCallback((updater) => {
+    rawSetState(prev => {
+      const next = typeof updater === 'function' ? (updater as (prev: EditorState | null) => EditorState | null)(prev) : updater;
+      if (next && next.translations != null && (typeof next.translations !== 'object' || Array.isArray(next.translations))) {
+        console.error('[STATE-GUARD] translations corrupted to:', typeof next.translations, String(next.translations).slice(0, 50));
+        return { ...next, translations: {} };
+      }
+      return next;
+    });
+  }, []);
   const [search, setSearch] = useState("");
   const [filterFile, setFilterFile] = useState<string>("all");
   const [filterCategory, setFilterCategory] = useState<string[]>([]);

@@ -131,8 +131,10 @@ const BuildVerificationDialog = ({ open, onOpenChange, result, buildLog }: Build
         {/* Checks list */}
         <ScrollArea className="max-h-48">
           <div className="space-y-1.5">
-            {result.checks.map((check, i) => (
-              <div key={i} className="flex items-start gap-2 p-2 rounded bg-muted/30 border border-border/50">
+            {result.checks.filter(c => c.label !== '___binary_separator___').map((check, i) => (
+              <div key={i} className={`flex items-start gap-2 p-2 rounded border border-border/50 ${
+                check.status === 'fail' ? 'bg-destructive/5' : 'bg-muted/30'
+              }`}>
                 <StatusIcon status={check.status} />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-display font-bold">{check.label}</p>
