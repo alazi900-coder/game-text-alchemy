@@ -209,6 +209,21 @@ const COMPRESSION_LZ4HC = 3;
 
 const COMPRESSION_ZSTD = 4;
 
+/** Compress data using LZ4 block compression */
+function compressLz4(input: Uint8Array): Uint8Array {
+  // lz4js.compressBlock needs a pre-allocated output buffer
+  // Max compressed size is input.length + (input.length / 255) + 16 (worst case)
+  const maxOut = Math.max(64, input.length + Math.ceil(input.length / 255) + 16);
+  const output = new Uint8Array(maxOut);
+  const written = lz4.compressBlock(input, output, 0, input.length, 0);
+  if (written <= 0) {
+    // Compression failed or didn't help — return uncompressed
+    console.warn("[compressLz4] compression returned 0, falling back to uncompressed");
+    return input;
+  }
+  return output.slice(0, written);
+}
+
 async function decompressBlock(compressed: Uint8Array, decompressedSize: number, compressionType: number): Promise<Uint8Array> {
   switch (compressionType) {
     case COMPRESSION_NONE:
@@ -603,8 +618,43 @@ export function repackBundle(
     decompressedSize: BigInt(newEntryBuffers[i].length),
   }));
 
-  // Write new UnityFS file (uncompressed)
-  const w = new BinaryWriter(totalDecompressedSize + 4096);
+  // Determine original compression type
+  const originalBlockCompression = info.blocks.length > 0 ? (info.blocks[0].flags & 0x3F) : COMPRESSION_NONE;
+  const headerCompression = info.flags & 0x3F;
+  // Use LZ4 if original used LZ4/LZ4HC, otherwise no compression
+  const useCompression = (originalBlockCompression === COMPRESSION_LZ4 || originalBlockCompression === COMPRESSION_LZ4HC)
+    ? COMPRESSION_LZ4
+    : COMPRESSION_NONE;
+
+  // Compress data blocks with LZ4 if needed
+  let compressedData: Uint8Array;
+  let compressedDataSize: number;
+  if (useCompression === COMPRESSION_LZ4) {
+    compressedData = compressLz4(newDecompressed);
+    compressedDataSize = compressedData.length;
+    console.log(`[repack] LZ4 compressed data: ${totalDecompressedSize} → ${compressedDataSize} bytes (${(compressedDataSize / totalDecompressedSize * 100).toFixed(1)}%)`);
+  } else {
+    compressedData = newDecompressed;
+    compressedDataSize = totalDecompressedSize;
+  }
+
+  // Build block info (with compressed sizes)
+  const blockInfoBuf = buildBlockInfoBuffer(totalDecompressedSize, compressedDataSize, useCompression, newEntries);
+
+  // Compress block info if original header used compression
+  const useHeaderCompression = (headerCompression === COMPRESSION_LZ4 || headerCompression === COMPRESSION_LZ4HC)
+    ? COMPRESSION_LZ4
+    : COMPRESSION_NONE;
+  let compressedBlockInfo: Uint8Array;
+  if (useHeaderCompression === COMPRESSION_LZ4) {
+    compressedBlockInfo = compressLz4(blockInfoBuf);
+    console.log(`[repack] LZ4 compressed block info: ${blockInfoBuf.length} → ${compressedBlockInfo.length} bytes`);
+  } else {
+    compressedBlockInfo = blockInfoBuf;
+  }
+
+  // Write new UnityFS file
+  const w = new BinaryWriter(compressedDataSize + 4096);
   
   // Header (big-endian)
   w.writeNullTermString("UnityFS");
@@ -616,19 +666,15 @@ export function repackBundle(
   const totalSizePos = w.position;
   w.writeU64(BigInt(0));
 
-  // Build block info
-  const blockInfoBuf = buildBlockInfoBuffer(totalDecompressedSize, newEntries);
-
-  // Compressed = decompressed (no compression)
-  w.writeU32(blockInfoBuf.length);
-  w.writeU32(blockInfoBuf.length);
-  w.writeU32(0); // flags: no compression, inline
+  w.writeU32(compressedBlockInfo.length);   // compressed block info size
+  w.writeU32(blockInfoBuf.length);          // decompressed block info size
+  w.writeU32(useHeaderCompression);         // flags: compression type for block info
 
   // Block info
-  w.writeBytes(blockInfoBuf);
+  w.writeBytes(compressedBlockInfo);
 
-  // Data
-  w.writeBytes(newDecompressed);
+  // Data blocks
+  w.writeBytes(compressedData);
 
   // Patch total size
   const totalFileSize = w.position;
@@ -637,7 +683,9 @@ export function repackBundle(
   const result = w.toUint8Array();
 
   return {
-    buffer: result.buffer as ArrayBuffer,
+    buffer: result.buffer.byteLength === result.byteLength
+      ? result.buffer as ArrayBuffer
+      : result.slice(0).buffer as ArrayBuffer,
     replacedCount,
     newSize: totalFileSize,
     originalSize: originalBuffer.byteLength,
@@ -748,17 +796,22 @@ function rebuildSerializedFile(
 }
 
 /** Build block info buffer for the new bundle */
-function buildBlockInfoBuffer(dataSize: number, entries: DirectoryEntry[]): Uint8Array {
+function buildBlockInfoBuffer(
+  decompressedDataSize: number,
+  compressedDataSize: number,
+  blockCompression: number,
+  entries: DirectoryEntry[],
+): Uint8Array {
   const w = new BinaryWriter(4096);
 
   // Hash (16 zero bytes)
   for (let i = 0; i < 16; i++) w.writeU8(0);
 
-  // Block count = 1 (single uncompressed block)
+  // Block count = 1
   w.writeU32(1);
-  w.writeU32(dataSize); // decompressed size
-  w.writeU32(dataSize); // compressed size (same, no compression)
-  w.writeU16(0); // flags: no compression
+  w.writeU32(decompressedDataSize); // decompressed size
+  w.writeU32(compressedDataSize);   // compressed size
+  w.writeU16(blockCompression);     // flags: compression type
 
   // Directory entries
   w.writeU32(entries.length);
