@@ -63,6 +63,7 @@ export default function MsbtProcess() {
   const cancelRef = useRef(false);
   const bundleStartTimeRef = useRef<number>(0);
   const navigate = useNavigate();
+  const autoExportedRef = useRef(false);
 
   useEffect(() => {
     (async () => {
