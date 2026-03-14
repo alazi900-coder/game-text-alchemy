@@ -615,7 +615,7 @@ export function repackBundle(
     // Rebuild this serialized file with replacements
     let rebuilt = entryData;
     if (entryReplacements.length > 0) {
-      rebuilt = rebuildSerializedFile(rebuilt, entryReplacements);
+      rebuilt = rebuildSerializedFile(rebuilt, entryReplacements) as Uint8Array<ArrayBuffer>;
       replacedCount += entryReplacements.length;
     }
     if (embeddedReplacements.length > 0) {
