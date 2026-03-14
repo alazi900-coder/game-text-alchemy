@@ -756,6 +756,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — Bundle جاهز للعبة 🎮`);
         } else {
           const outputZip = new JSZip();
+          let bundlesRepacked = 0;
+          let bundlesUntouched = 0;
           for (let bi = 0; bi < bundleMeta.length; bi++) {
             const meta = bundleMeta[bi];
             setBuildProgress(`إعادة بناء Bundle ${bi + 1}/${bundleMeta.length}: ${meta.originalFileName}...`);
@@ -775,10 +777,21 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
               }
             }
 
-            log(`[BUILD] Bundle ${meta.originalFileName}: ${replacements.size} replacements`);
-            const result = repackBundle(originalBuffer, meta.info, decompressedData, meta.assets, replacements);
-            outputZip.file(meta.originalFileName, new Uint8Array(result.buffer));
+            if (replacements.size > 0) {
+              log(`[BUILD] 🔧 Bundle ${meta.originalFileName}: ${replacements.size} replacements → REPACK`);
+              const result = repackBundle(originalBuffer, meta.info, decompressedData, meta.assets, replacements);
+              outputZip.file(meta.originalFileName, new Uint8Array(result.buffer));
+              bundlesRepacked++;
+            } else {
+              log(`[BUILD] ✅ Bundle ${meta.originalFileName}: no changes → ORIGINAL`);
+              outputZip.file(meta.originalFileName, new Uint8Array(originalBuffer));
+              bundlesUntouched++;
+            }
           }
+
+          log(`[BUILD] ═══ Bundle Diagnostic Summary ═══`);
+          log(`[BUILD] 📊 Total: ${bundleMeta.length} | Repacked: ${bundlesRepacked} | Untouched: ${bundlesUntouched}`);
+          log(`[BUILD] 📊 Rebuilt MSBT files: ${Object.keys(rebuiltMsbtFiles).length}`);
 
           setBuildProgress("ضغط جميع ملفات Bundle في ZIP...");
           const finalBlob = await outputZip.generateAsync({ type: "blob" });
@@ -788,7 +801,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           a.download = "arabized_bundles.zip";
           a.click();
           URL.revokeObjectURL(finalUrl);
-          setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — ${bundleMeta.length} ملف Bundle جاهز 🎮`);
+          setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — ${bundlesRepacked} ملف أُعيد بناؤه، ${bundlesUntouched} بقي أصلياً 🎮`);
         }
       } else if (scopedArchives.length > 0) {
         log(`[BUILD] ═══ SARC repack flow (${scopedArchives.length} archives) ═══`);
