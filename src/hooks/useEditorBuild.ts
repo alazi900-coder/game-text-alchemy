@@ -774,17 +774,21 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
 
       /** Resolve rebuilt MSBT data by trying multiple name formats */
       const findRebuiltMsbt = (lookupName: string): Uint8Array | undefined => {
-        // 1. Exact match
+        // 1. Exact match (most common — scoped name matches directly)
         if (rebuiltMsbtFiles[lookupName]) return rebuiltMsbtFiles[lookupName];
-        // 2. Try short name
+        
+        // 2. Try matching by short name — but ONLY if exactly one rebuilt file shares that short name
         const shortName = extractShortMsbtName(`msbt:${lookupName}`);
-        if (shortName && shortName !== lookupName && rebuiltMsbtFiles[shortName]) return rebuiltMsbtFiles[shortName];
-        // 3. Try matching any key whose short name matches
         if (shortName) {
-          for (const [key, data] of Object.entries(rebuiltMsbtFiles)) {
+          const candidates: string[] = [];
+          for (const key of Object.keys(rebuiltMsbtFiles)) {
             const keyShort = extractShortMsbtName(`msbt:${key}`);
-            if (keyShort === shortName) return data;
+            if (keyShort === shortName) candidates.push(key);
           }
+          if (candidates.length === 1) {
+            return rebuiltMsbtFiles[candidates[0]];
+          }
+          // If multiple candidates share the same short name, skip — ambiguous match
         }
         return undefined;
       };
