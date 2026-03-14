@@ -639,7 +639,9 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       }
 
       log(`[BUILD] ═══ MSBT rebuild complete ═══`);
-      log(`[BUILD] Modified entries: ${modifiedCount}`);
+      log(`[BUILD] Matched translations (non-empty): ${matchedTranslationCount}`);
+      log(`[BUILD] Unchanged translations (same as source): ${unchangedTranslationCount}`);
+      log(`[BUILD] Effective modified entries: ${modifiedCount}`);
       log(`[BUILD] Total MSBT entries parsed: ${totalMsbtEntries}`);
       log(`[BUILD] Files with no matches: ${filesWithNoMatch}/${fileNamesToBuild.length}`);
       log(`[BUILD] Files expected to match but got 0: ${filesExpectedButNoMatch}`);
@@ -675,6 +677,31 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         });
         setShowBuildVerification(true);
         setBuildProgress("❌ فشل البناء — خلل مطابقة في ملفات مستهدفة");
+        setBuilding(false);
+        return;
+      }
+
+      // Defensive strict policy: if we had buildable keys but no effective byte-level text changes, abort.
+      if (buildableTranslationsCount > 0 && modifiedCount === 0) {
+        log('[BUILD] ❌ STRICT POLICY: buildable keys exist but effective modifications = 0 — BUILD ABORTED');
+        setLastBuildLog([...buildLog]);
+        setBuildVerification({
+          checks: [
+            { label: "تعديلات فعلية", status: "fail", detail: "تم العثور على مفاتيح مطابقة لكن جميع النصوص مطابقة للأصل (لا يوجد فرق فعلي للبناء)." },
+            { label: "سبب محتمل", status: "warn", detail: "تم استيراد نصوص إنجليزية كما هي، أو ملف ترجمة غير مُعبّأ فعلياً." },
+            { label: "الحل", status: "warn", detail: "تأكد أن القيم المترجمة تختلف فعلاً عن النص الأصلي ثم أعد البناء." },
+          ],
+          outputSizeBytes: 0,
+          translationsApplied: 0,
+          translationsExpected: buildableTranslationsCount,
+          autoProcessedArabic: autoProcessedCount,
+          tagsFixed: tagFixCount,
+          tagsOk: tagOkCount,
+          filesBuilt: 0,
+          buildDurationMs: Date.now() - buildStartTime,
+        });
+        setShowBuildVerification(true);
+        setBuildProgress("❌ فشل البناء — لا توجد تعديلات فعلية داخل النصوص");
         setBuilding(false);
         return;
       }
