@@ -1041,8 +1041,9 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
             for (const msbtName of sarcMeta.msbtEntryNames) {
               const lookupName = resolveSarcLookupName(sarcMeta, msbtName);
               const fallbackLegacyName = msbtName.replace(/.*[/\\]/, '');
-              if (rebuiltMsbtFiles[lookupName]) {
-                sarcEntries.push({ name: msbtName, data: rebuiltMsbtFiles[lookupName] });
+              const rebuiltData = findRebuiltMsbt(lookupName);
+              if (rebuiltData) {
+                sarcEntries.push({ name: msbtName, data: rebuiltData });
               } else if (msbtFiles[lookupName]) {
                 sarcEntries.push({ name: msbtName, data: new Uint8Array(msbtFiles[lookupName]) });
               } else if (msbtFiles[fallbackLegacyName]) {
