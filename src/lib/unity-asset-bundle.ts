@@ -588,17 +588,23 @@ export function repackBundle(
     
     // Check if any assets in this entry need replacement
     const entryReplacements: { asset: ExtractedAsset; newData: Uint8Array }[] = [];
+    const embeddedReplacements: { asset: ExtractedAsset; newData: Uint8Array }[] = [];
     for (const a of entryAssets) {
       const replacementKey = `${a.name}#${a.pathId.toString()}`;
       const newData = replacements.get(replacementKey) ?? replacements.get(a.name);
       if (!newData) continue;
-      if (a.textAssetDataLenOffset < 0 || a.textAssetDataBytesOffset < 0) continue;
       // Critical: skip byte-identical payloads to avoid unnecessary bundle rewrites.
       if (areBytesEqual(newData, a.data)) continue;
-      entryReplacements.push({ asset: a, newData });
+      if (a.textAssetDataLenOffset >= 0 && a.textAssetDataBytesOffset >= 0) {
+        // Normal path: TextAsset with known offsets
+        entryReplacements.push({ asset: a, newData });
+      } else {
+        // Fallback path: embedded MSBT without parsed offsets (e.g. Fire Emblem Engage v22)
+        embeddedReplacements.push({ asset: a, newData });
+      }
     }
 
-    if (entryReplacements.length === 0) {
+    if (entryReplacements.length === 0 && embeddedReplacements.length === 0) {
       // No changes — copy as-is
       newEntryBuffers.push(entryData);
       newEntryOffsets.push(currentOffset);
@@ -607,8 +613,15 @@ export function repackBundle(
     }
 
     // Rebuild this serialized file with replacements
-    const rebuilt = rebuildSerializedFile(entryData, entryReplacements);
-    replacedCount += entryReplacements.length;
+    let rebuilt = entryData;
+    if (entryReplacements.length > 0) {
+      rebuilt = rebuildSerializedFile(rebuilt, entryReplacements);
+      replacedCount += entryReplacements.length;
+    }
+    if (embeddedReplacements.length > 0) {
+      rebuilt = replaceEmbeddedMsbt(rebuilt, embeddedReplacements);
+      replacedCount += embeddedReplacements.length;
+    }
     newEntryBuffers.push(rebuilt);
     newEntryOffsets.push(currentOffset);
     currentOffset += rebuilt.length;
