@@ -27,6 +27,8 @@ class BinaryReader {
   get position() { return this.pos; }
   set position(v: number) { this.pos = v; }
   get length() { return this.view.byteLength; }
+  get littleEndian() { return this.le; }
+  set littleEndian(v: boolean) { this.le = v; }
 
   readU8(): number { return this.view.getUint8(this.pos++); }
   readU16(): number { const v = this.view.getUint16(this.pos, this.le); this.pos += 2; return v; }
