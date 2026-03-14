@@ -974,17 +974,20 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
             const lookupName = resolveSarcLookupName(sarcMeta, msbtName);
             const fallbackLegacyName = msbtName.replace(/.*[/\\]/, '');
             const rebuiltData = findRebuiltMsbt(lookupName);
+            log(`[BUILD] 🔍 SARC lookup: entry="${msbtName}" → lookup="${lookupName}" → ${rebuiltData ? `✅ found (${rebuiltData.byteLength}b)` : '❌ NOT found'}`);
             if (rebuiltData) {
               sarcEntries.push({ name: msbtName, data: rebuiltData });
               sarcMatched++;
             } else if (msbtFiles[lookupName]) {
               sarcEntries.push({ name: msbtName, data: new Uint8Array(msbtFiles[lookupName]) });
+              log(`[BUILD]   ↪ fell back to original msbtFiles["${lookupName}"]`);
               sarcMissed++;
             } else if (msbtFiles[fallbackLegacyName]) {
               sarcEntries.push({ name: msbtName, data: new Uint8Array(msbtFiles[fallbackLegacyName]) });
+              log(`[BUILD]   ↪ fell back to legacy msbtFiles["${fallbackLegacyName}"]`);
               sarcMissed++;
             } else {
-              log(`[BUILD] ⚠️ SARC entry missing: ${msbtName} (lookup: ${lookupName})`);
+              log(`[BUILD]   ↪ ⚠️ MISSING entirely (not in rebuilt or original)`);
               sarcMissed++;
             }
           }
