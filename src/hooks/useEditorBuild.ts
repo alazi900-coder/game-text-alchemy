@@ -529,6 +529,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       const rebuiltMsbtFiles: Record<string, Uint8Array> = {};
       let filesWithNoMatch = 0;
       let totalMsbtEntries = 0;
+      let filesExpectedButNoMatch = 0;
+      const fileMatchStats = new Map<string, { expected: number; applied: number; total: number }>();
 
       for (let fi = 0; fi < fileNamesToBuild.length; fi++) {
         const fileName = fileNamesToBuild[fi];
@@ -559,6 +561,14 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
             }
           }
         }
+
+        let expectedForFile = 0;
+        if (indexMap) {
+          for (const canonicalKey of indexMap.values()) {
+            if (nonEmptyTranslations[canonicalKey]?.trim()) expectedForFile++;
+          }
+        }
+
         for (let ei = 0; ei < msbt.entries.length; ei++) {
           const entry = msbt.entries[ei];
           const canonicalKey = indexMap?.get(ei) || `msbt:${fileName}:${entry.label}:${ei}`;
@@ -570,9 +580,16 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         }
 
         const applied = Object.keys(translationsForFile).length;
+        fileMatchStats.set(fileName, { expected: expectedForFile, applied, total: msbt.entries.length });
+
         if (applied === 0) {
           filesWithNoMatch++;
-          log(`[BUILD] ⚠️ ${fileName}: 0/${msbt.entries.length} translations matched`);
+          if (expectedForFile > 0) {
+            filesExpectedButNoMatch++;
+            log(`[BUILD] ❌ ${fileName}: expected ${expectedForFile} translated entries, but applied 0`);
+          } else {
+            log(`[BUILD] ℹ️ ${fileName}: 0/${msbt.entries.length} translations matched (لا توجد ترجمات مخصصة لهذا الملف)`);
+          }
         }
 
         if (applied > 0) {
@@ -586,40 +603,25 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       log(`[BUILD] Modified entries: ${modifiedCount}`);
       log(`[BUILD] Total MSBT entries parsed: ${totalMsbtEntries}`);
       log(`[BUILD] Files with no matches: ${filesWithNoMatch}/${fileNamesToBuild.length}`);
+      log(`[BUILD] Files expected to match but got 0: ${filesExpectedButNoMatch}`);
       log(`[BUILD] Rebuilt files: ${Object.keys(rebuiltMsbtFiles).length}`);
 
-      // === STRICT 100% POLICY: fail if ANY file has zero matches ===
-      if (filesWithNoMatch > 0) {
-        const unmatchedFiles = fileNamesToBuild.filter(fileName => {
-          const buf = msbtFiles[fileName];
-          if (!buf) return false;
-          let indexMap = keyByMsbtNameAndIndex.get(fileName);
-          if (!indexMap) {
-            const shortName = extractShortMsbtName(`msbt:${fileName}`);
-            if (shortName && shortName !== fileName) {
-              for (const [k, v] of keyByMsbtNameAndIndex.entries()) {
-                if (extractShortMsbtName(`msbt:${k}`) === shortName) { indexMap = v; break; }
-              }
-            }
-          }
-          if (!indexMap) return true;
-          // Check if at least one entry matched
-          for (const [, canonicalKey] of indexMap.entries()) {
-            if (nonEmptyTranslations[canonicalKey]?.trim()) return false;
-          }
-          return true;
-        });
+      // === STRICT POLICY: fail only for files that had expected translations but got 0 applied ===
+      const criticalUnmatchedFiles = Array.from(fileMatchStats.entries())
+        .filter(([, stats]) => stats.expected > 0 && stats.applied === 0)
+        .map(([fileName]) => fileName);
 
-        log(`[BUILD] ❌ STRICT POLICY: ${filesWithNoMatch} files with 0% match — BUILD ABORTED`);
-        for (const f of unmatchedFiles) log(`[BUILD]   ⛔ ${f}`);
+      if (criticalUnmatchedFiles.length > 0) {
+        log(`[BUILD] ❌ STRICT POLICY: ${criticalUnmatchedFiles.length} files expected translations but got 0% match — BUILD ABORTED`);
+        for (const f of criticalUnmatchedFiles) log(`[BUILD]   ⛔ ${f}`);
 
         setLastBuildLog([...buildLog]);
         const failChecks: VerificationCheck[] = [
-          { label: "سياسة المطابقة الصارمة", status: "fail", detail: `${filesWithNoMatch} ملف MSBT بدون أي ترجمة مطابقة — البناء مرفوض` },
-          ...unmatchedFiles.slice(0, 10).map(f => ({ label: f, status: "fail" as const, detail: "0% مطابقة — لم تُحقن أي ترجمة" })),
+          { label: "سياسة المطابقة الصارمة", status: "fail", detail: `${criticalUnmatchedFiles.length} ملف كان يجب أن يستقبل ترجمات لكنه خرج 0% مطابقة — البناء مرفوض` },
+          ...criticalUnmatchedFiles.slice(0, 10).map(f => ({ label: f, status: "fail" as const, detail: "متوقع وجود ترجمات لكن لم تُحقن أي ترجمة" })),
         ];
-        if (unmatchedFiles.length > 10) {
-          failChecks.push({ label: "ملفات أخرى", status: "fail", detail: `و ${unmatchedFiles.length - 10} ملف آخر بنفس المشكلة` });
+        if (criticalUnmatchedFiles.length > 10) {
+          failChecks.push({ label: "ملفات أخرى", status: "fail", detail: `و ${criticalUnmatchedFiles.length - 10} ملف آخر بنفس المشكلة` });
         }
         setBuildVerification({
           checks: failChecks,
@@ -633,7 +635,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           buildDurationMs: Date.now() - buildStartTime,
         });
         setShowBuildVerification(true);
-        setBuildProgress("❌ فشل البناء — ملفات بدون ترجمات مطابقة");
+        setBuildProgress("❌ فشل البناء — خلل مطابقة في ملفات مستهدفة");
         setBuilding(false);
         return;
       }
