@@ -209,8 +209,10 @@ const COMPRESSION_LZ4HC = 3;
 
 const COMPRESSION_ZSTD = 4;
 
-/** Compress data using LZ4 block compression */
-function compressLz4(input: Uint8Array): Uint8Array {
+/** Compress data using LZ4 block compression.
+ * Returns null if block compression fails so caller can downgrade flags safely.
+ */
+function compressLz4(input: Uint8Array): Uint8Array | null {
   // lz4js.compressBlock needs a pre-allocated output buffer
   // Max compressed size is input.length + (input.length / 255) + 16 (worst case)
   const maxOut = Math.max(64, input.length + Math.ceil(input.length / 255) + 16);
@@ -218,9 +220,8 @@ function compressLz4(input: Uint8Array): Uint8Array {
   const hashTable = new Uint32Array(65536);
   const written = lz4.compressBlock(input, output, 0, input.length, hashTable);
   if (written <= 0) {
-    // Compression failed or didn't help — return uncompressed
-    console.warn("[compressLz4] compression returned 0, falling back to uncompressed");
-    return input;
+    console.warn("[compressLz4] compression returned 0; caller must fallback to COMPRESSION_NONE");
+    return null;
   }
   return output.slice(0, written);
 }
@@ -519,6 +520,14 @@ function parseTextAssetWithOffsets(data: Uint8Array): {
   return { name: name || "unnamed", data: assetData, dataLenOffset, dataBytesOffset };
 }
 
+function areBytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.byteLength !== b.byteLength) return false;
+  for (let i = 0; i < a.byteLength; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
 /* ─────────────────────────────────────────────────────────────────────
    REPACK: Replace TextAssets in the decompressed stream and rebuild
    the entire UnityFS bundle.
@@ -582,9 +591,11 @@ export function repackBundle(
     for (const a of entryAssets) {
       const replacementKey = `${a.name}#${a.pathId.toString()}`;
       const newData = replacements.get(replacementKey) ?? replacements.get(a.name);
-      if (newData && a.textAssetDataLenOffset >= 0 && a.textAssetDataBytesOffset >= 0) {
-        entryReplacements.push({ asset: a, newData });
-      }
+      if (!newData) continue;
+      if (a.textAssetDataLenOffset < 0 || a.textAssetDataBytesOffset < 0) continue;
+      // Critical: skip byte-identical payloads to avoid unnecessary bundle rewrites.
+      if (areBytesEqual(newData, a.data)) continue;
+      entryReplacements.push({ asset: a, newData });
     }
 
     if (entryReplacements.length === 0) {
@@ -601,6 +612,16 @@ export function repackBundle(
     newEntryBuffers.push(rebuilt);
     newEntryOffsets.push(currentOffset);
     currentOffset += rebuilt.length;
+  }
+
+  // If nothing actually changed, return original bundle bytes untouched.
+  if (replacedCount === 0) {
+    return {
+      buffer: originalBuffer.slice(0),
+      replacedCount: 0,
+      newSize: originalBuffer.byteLength,
+      originalSize: originalBuffer.byteLength,
+    };
   }
 
   // Assemble new decompressed data
@@ -622,34 +643,51 @@ export function repackBundle(
   // Determine original compression type
   const originalBlockCompression = info.blocks.length > 0 ? (info.blocks[0].flags & 0x3F) : COMPRESSION_NONE;
   const headerCompression = info.flags & 0x3F;
-  // Use LZ4 if original used LZ4/LZ4HC, otherwise no compression
-  const useCompression = (originalBlockCompression === COMPRESSION_LZ4 || originalBlockCompression === COMPRESSION_LZ4HC)
+  // Prefer original style, but downgrade safely if LZ4 block compression fails.
+  const preferredDataCompression = (originalBlockCompression === COMPRESSION_LZ4 || originalBlockCompression === COMPRESSION_LZ4HC)
     ? COMPRESSION_LZ4
     : COMPRESSION_NONE;
 
   // Compress data blocks with LZ4 if needed
   let compressedData: Uint8Array;
   let compressedDataSize: number;
-  if (useCompression === COMPRESSION_LZ4) {
-    compressedData = compressLz4(newDecompressed);
-    compressedDataSize = compressedData.length;
-    console.log(`[repack] LZ4 compressed data: ${totalDecompressedSize} → ${compressedDataSize} bytes (${(compressedDataSize / totalDecompressedSize * 100).toFixed(1)}%)`);
+  let dataCompressionUsed = preferredDataCompression;
+  if (preferredDataCompression === COMPRESSION_LZ4) {
+    const maybeCompressed = compressLz4(newDecompressed);
+    if (maybeCompressed) {
+      compressedData = maybeCompressed;
+      compressedDataSize = compressedData.length;
+      console.log(`[repack] LZ4 compressed data: ${totalDecompressedSize} → ${compressedDataSize} bytes (${(compressedDataSize / totalDecompressedSize * 100).toFixed(1)}%)`);
+    } else {
+      dataCompressionUsed = COMPRESSION_NONE;
+      compressedData = newDecompressed;
+      compressedDataSize = totalDecompressedSize;
+      console.warn(`[repack] Data compression downgraded to NONE for compatibility (size: ${compressedDataSize})`);
+    }
   } else {
     compressedData = newDecompressed;
     compressedDataSize = totalDecompressedSize;
   }
 
   // Build block info (with compressed sizes)
-  const blockInfoBuf = buildBlockInfoBuffer(totalDecompressedSize, compressedDataSize, useCompression, newEntries);
+  const blockInfoBuf = buildBlockInfoBuffer(totalDecompressedSize, compressedDataSize, dataCompressionUsed, newEntries);
 
   // Compress block info if original header used compression
-  const useHeaderCompression = (headerCompression === COMPRESSION_LZ4 || headerCompression === COMPRESSION_LZ4HC)
+  const preferredHeaderCompression = (headerCompression === COMPRESSION_LZ4 || headerCompression === COMPRESSION_LZ4HC)
     ? COMPRESSION_LZ4
     : COMPRESSION_NONE;
+  let headerCompressionUsed = preferredHeaderCompression;
   let compressedBlockInfo: Uint8Array;
-  if (useHeaderCompression === COMPRESSION_LZ4) {
-    compressedBlockInfo = compressLz4(blockInfoBuf);
-    console.log(`[repack] LZ4 compressed block info: ${blockInfoBuf.length} → ${compressedBlockInfo.length} bytes`);
+  if (preferredHeaderCompression === COMPRESSION_LZ4) {
+    const maybeCompressedBlockInfo = compressLz4(blockInfoBuf);
+    if (maybeCompressedBlockInfo) {
+      compressedBlockInfo = maybeCompressedBlockInfo;
+      console.log(`[repack] LZ4 compressed block info: ${blockInfoBuf.length} → ${compressedBlockInfo.length} bytes`);
+    } else {
+      headerCompressionUsed = COMPRESSION_NONE;
+      compressedBlockInfo = blockInfoBuf;
+      console.warn("[repack] Block info compression downgraded to NONE for compatibility");
+    }
   } else {
     compressedBlockInfo = blockInfoBuf;
   }
@@ -658,7 +696,7 @@ export function repackBundle(
   const blockInfoAtEnd = (info.flags & 0x80) !== 0;
   const alignFlag = (info.flags & 0x100) !== 0;
   // Reconstruct flags: header compression type + original structural flags
-  const newFlags = useHeaderCompression | (blockInfoAtEnd ? 0x80 : 0) | (alignFlag ? 0x100 : 0);
+  const newFlags = headerCompressionUsed | (blockInfoAtEnd ? 0x80 : 0) | (alignFlag ? 0x100 : 0);
 
   // Write new UnityFS file
   const w = new BinaryWriter(compressedDataSize + 4096);
