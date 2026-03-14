@@ -956,14 +956,20 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
 
             if (replacements.size > 0) {
               log(`[BUILD] 🔧 Bundle ${meta.originalFileName}: ${replacements.size} replacements requested`);
-              const result = repackBundle(originalBuffer, meta.info, decompressedData, meta.assets, replacements);
-              if (result.replacedCount > 0) {
-                log(`[BUILD] ✅ Bundle ${meta.originalFileName}: effective replacements=${result.replacedCount} → REPACK`);
-                outputZip.file(meta.originalFileName, new Uint8Array(result.buffer));
-                bundlesRepacked++;
-                totalEffectiveBundleReplacements += result.replacedCount;
-              } else {
-                log(`[BUILD] ⚠️ Bundle ${meta.originalFileName}: candidates exist but effective replacements=0 → ORIGINAL`);
+              try {
+                const result = repackBundle(originalBuffer, meta.info, decompressedData, meta.assets, replacements);
+                if (result.replacedCount > 0) {
+                  log(`[BUILD] ✅ Bundle ${meta.originalFileName}: effective replacements=${result.replacedCount} → REPACK`);
+                  outputZip.file(meta.originalFileName, new Uint8Array(result.buffer));
+                  bundlesRepacked++;
+                  totalEffectiveBundleReplacements += result.replacedCount;
+                } else {
+                  log(`[BUILD] ⚠️ Bundle ${meta.originalFileName}: candidates exist but effective replacements=0 → ORIGINAL`);
+                  outputZip.file(meta.originalFileName, new Uint8Array(originalBuffer));
+                  bundlesUntouched++;
+                }
+              } catch (repackErr: any) {
+                log(`[BUILD] ❌ Bundle ${meta.originalFileName}: repack error: ${repackErr?.message || repackErr} → ORIGINAL`);
                 outputZip.file(meta.originalFileName, new Uint8Array(originalBuffer));
                 bundlesUntouched++;
               }
