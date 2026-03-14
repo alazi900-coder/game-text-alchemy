@@ -741,6 +741,23 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         return scoped || msbtName.replace(/.*[/\\]/, '');
       };
 
+      /** Resolve rebuilt MSBT data by trying multiple name formats */
+      const findRebuiltMsbt = (lookupName: string): Uint8Array | undefined => {
+        // 1. Exact match
+        if (rebuiltMsbtFiles[lookupName]) return rebuiltMsbtFiles[lookupName];
+        // 2. Try short name
+        const shortName = extractShortMsbtName(`msbt:${lookupName}`);
+        if (shortName && shortName !== lookupName && rebuiltMsbtFiles[shortName]) return rebuiltMsbtFiles[shortName];
+        // 3. Try matching any key whose short name matches
+        if (shortName) {
+          for (const [key, data] of Object.entries(rebuiltMsbtFiles)) {
+            const keyShort = extractShortMsbtName(`msbt:${key}`);
+            if (keyShort === shortName) return data;
+          }
+        }
+        return undefined;
+      };
+
       const makeAssetReplacementKey = (asset: any) => {
         const pathId = typeof asset.pathId === 'bigint'
           ? asset.pathId.toString()
