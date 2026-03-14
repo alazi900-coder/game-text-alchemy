@@ -27,6 +27,8 @@ class BinaryReader {
   get position() { return this.pos; }
   set position(v: number) { this.pos = v; }
   get length() { return this.view.byteLength; }
+  get littleEndian() { return this.le; }
+  set littleEndian(v: boolean) { this.le = v; }
 
   readU8(): number { return this.view.getUint8(this.pos++); }
   readU16(): number { const v = this.view.getUint16(this.pos, this.le); this.pos += 2; return v; }
@@ -342,6 +344,17 @@ export async function decompressBundle(buffer: ArrayBuffer, info: UnityBundleInf
 export function extractAssets(decompressedData: Uint8Array, info: UnityBundleInfo): ExtractedAsset[] {
   const assets: ExtractedAsset[] = [];
 
+  // بعض الحزم تُرجع جدول ملفات داخلي فارغ رغم وجود بيانات فعلية.
+  // في هذه الحالة نستخدم فحص مباشر للبيانات المضغوطة بعد فك الضغط.
+  if (info.entries.length === 0 && decompressedData.length > 0) {
+    return [createRawOrEmbeddedMsbtAsset(decompressedData, {
+      name: "bundle_data",
+      entryIndex: 0,
+      absoluteDataOffset: 0,
+      objectByteSize: decompressedData.length,
+    })];
+  }
+
   for (let ei = 0; ei < info.entries.length; ei++) {
     const entry = info.entries[ei];
     const entryOffset = Number(entry.offset);
@@ -350,7 +363,16 @@ export function extractAssets(decompressedData: Uint8Array, info: UnityBundleInf
 
     try {
       const parsed = parseSerializedFile(entryData, ei, entryOffset);
-      assets.push(...parsed);
+      if (parsed.length > 0) {
+        assets.push(...parsed);
+      } else {
+        assets.push(createRawOrEmbeddedMsbtAsset(entryData, {
+          name: entry.name || `entry_${ei}`,
+          entryIndex: ei,
+          absoluteDataOffset: entryOffset,
+          objectByteSize: size,
+        }));
+      }
     } catch {
       assets.push(createRawOrEmbeddedMsbtAsset(entryData, {
         name: entry.name || `entry_${ei}`,
@@ -384,8 +406,10 @@ function parseSerializedFile(data: Uint8Array, entryIndex: number, entryAbsolute
   }
 
   if (version >= 9) {
-    r.readU8(); // bigEndian
+    const bigEndian = r.readU8() !== 0;
     r.skip(3);
+    // بعد هذا الحقل تصبح قراءة الميتاداتا حسب endian الموجود داخل الملف.
+    r.littleEndian = !bigEndian;
   }
 
   if (version >= 14) {
