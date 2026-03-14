@@ -780,9 +780,34 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
             }
           }
 
-          log(`[BUILD] Bundle repack: ${replacements.size} MSBT replacements`);
+          log(`[BUILD] Bundle repack requested: ${replacements.size} MSBT replacements`);
           const result = repackBundle(originalBuffer, meta.info, decompressedData, meta.assets, replacements);
+          log(`[BUILD] Bundle effective replacements: ${result.replacedCount}`);
           log(`[BUILD] Bundle output size: ${result.buffer.byteLength} bytes (original: ${originalBuffer.byteLength})`);
+
+          if (replacements.size > 0 && result.replacedCount === 0) {
+            log('[BUILD] ❌ Bundle had replacement candidates but produced 0 effective byte changes — BUILD ABORTED');
+            setLastBuildLog([...buildLog]);
+            setBuildVerification({
+              checks: [
+                { label: "حقن الترجمات", status: "fail", detail: "تم تجهيز بدائل للملف لكن لم يُسجل أي تغيير فعلي داخل البايتات." },
+                { label: "سبب محتمل", status: "warn", detail: "النصوص المستوردة مطابقة للأصل، أو حصل عدم تطابق بين الأصول والمفاتيح." },
+              ],
+              outputSizeBytes: 0,
+              originalSizeBytes: originalBuffer.byteLength,
+              translationsApplied: 0,
+              translationsExpected: buildableTranslationsCount,
+              autoProcessedArabic: autoProcessedCount,
+              tagsFixed: tagFixCount,
+              tagsOk: tagOkCount,
+              filesBuilt: 0,
+              buildDurationMs: Date.now() - buildStartTime,
+            });
+            setShowBuildVerification(true);
+            setBuildProgress("❌ فشل البناء — لا توجد تغييرات فعلية في الـBundle");
+            setBuilding(false);
+            return;
+          }
 
           // === BINARY VALIDATION before download ===
           setBuildProgress("فحص ثنائي للملف الناتج...");
@@ -820,7 +845,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           a.download = meta.originalFileName.replace(/\.(bytes\.)?bundle$/i, '_arabized.bytes.bundle');
           a.click();
           URL.revokeObjectURL(url);
-          setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — Bundle جاهز للعبة 🎮`);
+          setBuildProgress(`✅ تم بنجاح! تم تعديل ${modifiedCount} نص — ${result.replacedCount} أصل فعلي تم استبداله داخل الـBundle 🎮`);
         } else {
           const outputZip = new JSZip();
           let bundlesRepacked = 0;
