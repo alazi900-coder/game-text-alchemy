@@ -799,10 +799,21 @@ export function replaceEmbeddedMsbt(
     }
     if (msbtOffset < 0) continue;
 
+    // Bounds check: need at least 22 bytes from msbtOffset for header (offset 18 + 4 bytes)
+    if (msbtOffset + 22 > data.length) {
+      console.warn(`[replaceEmbeddedMsbt] MsgStdBn found at ${msbtOffset} but not enough data for header (need ${msbtOffset + 22}, have ${data.length})`);
+      continue;
+    }
+
     // Read original MSBT file size from MSBT header (offset 18 = file_size, LE u32)
-    const origMsbtSize = new DataView(
-      data.buffer, data.byteOffset + msbtOffset + 18, 4
-    ).getUint32(0, true);
+    const localBuf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+    const origMsbtSize = new DataView(localBuf, msbtOffset + 18, 4).getUint32(0, true);
+
+    // Sanity: origMsbtSize must not exceed remaining data
+    if (origMsbtSize === 0 || msbtOffset + origMsbtSize > data.length) {
+      console.warn(`[replaceEmbeddedMsbt] Invalid origMsbtSize=${origMsbtSize} at offset ${msbtOffset} (data.length=${data.length})`);
+      continue;
+    }
 
     // Search backwards from MsgStdBn for the dataLen field (u32 LE matching origMsbtSize)
     let dataLenOffset = -1;
