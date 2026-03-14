@@ -734,7 +734,12 @@ const Editor = () => {
                   {editor.buildStats && <span className="text-xs text-muted-foreground mr-2"> (اضغط للتفاصيل)</span>}
                 </div>
                 {!editor.building && (
-                  <div className="flex justify-center mt-3">
+                  <div className="flex justify-center gap-2 mt-3">
+                    {editor.lastBuildLog && editor.lastBuildLog.length > 0 && (
+                      <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); editor.setShowBuildVerification(true); }} className="font-display text-xs gap-1">
+                        📋 سجل البناء
+                      </Button>
+                    )}
                     <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); editor.dismissBuildProgress(); }} className="font-display">
                       ✓ موافق
                     </Button>
