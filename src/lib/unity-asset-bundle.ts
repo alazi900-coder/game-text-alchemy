@@ -406,8 +406,10 @@ function parseSerializedFile(data: Uint8Array, entryIndex: number, entryAbsolute
   }
 
   if (version >= 9) {
-    r.readU8(); // bigEndian
+    const bigEndian = r.readU8() !== 0;
     r.skip(3);
+    // بعد هذا الحقل تصبح قراءة الميتاداتا حسب endian الموجود داخل الملف.
+    r.littleEndian = !bigEndian;
   }
 
   if (version >= 14) {
