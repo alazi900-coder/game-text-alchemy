@@ -479,13 +479,43 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         (currentState as any).translations = {};
       }
 
+      const rawNonEmptyTranslationsCount = Object.values(currentState.translations as Record<string, unknown>)
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0).length;
+
       const { normalized: nonEmptyTranslations, remapped, dropped } = normalizeTranslationsForBuild(
         currentState.translations,
         validEntryKeySet,
         keyByMsbtNameAndIndex,
       );
 
-      log(`[BUILD] Normalized: ${Object.keys(nonEmptyTranslations).length} translations, remapped=${remapped}, dropped=${dropped}`);
+      const buildableTranslationsCount = Object.keys(nonEmptyTranslations).filter(key => validEntryKeySet.has(key)).length;
+
+      log(`[BUILD] Normalized: ${Object.keys(nonEmptyTranslations).length} total, buildable=${buildableTranslationsCount}, remapped=${remapped}, dropped=${dropped}`);
+      log(`[BUILD] Raw non-empty translations in state: ${rawNonEmptyTranslationsCount}`);
+
+      if (rawNonEmptyTranslationsCount > 0 && buildableTranslationsCount === 0) {
+        log('[BUILD] ❌ لا توجد مفاتيح ترجمة مطابقة للمدخلات الحالية — تم إيقاف البناء');
+        setLastBuildLog([...buildLog]);
+        setBuildVerification({
+          checks: [
+            { label: "مطابقة المفاتيح", status: "fail", detail: `تم العثور على ${rawNonEmptyTranslationsCount} ترجمة محفوظة لكن ولا مفتاح واحد مطابق للملفات الحالية.` },
+            { label: "سبب محتمل", status: "warn", detail: "ملف JSON بصيغة مفاتيح قديمة (مثل file.msbt:0) أو مشروع/استخراج مختلف." },
+            { label: "الحل", status: "warn", detail: "أعد تصدير/استيراد الترجمات من نفس جلسة الاستخراج الحالية ثم أعد البناء." },
+          ],
+          outputSizeBytes: 0,
+          translationsApplied: 0,
+          translationsExpected: rawNonEmptyTranslationsCount,
+          autoProcessedArabic: 0,
+          tagsFixed: 0,
+          tagsOk: 0,
+          filesBuilt: 0,
+          buildDurationMs: Date.now() - buildStartTime,
+        });
+        setShowBuildVerification(true);
+        setBuildProgress("❌ لا توجد ترجمات مطابقة للجلسة الحالية");
+        setBuilding(false);
+        return;
+      }
 
       // Auto Arabic processing before build
       let autoProcessedCount = 0;
@@ -626,7 +656,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           checks: failChecks,
           outputSizeBytes: 0,
           translationsApplied: modifiedCount,
-          translationsExpected: Object.keys(nonEmptyTranslations).length,
+          translationsExpected: buildableTranslationsCount,
           autoProcessedArabic: autoProcessedCount,
           tagsFixed: tagFixCount,
           tagsOk: tagOkCount,
@@ -734,7 +764,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
               outputSizeBytes: result.buffer.byteLength,
               originalSizeBytes: originalBuffer.byteLength,
               translationsApplied: modifiedCount,
-              translationsExpected: Object.keys(nonEmptyTranslations).length,
+              translationsExpected: buildableTranslationsCount,
               autoProcessedArabic: autoProcessedCount,
               tagsFixed: tagFixCount, tagsOk: tagOkCount,
               filesBuilt: 0,
@@ -856,7 +886,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
               outputSizeBytes: compressed.byteLength,
               originalSizeBytes: 0,
               translationsApplied: modifiedCount,
-              translationsExpected: Object.keys(nonEmptyTranslations).length,
+              translationsExpected: buildableTranslationsCount,
               autoProcessedArabic: autoProcessedCount,
               tagsFixed: tagFixCount, tagsOk: tagOkCount,
               filesBuilt: 0,
@@ -914,7 +944,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
                 outputSizeBytes: compressed.byteLength,
                 originalSizeBytes: 0,
                 translationsApplied: modifiedCount,
-                translationsExpected: Object.keys(nonEmptyTranslations).length,
+                translationsExpected: buildableTranslationsCount,
                 autoProcessedArabic: autoProcessedCount,
                 tagsFixed: tagFixCount, tagsOk: tagOkCount,
                 filesBuilt: 0,
@@ -1011,7 +1041,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       // Run post-build verification
       const verification = buildVerificationChecks({
         modifiedCount,
-        totalTranslations: Object.keys(nonEmptyTranslations).length,
+        totalTranslations: buildableTranslationsCount,
         autoProcessedArabic: autoProcessedCount,
         tagFixCount,
         tagOkCount,
