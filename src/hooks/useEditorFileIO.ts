@@ -2009,6 +2009,235 @@ export function useEditorFileIO({ state, setState, setLastSaved, filteredEntries
     }
   }, []);
 
+  // ── Cobalt (astra-msbt) txt format support ──
+
+  /** Parse a Cobalt .txt file: [LABEL]\ntext\n\n[LABEL2]\ntext2 */
+  const parseCobaltTxt = (text: string): Map<string, string> => {
+    const entries = new Map<string, string>();
+    const lines = text.split(/\r?\n/);
+    let currentLabel = '';
+    let currentLines: string[] = [];
+
+    const flush = () => {
+      if (currentLabel) {
+        // Trim trailing empty lines but preserve internal newlines
+        while (currentLines.length > 0 && currentLines[currentLines.length - 1].trim() === '') {
+          currentLines.pop();
+        }
+        if (currentLines.length > 0) {
+          entries.set(currentLabel, currentLines.join('\n'));
+        }
+      }
+    };
+
+    for (const line of lines) {
+      const labelMatch = line.match(/^\[([^\]]+)\]\s*$/);
+      if (labelMatch) {
+        flush();
+        currentLabel = labelMatch[1];
+        currentLines = [];
+      } else if (currentLabel) {
+        currentLines.push(line);
+      }
+    }
+    flush();
+    return entries;
+  };
+
+  /** Extract short MSBT base name from scoped key for Cobalt matching.
+   *  e.g. "msbt:bundle__accessories__entry_0.msbt" → "accessories"
+   *  Also handles: "msbt:bundle__pack__accessories.msbt" → "accessories"
+   */
+  const extractCobaltBaseName = (msbtFile: string): string | null => {
+    // Extract short MSBT name first
+    const shortMatch = msbtFile.match(/(?:__)?([^_][^_]*?)(?:\.msbt)?$/i);
+    if (!shortMatch) return null;
+    let name = shortMatch[1];
+    // Remove .msbt extension if present
+    name = name.replace(/\.msbt$/i, '');
+    return name.toLowerCase();
+  };
+
+  /** Import Cobalt .txt files (multiple file select) */
+  const handleImportCobalt = useCallback(() => {
+    if (!state) return;
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.txt';
+    input.multiple = true;
+    input.onchange = async (e) => {
+      const files = (e.target as HTMLInputElement).files;
+      if (!files || files.length === 0) return;
+
+      // Build lookup: baseName → label → entry key
+      // e.g. "accessories" → "MAID_QueenNia" → "msbt:bundle__accessories__entry_0.msbt:MAID_QueenNia:5"
+      const labelLookup = new Map<string, Map<string, string>>();
+      // Also build: baseName → index → entry key (for index-based fallback)
+      const indexLookup = new Map<string, Map<number, string>>();
+
+      for (const entry of state.entries) {
+        // Extract base name from msbtFile
+        const parts = entry.msbtFile.split('__');
+        const lastPart = parts[parts.length - 1]?.replace(/\.msbt$/i, '').toLowerCase();
+        if (!lastPart) continue;
+
+        const entryKey = `${entry.msbtFile}:${entry.index}`;
+
+        // Label-based lookup
+        if (entry.label) {
+          if (!labelLookup.has(lastPart)) labelLookup.set(lastPart, new Map());
+          labelLookup.get(lastPart)!.set(entry.label, entryKey);
+        }
+
+        // Index-based lookup
+        if (!indexLookup.has(lastPart)) indexLookup.set(lastPart, new Map());
+        indexLookup.get(lastPart)!.set(entry.index, entryKey);
+      }
+
+      const updates: Record<string, string> = {};
+      let totalLabels = 0;
+      let matched = 0;
+      let unmatched = 0;
+      const unmatchedLabels: string[] = [];
+
+      for (const file of Array.from(files)) {
+        const text = await file.text();
+        const cobaltEntries = parseCobaltTxt(text);
+        const baseName = file.name.replace(/\.txt$/i, '').toLowerCase();
+
+        // Find matching entry map
+        const labelMap = labelLookup.get(baseName);
+        const idxMap = indexLookup.get(baseName);
+
+        for (const [label, value] of cobaltEntries) {
+          totalLabels++;
+          const trimmed = normalizeArabicPresentationForms(value.trim());
+          if (!trimmed) continue;
+
+          // Try label match first
+          let entryKey = labelMap?.get(label);
+
+          // Try without common prefixes/suffixes variations
+          if (!entryKey && labelMap) {
+            // Case-insensitive search
+            for (const [mapLabel, mapKey] of labelMap) {
+              if (mapLabel.toLowerCase() === label.toLowerCase()) {
+                entryKey = mapKey;
+                break;
+              }
+            }
+          }
+
+          if (entryKey) {
+            updates[entryKey] = trimmed;
+            matched++;
+          } else {
+            unmatched++;
+            if (unmatchedLabels.length < 10) {
+              unmatchedLabels.push(`${baseName}:[${label}]`);
+            }
+          }
+        }
+      }
+
+      if (totalLabels === 0) {
+        alert('⚠️ لم يتم العثور على أي نصوص في ملفات Cobalt');
+        return;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        setState(prev => prev ? { ...prev, translations: { ...prev.translations, ...updates } } : prev);
+      }
+
+      let msg = `✅ Cobalt: تم استيراد ${matched} ترجمة من ${files.length} ملف`;
+      if (unmatched > 0) {
+        msg += ` (${unmatched} لم تتطابق)`;
+        if (unmatchedLabels.length > 0) {
+          console.log('🔍 Cobalt unmatched labels:', unmatchedLabels);
+        }
+      }
+      setLastSaved(msg);
+      setTimeout(() => setLastSaved(""), 5000);
+    };
+    input.click();
+  }, [state, setState, setLastSaved]);
+
+  /** Export translations in Cobalt .txt format (one file per MSBT, zipped) */
+  const handleExportCobalt = useCallback(async () => {
+    if (!state) return;
+
+    const entriesToExport = isFilterActive ? filteredEntries : state.entries;
+
+    // Group translated entries by MSBT base name
+    const groups = new Map<string, { label: string; text: string }[]>();
+
+    for (const entry of entriesToExport) {
+      const key = `${entry.msbtFile}:${entry.index}`;
+      const translation = state.translations[key]?.trim();
+      if (!translation || translation === entry.original) continue;
+      if (!entry.label) continue;
+
+      // Extract base name
+      const parts = entry.msbtFile.split('__');
+      const baseName = parts[parts.length - 1]?.replace(/\.msbt$/i, '').toLowerCase();
+      if (!baseName) continue;
+
+      if (!groups.has(baseName)) groups.set(baseName, []);
+      groups.get(baseName)!.push({
+        label: entry.label,
+        text: normalizeArabicPresentationForms(translation),
+      });
+    }
+
+    if (groups.size === 0) {
+      alert('⚠️ لا توجد ترجمات مع labels لتصديرها بصيغة Cobalt');
+      return;
+    }
+
+    // Build txt files
+    const fileContents = new Map<string, string>();
+    for (const [baseName, entries] of groups) {
+      const lines: string[] = [];
+      for (const { label, text } of entries) {
+        lines.push(`[${label}]`);
+        lines.push(text);
+        lines.push('');
+      }
+      fileContents.set(`${baseName}.txt`, lines.join('\n'));
+    }
+
+    if (fileContents.size === 1) {
+      // Single file — download directly
+      const [name, content] = [...fileContents.entries()][0];
+      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(url);
+    } else {
+      // Multiple files — zip them
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
+      const msbtFolder = zip.folder("message/us/usen");
+      for (const [name, content] of fileContents) {
+        msbtFolder!.file(name, content);
+      }
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `cobalt-translations_${new Date().toISOString().slice(0, 10)}.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+
+    const totalEntries = [...groups.values()].reduce((s, g) => s + g.length, 0);
+    setLastSaved(`✅ Cobalt: تم تصدير ${totalEntries} ترجمة في ${groups.size} ملف`);
+    setTimeout(() => setLastSaved(""), 4000);
+  }, [state, isFilterActive, filteredEntries, setLastSaved]);
+
   return {
     handleExportTranslations,
     handleExportEnglishOnly,
@@ -2031,6 +2260,9 @@ export function useEditorFileIO({ state, setState, setLastSaved, filteredEntries
     normalizeArabicPresentationForms,
     isFilterActive,
     filterLabel,
+    // Cobalt
+    handleImportCobalt,
+    handleExportCobalt,
     // Conflict dialog
     importConflicts,
     handleConflictConfirm,
