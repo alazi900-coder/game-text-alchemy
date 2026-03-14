@@ -802,10 +802,9 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
             if (!isMsbt(assetData)) continue;
             const lookupName = resolveBundleLookupName(meta, asset);
             const rebuiltData = findRebuiltMsbt(lookupName);
+            log(`[BUILD] 🔍 Bundle lookup: "${lookupName}" → ${rebuiltData ? `✅ found (${rebuiltData.byteLength}b)` : '❌ NOT found'}`);
             if (rebuiltData) {
               replacements.set(makeAssetReplacementKey(asset), rebuiltData);
-            } else {
-              log(`[BUILD] ⚠️ Bundle asset not found in rebuilt: ${lookupName}`);
             }
           }
 
