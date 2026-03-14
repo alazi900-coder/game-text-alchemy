@@ -644,8 +644,9 @@ export function repackBundle(
   const originalBlockCompression = info.blocks.length > 0 ? (info.blocks[0].flags & 0x3F) : COMPRESSION_NONE;
   const headerCompression = info.flags & 0x3F;
   // Prefer original style, but downgrade safely if LZ4 block compression fails.
+  // Preserve original compression type exactly (LZ4HC stays LZ4HC)
   const preferredDataCompression = (originalBlockCompression === COMPRESSION_LZ4 || originalBlockCompression === COMPRESSION_LZ4HC)
-    ? COMPRESSION_LZ4
+    ? originalBlockCompression
     : COMPRESSION_NONE;
 
   // Compress data blocks with LZ4 if needed
