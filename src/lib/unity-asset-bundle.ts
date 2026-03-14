@@ -591,9 +591,11 @@ export function repackBundle(
     for (const a of entryAssets) {
       const replacementKey = `${a.name}#${a.pathId.toString()}`;
       const newData = replacements.get(replacementKey) ?? replacements.get(a.name);
-      if (newData && a.textAssetDataLenOffset >= 0 && a.textAssetDataBytesOffset >= 0) {
-        entryReplacements.push({ asset: a, newData });
-      }
+      if (!newData) continue;
+      if (a.textAssetDataLenOffset < 0 || a.textAssetDataBytesOffset < 0) continue;
+      // Critical: skip byte-identical payloads to avoid unnecessary bundle rewrites.
+      if (areBytesEqual(newData, a.data)) continue;
+      entryReplacements.push({ asset: a, newData });
     }
 
     if (entryReplacements.length === 0) {
@@ -610,6 +612,16 @@ export function repackBundle(
     newEntryBuffers.push(rebuilt);
     newEntryOffsets.push(currentOffset);
     currentOffset += rebuilt.length;
+  }
+
+  // If nothing actually changed, return original bundle bytes untouched.
+  if (replacedCount === 0) {
+    return {
+      buffer: originalBuffer.slice(0),
+      replacedCount: 0,
+      newSize: originalBuffer.byteLength,
+      originalSize: originalBuffer.byteLength,
+    };
   }
 
   // Assemble new decompressed data
