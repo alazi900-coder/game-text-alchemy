@@ -663,12 +663,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         if (applied > 0) {
           const rebuiltData = rebuildMsbt(msbt, translationsForFile);
           rebuiltMsbtFiles[fileName] = rebuiltData;
-          // Also store under short name for cross-lookup (SARC/Bundle repack uses scoped names)
-          const shortName = extractShortMsbtName(`msbt:${fileName}`);
-          if (shortName && shortName !== fileName) {
-            rebuiltMsbtFiles[shortName] = rebuiltData;
-            log(`[BUILD] 🔗 Cross-indexed: ${fileName} → ${shortName}`);
-          }
+          log(`[BUILD] ✅ Rebuilt: ${fileName} (${rebuiltData.byteLength} bytes, ${applied} entries)`);
         }
         // Files with no translations are NOT added — they stay untouched in the original bundle
       }
@@ -779,17 +774,21 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
 
       /** Resolve rebuilt MSBT data by trying multiple name formats */
       const findRebuiltMsbt = (lookupName: string): Uint8Array | undefined => {
-        // 1. Exact match
+        // 1. Exact match (most common — scoped name matches directly)
         if (rebuiltMsbtFiles[lookupName]) return rebuiltMsbtFiles[lookupName];
-        // 2. Try short name
+        
+        // 2. Try matching by short name — but ONLY if exactly one rebuilt file shares that short name
         const shortName = extractShortMsbtName(`msbt:${lookupName}`);
-        if (shortName && shortName !== lookupName && rebuiltMsbtFiles[shortName]) return rebuiltMsbtFiles[shortName];
-        // 3. Try matching any key whose short name matches
         if (shortName) {
-          for (const [key, data] of Object.entries(rebuiltMsbtFiles)) {
+          const candidates: string[] = [];
+          for (const key of Object.keys(rebuiltMsbtFiles)) {
             const keyShort = extractShortMsbtName(`msbt:${key}`);
-            if (keyShort === shortName) return data;
+            if (keyShort === shortName) candidates.push(key);
           }
+          if (candidates.length === 1) {
+            return rebuiltMsbtFiles[candidates[0]];
+          }
+          // If multiple candidates share the same short name, skip — ambiguous match
         }
         return undefined;
       };
