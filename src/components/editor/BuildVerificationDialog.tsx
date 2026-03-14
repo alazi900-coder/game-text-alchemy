@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, AlertTriangle, XCircle, ShieldCheck, Copy, ChevronDown, ChevronUp } from "lucide-react";
+import { CheckCircle2, AlertTriangle, XCircle, ShieldCheck, Copy, ChevronDown, ChevronUp, Filter } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -49,16 +49,33 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+type LogFilter = "all" | "errors" | "unchanged";
+
+function isErrorLine(line: string): boolean {
+  return line.includes("❌") || line.includes("⛔") || line.includes("ERROR") || line.includes("STRICT POLICY");
+}
+
+function isUnchangedLine(line: string): boolean {
+  return line.includes("unchanged=") || line.includes("مطابقة للنص الأصلي");
+}
+
 function getLogLineColor(line: string): string {
-  if (line.includes("❌") || line.includes("ERROR") || line.includes("fail")) return "text-destructive";
+  if (line.includes("❌") || line.includes("ERROR") || line.includes("fail") || line.includes("⛔")) return "text-destructive";
   if (line.includes("⚠️") || line.includes("WARN") || line.includes("تحذير")) return "text-yellow-500";
   if (line.includes("✅") || line.includes("اكتمل") || line.includes("بنجاح")) return "text-secondary";
   if (line.includes("═══")) return "text-primary font-bold";
   return "text-muted-foreground";
 }
 
+const filterLabels: Record<LogFilter, string> = {
+  all: "الكل",
+  errors: "❌ فشل فقط",
+  unchanged: "🔄 بدون تغيير",
+};
+
 const BuildVerificationDialog = ({ open, onOpenChange, result, buildLog }: BuildVerificationDialogProps) => {
   const [logOpen, setLogOpen] = useState(false);
+  const [logFilter, setLogFilter] = useState<LogFilter>("all");
 
   if (!result) return null;
 
@@ -73,10 +90,22 @@ const BuildVerificationDialog = ({ open, onOpenChange, result, buildLog }: Build
     ? (result.outputSizeBytes / result.originalSizeBytes * 100).toFixed(0)
     : null;
 
+  const filteredLog = useMemo(() => {
+    if (!buildLog?.length || logFilter === "all") return buildLog || [];
+    return buildLog.filter(line => {
+      if (logFilter === "errors") return isErrorLine(line);
+      if (logFilter === "unchanged") return isUnchangedLine(line);
+      return true;
+    });
+  }, [buildLog, logFilter]);
+
+  const errorCount = useMemo(() => buildLog?.filter(isErrorLine).length || 0, [buildLog]);
+  const unchangedCount = useMemo(() => buildLog?.filter(isUnchangedLine).length || 0, [buildLog]);
+
   const handleCopyLog = () => {
-    if (!buildLog?.length) return;
-    navigator.clipboard.writeText(buildLog.join("\n")).then(() => {
-      toast({ title: "✅ تم نسخ السجل", description: `${buildLog.length} سطر` });
+    if (!filteredLog.length) return;
+    navigator.clipboard.writeText(filteredLog.join("\n")).then(() => {
+      toast({ title: "✅ تم نسخ السجل", description: `${filteredLog.length} سطر` });
     });
   };
 
@@ -174,12 +203,39 @@ const BuildVerificationDialog = ({ open, onOpenChange, result, buildLog }: Build
               </Button>
             </div>
             <CollapsibleContent>
-              <ScrollArea className="max-h-52 mt-1.5 rounded border border-border bg-muted/30 p-2">
-                <div className="space-y-0.5 font-mono text-[10px] leading-relaxed" dir="ltr">
-                  {buildLog.map((line, i) => (
-                    <p key={i} className={getLogLineColor(line)}>{line}</p>
-                  ))}
-                </div>
+              {/* Filter chips */}
+              <div className="flex gap-1.5 mt-1.5 mb-1.5 flex-wrap">
+                {(["all", "errors", "unchanged"] as LogFilter[]).map(f => {
+                  const count = f === "all" ? buildLog.length : f === "errors" ? errorCount : unchangedCount;
+                  if (f !== "all" && count === 0) return null;
+                  return (
+                    <Button
+                      key={f}
+                      variant={logFilter === f ? "default" : "outline"}
+                      size="sm"
+                      className="text-[10px] h-6 px-2 gap-1 font-display"
+                      onClick={() => setLogFilter(f)}
+                    >
+                      <Filter className="w-3 h-3" />
+                      {filterLabels[f]}
+                      <span className="opacity-70">({count})</span>
+                    </Button>
+                  );
+                })}
+              </div>
+
+              <ScrollArea className="max-h-52 rounded border border-border bg-muted/30 p-2">
+                {filteredLog.length > 0 ? (
+                  <div className="space-y-0.5 font-mono text-[10px] leading-relaxed" dir="ltr">
+                    {filteredLog.map((line, i) => (
+                      <p key={i} className={getLogLineColor(line)}>{line}</p>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-center text-[10px] text-muted-foreground py-4 font-body">
+                    لا توجد أسطر مطابقة لهذا الفلتر
+                  </p>
+                )}
               </ScrollArea>
             </CollapsibleContent>
           </Collapsible>
