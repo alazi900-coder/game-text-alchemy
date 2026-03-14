@@ -556,6 +556,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
 
       // Rebuild each MSBT file locally with translations injected
       let modifiedCount = 0;
+      let matchedTranslationCount = 0;
+      let unchangedTranslationCount = 0;
       const rebuiltMsbtFiles: Record<string, Uint8Array> = {};
       let filesWithNoMatch = 0;
       let totalMsbtEntries = 0;
@@ -603,10 +605,18 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           const entry = msbt.entries[ei];
           const canonicalKey = indexMap?.get(ei) || `msbt:${fileName}:${entry.label}:${ei}`;
           const trans = nonEmptyTranslations[canonicalKey];
-          if (trans && trans.trim()) {
-            translationsForFile[entry.label] = trans;
-            modifiedCount++;
+          if (!trans || !trans.trim()) continue;
+
+          matchedTranslationCount++;
+          const sourceText = entry.text?.trim() || "";
+          const translatedText = trans.trim();
+          if (translatedText === sourceText) {
+            unchangedTranslationCount++;
+            continue;
           }
+
+          translationsForFile[entry.label] = trans;
+          modifiedCount++;
         }
 
         const applied = Object.keys(translationsForFile).length;
