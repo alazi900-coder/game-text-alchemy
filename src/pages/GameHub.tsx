@@ -97,6 +97,23 @@ export default function GameHub() {
             <span className="mr-auto text-muted-foreground group-hover:text-primary transition-colors">←</span>
           </Link>
         </div>
+
+        {/* Cobalt Mod link */}
+        <div className="max-w-4xl mx-auto mt-4">
+          <Link
+            to="/cobalt"
+            className="group flex items-center gap-4 rounded-2xl border border-border/50 p-5 transition-all hover:scale-[1.01] hover:shadow-xl hover:border-primary/30 bg-card/50"
+          >
+            <div className="flex items-center justify-center w-12 h-12 rounded-xl bg-primary/10 text-primary">
+              <FileText className="w-6 h-6" />
+            </div>
+            <div>
+              <h3 className="font-display font-bold text-foreground">محرر Cobalt — بناء ملفات MSBT</h3>
+              <p className="text-xs text-muted-foreground font-body">استيراد ملفات TXT وتحويلها إلى MSBT لمودات Cobalt في Fire Emblem Engage</p>
+            </div>
+            <span className="mr-auto text-muted-foreground group-hover:text-primary transition-colors">←</span>
+          </Link>
+        </div>
       </section>
 
       <footer className="mt-auto py-6 text-center text-sm text-muted-foreground border-t border-border">
