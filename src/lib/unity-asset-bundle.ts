@@ -654,6 +654,12 @@ export function repackBundle(
     compressedBlockInfo = blockInfoBuf;
   }
 
+  // Preserve original flag bits: blockInfoAtEnd (0x80), alignment (0x100)
+  const blockInfoAtEnd = (info.flags & 0x80) !== 0;
+  const alignFlag = (info.flags & 0x100) !== 0;
+  // Reconstruct flags: header compression type + original structural flags
+  const newFlags = useHeaderCompression | (blockInfoAtEnd ? 0x80 : 0) | (alignFlag ? 0x100 : 0);
+
   // Write new UnityFS file
   const w = new BinaryWriter(compressedDataSize + 4096);
   
@@ -669,17 +675,32 @@ export function repackBundle(
 
   w.writeU32(compressedBlockInfo.length);   // compressed block info size
   w.writeU32(blockInfoBuf.length);          // decompressed block info size
-  w.writeU32(useHeaderCompression);         // flags: compression type for block info
+  w.writeU32(newFlags);                     // flags: preserve original structure
 
-  // Block info
-  w.writeBytes(compressedBlockInfo);
+  if (blockInfoAtEnd) {
+    // Original had block info at end — write data first, then block info
+    if (alignFlag) w.align(16);
+    
+    // Data blocks
+    w.writeBytes(compressedData);
 
-  // Data blocks
-  w.writeBytes(compressedData);
+    // Block info at end
+    w.writeBytes(compressedBlockInfo);
+  } else {
+    // Block info inline (before data)
+    w.writeBytes(compressedBlockInfo);
+    
+    if (alignFlag) w.align(16);
+
+    // Data blocks
+    w.writeBytes(compressedData);
+  }
 
   // Patch total size
   const totalFileSize = w.position;
   w.patchU64(totalSizePos, BigInt(totalFileSize));
+
+  console.log(`[repack] Flags: original=0x${info.flags.toString(16)}, new=0x${newFlags.toString(16)}, blockInfoAtEnd=${blockInfoAtEnd}, align=${alignFlag}`);
 
   const result = w.toUint8Array();
 
