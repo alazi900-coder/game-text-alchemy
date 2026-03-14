@@ -97,7 +97,7 @@ describe("replaceEmbeddedMsbt", () => {
     expect(String.fromCharCode(...result.slice(24, 32))).toBe("MsgStdBn");
     // New body content at offset 24+22
     const bodyOut = new TextDecoder().decode(result.slice(46, 46 + newMsbtBody.length));
-    expect(bodyOut).toBe("Marhaba!!!!");
+    expect(bodyOut).toBe("Marhaba!!!!!");
     // Trailer preserved
     expect(result[result.length - 4]).toBe(0xDE);
     expect(result[result.length - 1]).toBe(0xEF);
