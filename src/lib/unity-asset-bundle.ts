@@ -588,17 +588,23 @@ export function repackBundle(
     
     // Check if any assets in this entry need replacement
     const entryReplacements: { asset: ExtractedAsset; newData: Uint8Array }[] = [];
+    const embeddedReplacements: { asset: ExtractedAsset; newData: Uint8Array }[] = [];
     for (const a of entryAssets) {
       const replacementKey = `${a.name}#${a.pathId.toString()}`;
       const newData = replacements.get(replacementKey) ?? replacements.get(a.name);
       if (!newData) continue;
-      if (a.textAssetDataLenOffset < 0 || a.textAssetDataBytesOffset < 0) continue;
       // Critical: skip byte-identical payloads to avoid unnecessary bundle rewrites.
       if (areBytesEqual(newData, a.data)) continue;
-      entryReplacements.push({ asset: a, newData });
+      if (a.textAssetDataLenOffset >= 0 && a.textAssetDataBytesOffset >= 0) {
+        // Normal path: TextAsset with known offsets
+        entryReplacements.push({ asset: a, newData });
+      } else {
+        // Fallback path: embedded MSBT without parsed offsets (e.g. Fire Emblem Engage v22)
+        embeddedReplacements.push({ asset: a, newData });
+      }
     }
 
-    if (entryReplacements.length === 0) {
+    if (entryReplacements.length === 0 && embeddedReplacements.length === 0) {
       // No changes — copy as-is
       newEntryBuffers.push(entryData);
       newEntryOffsets.push(currentOffset);
@@ -607,8 +613,15 @@ export function repackBundle(
     }
 
     // Rebuild this serialized file with replacements
-    const rebuilt = rebuildSerializedFile(entryData, entryReplacements);
-    replacedCount += entryReplacements.length;
+    let rebuilt: Uint8Array = entryData;
+    if (entryReplacements.length > 0) {
+      rebuilt = rebuildSerializedFile(rebuilt, entryReplacements);
+      replacedCount += entryReplacements.length;
+    }
+    if (embeddedReplacements.length > 0) {
+      rebuilt = replaceEmbeddedMsbt(rebuilt, embeddedReplacements);
+      replacedCount += embeddedReplacements.length;
+    }
     newEntryBuffers.push(rebuilt);
     newEntryOffsets.push(currentOffset);
     currentOffset += rebuilt.length;
@@ -743,10 +756,8 @@ export function repackBundle(
 
   const result = w.toUint8Array();
 
-  // CRITICAL: ensure output buffer is exactly the declared size (no trailing zeros)
-  const outputBuffer = result.buffer.byteLength === result.byteLength
-    ? result.buffer as ArrayBuffer
-    : result.slice(0).buffer as ArrayBuffer;
+  // CRITICAL: always slice to ensure output buffer is exactly the declared size (no trailing zeros)
+  const outputBuffer = result.slice(0).buffer as ArrayBuffer;
 
   // Assertion: declared header size must match actual buffer size
   if (outputBuffer.byteLength !== totalFileSize) {
@@ -762,6 +773,79 @@ export function repackBundle(
     newSize: totalFileSize,
     originalSize: originalBuffer.byteLength,
   };
+}
+
+/**
+ * Replace embedded MSBT data in a serialized file when TextAsset offsets are unknown.
+ * Used for Fire Emblem Engage (Unity v22 serialized files) where parseSerializedFile
+ * falls back to createRawOrEmbeddedMsbtAsset with offsets = -1.
+ */
+function replaceEmbeddedMsbt(
+  entryData: Uint8Array,
+  replacements: { asset: ExtractedAsset; newData: Uint8Array }[],
+): Uint8Array {
+  let result = new Uint8Array(entryData);
+
+  for (const { newData } of replacements) {
+    // Find MsgStdBn magic in current data
+    const data = result;
+    let msbtOffset = -1;
+    for (let i = 0; i <= data.length - 8; i++) {
+      if (data[i] === 0x4D && data[i+1] === 0x73 && data[i+2] === 0x67 && data[i+3] === 0x53 &&
+          data[i+4] === 0x74 && data[i+5] === 0x64 && data[i+6] === 0x42 && data[i+7] === 0x6E) {
+        msbtOffset = i;
+        break;
+      }
+    }
+    if (msbtOffset < 0) continue;
+
+    // Read original MSBT file size from MSBT header (offset 18 = file_size, LE u32)
+    const origMsbtSize = new DataView(
+      data.buffer, data.byteOffset + msbtOffset + 18, 4
+    ).getUint32(0, true);
+
+    // Search backwards from MsgStdBn for the dataLen field (u32 LE matching origMsbtSize)
+    let dataLenOffset = -1;
+    for (let back = 4; back <= 8; back++) {
+      const pos = msbtOffset - back;
+      if (pos < 0) continue;
+      const val = new DataView(data.buffer, data.byteOffset + pos, 4).getUint32(0, true);
+      if (val === origMsbtSize) {
+        dataLenOffset = pos;
+        break;
+      }
+    }
+
+    // Build new buffer with size adjustment
+    const sizeDiff = newData.length - origMsbtSize;
+    const newResult = new Uint8Array(result.length + sizeDiff);
+
+    // Copy before MSBT
+    newResult.set(result.subarray(0, msbtOffset), 0);
+    // Insert new MSBT
+    newResult.set(newData, msbtOffset);
+    // Copy after original MSBT
+    const afterOrigMsbt = msbtOffset + origMsbtSize;
+    if (afterOrigMsbt < result.length) {
+      newResult.set(result.subarray(afterOrigMsbt), msbtOffset + newData.length);
+    }
+
+    // Update dataLen field if found
+    if (dataLenOffset >= 0) {
+      new DataView(newResult.buffer, newResult.byteOffset + dataLenOffset, 4)
+        .setUint32(0, newData.length, true);
+    }
+
+    // Update serialized file header fileSize (u32 BE at offset 4)
+    if (newResult.length >= 8) {
+      new DataView(newResult.buffer, newResult.byteOffset + 4, 4)
+        .setUint32(0, newResult.length, false);
+    }
+
+    result = newResult;
+  }
+
+  return result;
 }
 
 /** Rebuild a serialized file with TextAsset data replacements */
