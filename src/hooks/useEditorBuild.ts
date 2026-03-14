@@ -632,8 +632,15 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           }
         }
 
-        if (applied > 0) {
-          rebuiltMsbtFiles[fileName] = rebuildMsbt(msbt, translationsForFile);
+      if (applied > 0) {
+          const rebuiltData = rebuildMsbt(msbt, translationsForFile);
+          rebuiltMsbtFiles[fileName] = rebuiltData;
+          // Also store under short name for cross-lookup (SARC/Bundle repack uses scoped names)
+          const shortName = extractShortMsbtName(`msbt:${fileName}`);
+          if (shortName && shortName !== fileName) {
+            rebuiltMsbtFiles[shortName] = rebuiltData;
+            log(`[BUILD] 🔗 Cross-indexed: ${fileName} → ${shortName}`);
+          }
         }
         // Files with no translations are NOT added — they stay untouched in the original bundle
       }
@@ -734,6 +741,23 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         return scoped || msbtName.replace(/.*[/\\]/, '');
       };
 
+      /** Resolve rebuilt MSBT data by trying multiple name formats */
+      const findRebuiltMsbt = (lookupName: string): Uint8Array | undefined => {
+        // 1. Exact match
+        if (rebuiltMsbtFiles[lookupName]) return rebuiltMsbtFiles[lookupName];
+        // 2. Try short name
+        const shortName = extractShortMsbtName(`msbt:${lookupName}`);
+        if (shortName && shortName !== lookupName && rebuiltMsbtFiles[shortName]) return rebuiltMsbtFiles[shortName];
+        // 3. Try matching any key whose short name matches
+        if (shortName) {
+          for (const [key, data] of Object.entries(rebuiltMsbtFiles)) {
+            const keyShort = extractShortMsbtName(`msbt:${key}`);
+            if (keyShort === shortName) return data;
+          }
+        }
+        return undefined;
+      };
+
       const makeAssetReplacementKey = (asset: any) => {
         const pathId = typeof asset.pathId === 'bigint'
           ? asset.pathId.toString()
@@ -772,7 +796,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
             const assetData = asset.data instanceof Uint8Array ? asset.data : new Uint8Array(asset.data);
             if (!isMsbt(assetData)) continue;
             const lookupName = resolveBundleLookupName(meta, asset);
-            const rebuiltData = rebuiltMsbtFiles[lookupName];
+            const rebuiltData = findRebuiltMsbt(lookupName);
             if (rebuiltData) {
               replacements.set(makeAssetReplacementKey(asset), rebuiltData);
             } else {
@@ -864,7 +888,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
               const assetData = asset.data instanceof Uint8Array ? asset.data : new Uint8Array(asset.data);
               if (!isMsbt(assetData)) continue;
               const lookupName = resolveBundleLookupName(meta, asset);
-              const rebuiltData = rebuiltMsbtFiles[lookupName];
+              const rebuiltData = findRebuiltMsbt(lookupName);
               if (rebuiltData) {
                 replacements.set(makeAssetReplacementKey(asset), rebuiltData);
               }
@@ -945,8 +969,9 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           for (const msbtName of sarcMeta.msbtEntryNames) {
             const lookupName = resolveSarcLookupName(sarcMeta, msbtName);
             const fallbackLegacyName = msbtName.replace(/.*[/\\]/, '');
-            if (rebuiltMsbtFiles[lookupName]) {
-              sarcEntries.push({ name: msbtName, data: rebuiltMsbtFiles[lookupName] });
+            const rebuiltData = findRebuiltMsbt(lookupName);
+            if (rebuiltData) {
+              sarcEntries.push({ name: msbtName, data: rebuiltData });
               sarcMatched++;
             } else if (msbtFiles[lookupName]) {
               sarcEntries.push({ name: msbtName, data: new Uint8Array(msbtFiles[lookupName]) });
@@ -1016,8 +1041,9 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
             for (const msbtName of sarcMeta.msbtEntryNames) {
               const lookupName = resolveSarcLookupName(sarcMeta, msbtName);
               const fallbackLegacyName = msbtName.replace(/.*[/\\]/, '');
-              if (rebuiltMsbtFiles[lookupName]) {
-                sarcEntries.push({ name: msbtName, data: rebuiltMsbtFiles[lookupName] });
+              const rebuiltData = findRebuiltMsbt(lookupName);
+              if (rebuiltData) {
+                sarcEntries.push({ name: msbtName, data: rebuiltData });
               } else if (msbtFiles[lookupName]) {
                 sarcEntries.push({ name: msbtName, data: new Uint8Array(msbtFiles[lookupName]) });
               } else if (msbtFiles[fallbackLegacyName]) {
