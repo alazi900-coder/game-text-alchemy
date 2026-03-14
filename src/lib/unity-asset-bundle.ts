@@ -819,8 +819,8 @@ export function replaceEmbeddedMsbt(
     let dataLenOffset = -1;
     for (let back = 4; back <= 8; back++) {
       const pos = msbtOffset - back;
-      if (pos < 0) continue;
-      const val = new DataView(data.buffer, data.byteOffset + pos, 4).getUint32(0, true);
+      if (pos < 0 || pos + 4 > data.length) continue;
+      const val = new DataView(localBuf, pos, 4).getUint32(0, true);
       if (val === origMsbtSize) {
         dataLenOffset = pos;
         break;
