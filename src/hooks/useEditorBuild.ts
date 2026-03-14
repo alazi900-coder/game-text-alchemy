@@ -850,6 +850,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           const outputZip = new JSZip();
           let bundlesRepacked = 0;
           let bundlesUntouched = 0;
+          let totalEffectiveBundleReplacements = 0;
           for (let bi = 0; bi < bundleMeta.length; bi++) {
             const meta = bundleMeta[bi];
             setBuildProgress(`إعادة بناء Bundle ${bi + 1}/${bundleMeta.length}: ${meta.originalFileName}...`);
@@ -870,10 +871,18 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
             }
 
             if (replacements.size > 0) {
-              log(`[BUILD] 🔧 Bundle ${meta.originalFileName}: ${replacements.size} replacements → REPACK`);
+              log(`[BUILD] 🔧 Bundle ${meta.originalFileName}: ${replacements.size} replacements requested`);
               const result = repackBundle(originalBuffer, meta.info, decompressedData, meta.assets, replacements);
-              outputZip.file(meta.originalFileName, new Uint8Array(result.buffer));
-              bundlesRepacked++;
+              if (result.replacedCount > 0) {
+                log(`[BUILD] ✅ Bundle ${meta.originalFileName}: effective replacements=${result.replacedCount} → REPACK`);
+                outputZip.file(meta.originalFileName, new Uint8Array(result.buffer));
+                bundlesRepacked++;
+                totalEffectiveBundleReplacements += result.replacedCount;
+              } else {
+                log(`[BUILD] ⚠️ Bundle ${meta.originalFileName}: candidates exist but effective replacements=0 → ORIGINAL`);
+                outputZip.file(meta.originalFileName, new Uint8Array(originalBuffer));
+                bundlesUntouched++;
+              }
             } else {
               log(`[BUILD] ✅ Bundle ${meta.originalFileName}: no changes → ORIGINAL`);
               outputZip.file(meta.originalFileName, new Uint8Array(originalBuffer));
@@ -884,6 +893,31 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           log(`[BUILD] ═══ Bundle Diagnostic Summary ═══`);
           log(`[BUILD] 📊 Total: ${bundleMeta.length} | Repacked: ${bundlesRepacked} | Untouched: ${bundlesUntouched}`);
           log(`[BUILD] 📊 Rebuilt MSBT files: ${Object.keys(rebuiltMsbtFiles).length}`);
+          log(`[BUILD] 📊 Effective binary replacements: ${totalEffectiveBundleReplacements}`);
+
+          if (modifiedCount > 0 && totalEffectiveBundleReplacements === 0) {
+            log('[BUILD] ❌ STRICT POLICY: translations detected but no effective binary replacements in any bundle — BUILD ABORTED');
+            setLastBuildLog([...buildLog]);
+            setBuildVerification({
+              checks: [
+                { label: "حقن فعلي داخل Bundle", status: "fail", detail: "تم رصد ترجمات في الجلسة لكن الناتج النهائي لم يحتوِ أي استبدال فعلي داخل الملفات الثنائية." },
+                { label: "سبب محتمل", status: "warn", detail: "الترجمات مطابقة للأصل أو حدث عدم تطابق بين مفاتيح MSBT والأصول داخل الـBundle." },
+              ],
+              outputSizeBytes: 0,
+              originalSizeBytes: 0,
+              translationsApplied: modifiedCount,
+              translationsExpected: buildableTranslationsCount,
+              autoProcessedArabic: autoProcessedCount,
+              tagsFixed: tagFixCount,
+              tagsOk: tagOkCount,
+              filesBuilt: 0,
+              buildDurationMs: Date.now() - buildStartTime,
+            });
+            setShowBuildVerification(true);
+            setBuildProgress("❌ فشل البناء — لا توجد تعديلات فعلية داخل ملفات الـBundle");
+            setBuilding(false);
+            return;
+          }
 
           setBuildProgress("ضغط جميع ملفات Bundle في ZIP...");
           const finalBlob = await outputZip.generateAsync({ type: "blob" });
