@@ -799,17 +799,28 @@ export function replaceEmbeddedMsbt(
     }
     if (msbtOffset < 0) continue;
 
+    // Bounds check: need at least 22 bytes from msbtOffset for header (offset 18 + 4 bytes)
+    if (msbtOffset + 22 > data.length) {
+      console.warn(`[replaceEmbeddedMsbt] MsgStdBn found at ${msbtOffset} but not enough data for header (need ${msbtOffset + 22}, have ${data.length})`);
+      continue;
+    }
+
     // Read original MSBT file size from MSBT header (offset 18 = file_size, LE u32)
-    const origMsbtSize = new DataView(
-      data.buffer, data.byteOffset + msbtOffset + 18, 4
-    ).getUint32(0, true);
+    const localBuf = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+    const origMsbtSize = new DataView(localBuf, msbtOffset + 18, 4).getUint32(0, true);
+
+    // Sanity: origMsbtSize must not exceed remaining data
+    if (origMsbtSize === 0 || msbtOffset + origMsbtSize > data.length) {
+      console.warn(`[replaceEmbeddedMsbt] Invalid origMsbtSize=${origMsbtSize} at offset ${msbtOffset} (data.length=${data.length})`);
+      continue;
+    }
 
     // Search backwards from MsgStdBn for the dataLen field (u32 LE matching origMsbtSize)
     let dataLenOffset = -1;
     for (let back = 4; back <= 8; back++) {
       const pos = msbtOffset - back;
-      if (pos < 0) continue;
-      const val = new DataView(data.buffer, data.byteOffset + pos, 4).getUint32(0, true);
+      if (pos < 0 || pos + 4 > data.length) continue;
+      const val = new DataView(localBuf, pos, 4).getUint32(0, true);
       if (val === origMsbtSize) {
         dataLenOffset = pos;
         break;
@@ -883,7 +894,21 @@ function rebuildSerializedFile(
     newData: Uint8Array;
   }
 
-  const patches: Patch[] = sorted.map(({ asset, newData }) => {
+  const patches: Patch[] = [];
+  for (const { asset, newData } of sorted) {
+    // Bounds check: ensure offsets are within the serialized file
+    if (asset.textAssetDataLenOffset < 0 || asset.textAssetDataBytesOffset < 0) {
+      console.warn(`[rebuildSerializedFile] Skipping asset "${asset.name}": negative offsets (len=${asset.textAssetDataLenOffset}, data=${asset.textAssetDataBytesOffset})`);
+      continue;
+    }
+    if (asset.textAssetDataLenOffset + 4 > originalData.length) {
+      console.warn(`[rebuildSerializedFile] Skipping asset "${asset.name}": textAssetDataLenOffset=${asset.textAssetDataLenOffset} out of bounds (data.length=${originalData.length})`);
+      continue;
+    }
+    if (asset.textAssetDataBytesOffset > originalData.length) {
+      console.warn(`[rebuildSerializedFile] Skipping asset "${asset.name}": textAssetDataBytesOffset=${asset.textAssetDataBytesOffset} out of bounds (data.length=${originalData.length})`);
+      continue;
+    }
     // Read original data length from the serialized file
     const lenView = new DataView(
       (originalData.buffer as ArrayBuffer).slice(originalData.byteOffset, originalData.byteOffset + originalData.byteLength)
@@ -891,13 +916,13 @@ function rebuildSerializedFile(
     const originalLen = lenView.getUint32(asset.textAssetDataLenOffset, true);
     const alignedOriginalLen = originalLen + ((4 - (originalLen % 4)) % 4);
 
-    return {
+    patches.push({
       lenOffset: asset.textAssetDataLenOffset,
       dataOffset: asset.textAssetDataBytesOffset,
       originalLen: alignedOriginalLen, // include alignment padding
       newData,
-    };
-  });
+    });
+  }
 
   // Calculate new size
   let sizeDelta = 0;

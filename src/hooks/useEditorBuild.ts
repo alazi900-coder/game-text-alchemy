@@ -840,7 +840,32 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           }
 
           log(`[BUILD] Bundle repack requested: ${replacements.size} MSBT replacements`);
-          const result = repackBundle(originalBuffer, meta.info, decompressedData, meta.assets, replacements);
+          let result: { buffer: ArrayBuffer; replacedCount: number; newSize: number; originalSize: number };
+          try {
+            result = repackBundle(originalBuffer, meta.info, decompressedData, meta.assets, replacements);
+          } catch (repackErr: any) {
+            log(`[BUILD] ❌ repackBundle threw: ${repackErr?.message || repackErr}`);
+            setLastBuildLog([...buildLog]);
+            setBuildVerification({
+              checks: [
+                { label: "خطأ في إعادة البناء", status: "fail", detail: repackErr?.message || String(repackErr) },
+                { label: "سبب محتمل", status: "warn", detail: "بنية الملف الثنائية تالفة أو غير مدعومة — جرّب إعادة رفع الملفات الأصلية." },
+              ],
+              outputSizeBytes: 0,
+              originalSizeBytes: originalBuffer.byteLength,
+              translationsApplied: modifiedCount,
+              translationsExpected: buildableTranslationsCount,
+              autoProcessedArabic: autoProcessedCount,
+              tagsFixed: tagFixCount,
+              tagsOk: tagOkCount,
+              filesBuilt: 0,
+              buildDurationMs: Date.now() - buildStartTime,
+            });
+            setShowBuildVerification(true);
+            setBuildProgress("❌ " + (repackErr?.message || "خطأ أثناء إعادة بناء الـBundle"));
+            setBuilding(false);
+            return;
+          }
           log(`[BUILD] Bundle effective replacements: ${result.replacedCount}`);
           log(`[BUILD] Bundle output size: ${result.buffer.byteLength} bytes (original: ${originalBuffer.byteLength})`);
 
@@ -931,14 +956,20 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
 
             if (replacements.size > 0) {
               log(`[BUILD] 🔧 Bundle ${meta.originalFileName}: ${replacements.size} replacements requested`);
-              const result = repackBundle(originalBuffer, meta.info, decompressedData, meta.assets, replacements);
-              if (result.replacedCount > 0) {
-                log(`[BUILD] ✅ Bundle ${meta.originalFileName}: effective replacements=${result.replacedCount} → REPACK`);
-                outputZip.file(meta.originalFileName, new Uint8Array(result.buffer));
-                bundlesRepacked++;
-                totalEffectiveBundleReplacements += result.replacedCount;
-              } else {
-                log(`[BUILD] ⚠️ Bundle ${meta.originalFileName}: candidates exist but effective replacements=0 → ORIGINAL`);
+              try {
+                const result = repackBundle(originalBuffer, meta.info, decompressedData, meta.assets, replacements);
+                if (result.replacedCount > 0) {
+                  log(`[BUILD] ✅ Bundle ${meta.originalFileName}: effective replacements=${result.replacedCount} → REPACK`);
+                  outputZip.file(meta.originalFileName, new Uint8Array(result.buffer));
+                  bundlesRepacked++;
+                  totalEffectiveBundleReplacements += result.replacedCount;
+                } else {
+                  log(`[BUILD] ⚠️ Bundle ${meta.originalFileName}: candidates exist but effective replacements=0 → ORIGINAL`);
+                  outputZip.file(meta.originalFileName, new Uint8Array(originalBuffer));
+                  bundlesUntouched++;
+                }
+              } catch (repackErr: any) {
+                log(`[BUILD] ❌ Bundle ${meta.originalFileName}: repack error: ${repackErr?.message || repackErr} → ORIGINAL`);
                 outputZip.file(meta.originalFileName, new Uint8Array(originalBuffer));
                 bundlesUntouched++;
               }
