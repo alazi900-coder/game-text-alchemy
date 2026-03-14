@@ -780,7 +780,7 @@ export function repackBundle(
  * Used for Fire Emblem Engage (Unity v22 serialized files) where parseSerializedFile
  * falls back to createRawOrEmbeddedMsbtAsset with offsets = -1.
  */
-function replaceEmbeddedMsbt(
+export function replaceEmbeddedMsbt(
   entryData: Uint8Array,
   replacements: { asset: ExtractedAsset; newData: Uint8Array }[],
 ): Uint8Array {
