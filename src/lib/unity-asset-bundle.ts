@@ -232,7 +232,7 @@ async function decompressBlock(compressed: Uint8Array, decompressedSize: number,
     case COMPRESSION_LZ4:
     case COMPRESSION_LZ4HC: {
       const output = new Uint8Array(decompressedSize);
-      lz4.decompressBlock(compressed, output, 0, compressed.length, 0);
+      lz4.decompressBlock(compressed, output, 0, compressed.length, 0); // decompressBlock's last param is sIndex offset, 0 is correct
       return output;
     }
     case COMPRESSION_ZSTD: {
