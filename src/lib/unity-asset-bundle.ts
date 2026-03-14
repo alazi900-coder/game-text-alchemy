@@ -675,7 +675,7 @@ export function repackBundle(
 
   // Compress block info if original header used compression
   const preferredHeaderCompression = (headerCompression === COMPRESSION_LZ4 || headerCompression === COMPRESSION_LZ4HC)
-    ? COMPRESSION_LZ4
+    ? headerCompression
     : COMPRESSION_NONE;
   let headerCompressionUsed = preferredHeaderCompression;
   let compressedBlockInfo: Uint8Array;
