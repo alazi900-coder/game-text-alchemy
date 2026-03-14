@@ -81,7 +81,7 @@ describe("replaceEmbeddedMsbt", () => {
     const origLen = entry.length;
 
     // New MSBT: same total size (22 header + 12 body = 34)
-    const newMsbtBody = new TextEncoder().encode("Marhaba!!!!");
+    const newMsbtBody = new TextEncoder().encode("Marhaba!!!!!");
     const newMsbt = new Uint8Array(22 + newMsbtBody.length);
     const magic = [0x4D, 0x73, 0x67, 0x53, 0x74, 0x64, 0x42, 0x6E];
     newMsbt.set(magic, 0);
