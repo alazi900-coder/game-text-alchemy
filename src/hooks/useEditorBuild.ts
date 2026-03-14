@@ -653,6 +653,11 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       log(`[BUILD] Files with no matches: ${filesWithNoMatch}/${fileNamesToBuild.length}`);
       log(`[BUILD] Files expected to match but got 0: ${filesExpectedButNoMatch}`);
       log(`[BUILD] Rebuilt files: ${Object.keys(rebuiltMsbtFiles).length}`);
+      // Diagnostic: list all rebuilt keys
+      log(`[BUILD] ═══ rebuiltMsbtFiles keys ═══`);
+      for (const key of Object.keys(rebuiltMsbtFiles)) {
+        log(`[BUILD]   📄 ${key} (${rebuiltMsbtFiles[key].byteLength} bytes)`);
+      }
 
       // === STRICT POLICY: fail only for files that had expected translations but got 0 applied ===
       const criticalUnmatchedFiles = Array.from(fileMatchStats.entries())
