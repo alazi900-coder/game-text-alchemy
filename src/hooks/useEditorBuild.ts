@@ -562,7 +562,14 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       let filesWithNoMatch = 0;
       let totalMsbtEntries = 0;
       let filesExpectedButNoMatch = 0;
-      const fileMatchStats = new Map<string, { expected: number; applied: number; total: number }>();
+      const fileMatchStats = new Map<string, {
+        expected: number;
+        matched: number;
+        unchanged: number;
+        effectiveExpected: number;
+        applied: number;
+        total: number;
+      }>();
 
       for (let fi = 0; fi < fileNamesToBuild.length; fi++) {
         const fileName = fileNamesToBuild[fi];
@@ -601,6 +608,9 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           }
         }
 
+        let matchedForFile = 0;
+        let unchangedForFile = 0;
+
         for (let ei = 0; ei < msbt.entries.length; ei++) {
           const entry = msbt.entries[ei];
           const canonicalKey = indexMap?.get(ei) || `msbt:${fileName}:${entry.label}:${ei}`;
@@ -608,10 +618,13 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           if (!trans || !trans.trim()) continue;
 
           matchedTranslationCount++;
+          matchedForFile++;
+
           const sourceText = entry.text?.trim() || "";
           const translatedText = trans.trim();
           if (translatedText === sourceText) {
             unchangedTranslationCount++;
+            unchangedForFile++;
             continue;
           }
 
@@ -620,19 +633,34 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         }
 
         const applied = Object.keys(translationsForFile).length;
-        fileMatchStats.set(fileName, { expected: expectedForFile, applied, total: msbt.entries.length });
+        const effectiveExpectedForFile = Math.max(0, matchedForFile - unchangedForFile);
+
+        fileMatchStats.set(fileName, {
+          expected: expectedForFile,
+          matched: matchedForFile,
+          unchanged: unchangedForFile,
+          effectiveExpected: effectiveExpectedForFile,
+          applied,
+          total: msbt.entries.length,
+        });
 
         if (applied === 0) {
           filesWithNoMatch++;
-          if (expectedForFile > 0) {
+
+          const noIndexMatch = expectedForFile > 0 && matchedForFile === 0;
+          const hadEffectiveDiffButNoApply = effectiveExpectedForFile > 0 && applied === 0;
+
+          if (noIndexMatch || hadEffectiveDiffButNoApply) {
             filesExpectedButNoMatch++;
-            log(`[BUILD] ❌ ${fileName}: expected ${expectedForFile} translated entries, but applied 0`);
+            log(`[BUILD] ❌ ${fileName}: expected=${expectedForFile}, matched=${matchedForFile}, unchanged=${unchangedForFile}, applied=${applied}`);
+          } else if (expectedForFile > 0 && effectiveExpectedForFile === 0) {
+            log(`[BUILD] ℹ️ ${fileName}: جميع الترجمات المطابقة مطابقة للنص الأصلي (unchanged=${unchangedForFile})`);
           } else {
             log(`[BUILD] ℹ️ ${fileName}: 0/${msbt.entries.length} translations matched (لا توجد ترجمات مخصصة لهذا الملف)`);
           }
         }
 
-      if (applied > 0) {
+        if (applied > 0) {
           const rebuiltData = rebuildMsbt(msbt, translationsForFile);
           rebuiltMsbtFiles[fileName] = rebuiltData;
           // Also store under short name for cross-lookup (SARC/Bundle repack uses scoped names)
@@ -659,15 +687,18 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         log(`[BUILD]   📄 ${key} (${rebuiltMsbtFiles[key].byteLength} bytes)`);
       }
 
-      // === STRICT POLICY: fail only for files that had expected translations but got 0 applied ===
+      // === STRICT POLICY: fail only when we truly had unresolved effective translations ===
       const criticalUnmatchedFiles = Array.from(fileMatchStats.entries())
-        .filter(([, stats]) => stats.expected > 0 && stats.applied === 0)
+        .filter(([, stats]) => {
+          const noIndexMatch = stats.expected > 0 && stats.matched === 0;
+          const effectiveNotApplied = stats.effectiveExpected > 0 && stats.applied === 0;
+          return noIndexMatch || effectiveNotApplied;
+        })
         .map(([fileName]) => fileName);
 
       if (criticalUnmatchedFiles.length > 0) {
         log(`[BUILD] ❌ STRICT POLICY: ${criticalUnmatchedFiles.length} files expected translations but got 0% match — BUILD ABORTED`);
         for (const f of criticalUnmatchedFiles) log(`[BUILD]   ⛔ ${f}`);
-
         setLastBuildLog([...buildLog]);
         const failChecks: VerificationCheck[] = [
           { label: "سياسة المطابقة الصارمة", status: "fail", detail: `${criticalUnmatchedFiles.length} ملف كان يجب أن يستقبل ترجمات لكنه خرج 0% مطابقة — البناء مرفوض` },
