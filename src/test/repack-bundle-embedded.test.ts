@@ -197,6 +197,46 @@ function buildBlockInfo(dataSize: number, entryName: string): Uint8Array {
   return new Uint8Array(w.toArrayBuffer());
 }
 
+/**
+ * Build a serialized file with a valid header but zero objects.
+ * This simulates files where parser metadata succeeds but object table is empty,
+ * while MSBT bytes still exist in the payload tail.
+ */
+function buildSerializedWithZeroObjectsAndEmbeddedMsbt(msbt: Uint8Array): Uint8Array {
+  const w = new TestWriter(1024 + msbt.length);
+
+  // Header (big-endian)
+  w.writeU32BE(0);   // metadataSize
+  w.writeU32BE(0);   // fileSize (not trusted by parser here)
+  w.writeU32BE(22);  // version
+  w.writeU32BE(0);   // dataOffset
+
+  // Endianness flag + padding
+  w.writeU8(1);      // bigEndian = true
+  w.writeU8(0); w.writeU8(0); w.writeU8(0);
+
+  // v14+ extra header fields
+  w.writeU32BE(0); w.writeU32BE(0); w.writeU32BE(0); w.writeU32BE(0); w.writeU32BE(0);
+
+  // v7+ unity version string (empty)
+  w.writeU8(0);
+
+  // platform
+  w.writeU32BE(0);
+
+  // v13+ type tree metadata
+  w.writeU8(0);      // hasTypeTree=false
+  w.writeU32BE(0);   // typeCount=0
+
+  // objectCount = 0
+  w.writeU32BE(0);
+
+  // Tail payload containing embedded MSBT
+  w.writeBytes(msbt);
+
+  return new Uint8Array(w.toArrayBuffer());
+}
+
 /* ───────── Tests ───────── */
 
 describe("repackBundle with embedded MSBT (v22 fallback)", () => {
