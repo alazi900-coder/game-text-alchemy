@@ -68,6 +68,28 @@ describe("normalizeMsbtTranslations", () => {
     expect(result.normalized["msbt:bundle__accessories__entry_0.msbt:Label_B:1"]).toBe("ترجمة ب");
   });
 
+  it("remaps legacy key format file.msbt:index to scoped key", () => {
+    const translations = {
+      "entry_0.msbt:0": "ترجمة أ",
+      "entry_0.msbt:1": "ترجمة ب",
+    };
+    const result = normalizeMsbtTranslations(translations, scopedKeys);
+    expect(result.remapped).toBe(2);
+    expect(result.normalized["msbt:bundle__accessories__entry_0.msbt:Label_A:0"]).toBe("ترجمة أ");
+    expect(result.normalized["msbt:bundle__accessories__entry_0.msbt:Label_B:1"]).toBe("ترجمة ب");
+  });
+
+  it("remaps msbt key without label using full-name + index", () => {
+    const translations = {
+      "msbt:entry_1.msbt:0": "ترجمة ج",
+      "msbt:entry_1.msbt:1": "ترجمة د",
+    };
+    const result = normalizeMsbtTranslations(translations, scopedKeys);
+    expect(result.remapped).toBe(2);
+    expect(result.normalized["msbt:bundle__weapons__entry_1.msbt:Label_C:0"]).toBe("ترجمة ج");
+    expect(result.normalized["msbt:bundle__weapons__entry_1.msbt:Label_D:1"]).toBe("ترجمة د");
+  });
+
   it("detects ambiguity when multiple scoped files share short name", () => {
     // Two different scoped files with same short name
     const ambiguousKeys = new Set([

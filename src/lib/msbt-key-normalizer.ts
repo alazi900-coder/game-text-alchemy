@@ -95,6 +95,73 @@ function buildSessionMaps(validKeys: Set<string>) {
   return { byShortNameAndIndex, byShortNameLabelIndex, byFullNameAndIndex };
 }
 
+/** Parse msbt key variants (scoped/unscoped, with or without msbt: prefix). */
+function parseMsbtLikeKey(rawKey: string): { fullName: string; shortName: string; label: string | null; index: number } | null {
+  const payload = rawKey.startsWith("msbt:") ? rawKey.slice(5) : rawKey;
+  const msbtMatch = payload.match(/^(.+?\.msbt)(?::|$)/i);
+  if (!msbtMatch?.[1]) return null;
+
+  const fullName = msbtMatch[1];
+  const tail = payload.slice(fullName.length);
+  if (!tail.startsWith(":")) return null;
+
+  const parts = tail.slice(1).split(":").filter(Boolean);
+  if (parts.length === 0) return null;
+
+  const indexPart = parts[parts.length - 1];
+  if (!/^\d+$/.test(indexPart)) return null;
+
+  const index = Number(indexPart);
+  const label = parts.length >= 2 ? parts[parts.length - 2] : null;
+  const shortName = extractShortMsbtName(`msbt:${fullName}`) || fullName;
+
+  return { fullName, shortName, label, index };
+}
+
+function isLikelyMsbtKey(rawKey: string): boolean {
+  return rawKey.startsWith("msbt:") || /\.msbt(?::|$)/i.test(rawKey);
+}
+
+function mapMsbtKeyToSession(
+  rawKey: string,
+  maps: ReturnType<typeof buildSessionMaps>,
+): { mappedKey?: string; isAmbiguous: boolean } {
+  const parsed = parseMsbtLikeKey(rawKey);
+  if (!parsed) return { isAmbiguous: false };
+
+  let mappedKey: string | undefined;
+
+  // Stage 2: Full name + index
+  mappedKey = maps.byFullNameAndIndex.get(parsed.fullName)?.get(parsed.index);
+
+  // Stage 3: Short name + label + index
+  if (!mappedKey && parsed.label) {
+    mappedKey = maps.byShortNameLabelIndex.get(`${parsed.shortName}:${parsed.label}:${parsed.index}`);
+  }
+
+  // Stage 4: Short name + index (unique scope only)
+  if (!mappedKey) {
+    const indexMap = maps.byShortNameAndIndex.get(parsed.shortName);
+    const candidate = indexMap?.get(parsed.index);
+
+    if (candidate) {
+      let scopeCount = 0;
+      for (const fullKey of maps.byFullNameAndIndex.keys()) {
+        const short = extractShortMsbtName(`msbt:${fullKey}`);
+        if (short === parsed.shortName) scopeCount++;
+      }
+
+      if (scopeCount <= 1) {
+        mappedKey = candidate;
+      } else {
+        return { isAmbiguous: true };
+      }
+    }
+  }
+
+  return { mappedKey, isAmbiguous: false };
+}
+
 /**
  * Normalize translations to match current session keys.
  * Multi-stage fallback:
@@ -112,9 +179,9 @@ export function normalizeMsbtTranslations(
     console.warn('[NORMALIZER] translations is not an object:', typeof translations);
     return { normalized: {}, matched: 0, remapped: 0, ambiguous: 0, dropped: 0 };
   }
+
   const normalized: Record<string, string> = {};
   let matched = 0, remapped = 0, ambiguous = 0, dropped = 0;
-
   const maps = buildSessionMaps(validKeys);
 
   for (const [rawKey, rawValue] of Object.entries(translations)) {
@@ -128,67 +195,26 @@ export function normalizeMsbtTranslations(
       continue;
     }
 
-    // Only try remapping for msbt: keys
-    if (!rawKey.startsWith("msbt:")) {
-      // Non-MSBT key (bdat, etc.) - keep as-is for other handlers
-      normalized[rawKey] = trimmed;
-      matched++;
-      continue;
-    }
+    // MSBT-like keys can be scoped, unscoped, or legacy without "msbt:" prefix.
+    if (isLikelyMsbtKey(rawKey)) {
+      const { mappedKey, isAmbiguous } = mapMsbtKeyToSession(rawKey, maps);
 
-    const shortName = extractShortMsbtName(rawKey);
-    const index = extractMsbtIndex(rawKey);
-    const label = extractMsbtLabel(rawKey);
-
-    if (shortName == null || index == null) {
-      dropped++;
-      continue;
-    }
-
-    let mappedKey: string | undefined;
-
-    // Stage 2: Full name + index (handles exact scoped name from same session)
-    const payload = rawKey.slice(5);
-    const msbtMatch = payload.match(/^(.+?\.msbt)(?::|$)/i);
-    const fullName = msbtMatch?.[1] || payload.split(":")[0];
-    mappedKey = maps.byFullNameAndIndex.get(fullName)?.get(index);
-
-    // Stage 3: Short name + label + index
-    if (!mappedKey && label) {
-      const compound = `${shortName}:${label}:${index}`;
-      mappedKey = maps.byShortNameLabelIndex.get(compound);
-    }
-
-    // Stage 4: Short name + index
-    if (!mappedKey) {
-      const indexMap = maps.byShortNameAndIndex.get(shortName);
-      if (indexMap) {
-        const candidate = indexMap.get(index);
-        if (candidate) {
-          // Check for ambiguity: multiple scoped files share same short name
-          // Count how many full names map to this short name
-          let scopeCount = 0;
-          for (const fullKey of maps.byFullNameAndIndex.keys()) {
-            const fShort = extractShortMsbtName(`msbt:${fullKey}`);
-            if (fShort === shortName) scopeCount++;
-          }
-          if (scopeCount <= 1) {
-            mappedKey = candidate;
-          } else {
-            // Ambiguous - multiple scoped files have same short name
-            ambiguous++;
-            continue;
-          }
-        }
+      if (mappedKey && !normalized[mappedKey]) {
+        normalized[mappedKey] = trimmed;
+        remapped++;
+      } else if (isAmbiguous) {
+        ambiguous++;
+      } else {
+        dropped++;
+        // Preserve unmatched key for cross-session storage/import; it won't be used in current build.
+        normalized[rawKey] = trimmed;
       }
+      continue;
     }
 
-    if (mappedKey && !normalized[mappedKey]) {
-      normalized[mappedKey] = trimmed;
-      remapped++;
-    } else if (!mappedKey) {
-      dropped++;
-    }
+    // Non-MSBT key (bdat, etc.) - keep as-is for other handlers
+    normalized[rawKey] = trimmed;
+    matched++;
   }
 
   return { normalized, matched, remapped, ambiguous, dropped };

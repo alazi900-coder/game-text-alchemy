@@ -1041,7 +1041,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       // Run post-build verification
       const verification = buildVerificationChecks({
         modifiedCount,
-        totalTranslations: Object.keys(nonEmptyTranslations).length,
+        totalTranslations: buildableTranslationsCount,
         autoProcessedArabic: autoProcessedCount,
         tagFixCount,
         tagOkCount,
