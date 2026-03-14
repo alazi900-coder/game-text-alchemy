@@ -392,4 +392,41 @@ describe("repackBundle with embedded MSBT (v22 fallback)", () => {
     // Should return original buffer copy
     expect(result.buffer.byteLength).toBe(bundle.byteLength);
   });
+
+  it("falls back to raw MSBT scan when serialized parser returns zero objects", async () => {
+    const msbt = buildMsbt(new TextEncoder().encode("Fallback text payload"));
+    const serialized = buildSerializedWithZeroObjectsAndEmbeddedMsbt(msbt);
+    const bundle = buildSyntheticBundle(serialized, "zero-objects.bundle");
+
+    const info = await parseUnityBundle(bundle);
+    const decompressed = await decompressBundle(bundle, info);
+    const assets = extractAssets(decompressed, info);
+    const msbtAssets = assets.filter(a => isMsbt(a.data));
+
+    expect(msbtAssets.length).toBe(1);
+    expect(new TextDecoder().decode(msbtAssets[0].data)).toContain("Fallback text payload");
+  });
+
+  it("falls back to decompressed stream scan when directory entries are empty", () => {
+    const msbt = buildMsbt(new TextEncoder().encode("stream-level fallback"));
+    const noise = new Uint8Array([0x00, 0x11, 0x22, 0x33]);
+    const decompressedData = new Uint8Array(noise.length + msbt.length);
+    decompressedData.set(noise, 0);
+    decompressedData.set(msbt, noise.length);
+
+    const assets = extractAssets(decompressedData, {
+      signature: "UnityFS",
+      formatVersion: 6,
+      unityVersion: "5.x.x",
+      generatorVersion: "2020.3.18f1",
+      totalSize: BigInt(decompressedData.length),
+      blocks: [],
+      entries: [],
+      dataOffset: 0,
+      flags: 0,
+    });
+
+    expect(assets.length).toBe(1);
+    expect(isMsbt(assets[0].data)).toBe(true);
+  });
 });
