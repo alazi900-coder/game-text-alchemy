@@ -894,7 +894,21 @@ function rebuildSerializedFile(
     newData: Uint8Array;
   }
 
-  const patches: Patch[] = sorted.map(({ asset, newData }) => {
+  const patches: Patch[] = [];
+  for (const { asset, newData } of sorted) {
+    // Bounds check: ensure offsets are within the serialized file
+    if (asset.textAssetDataLenOffset < 0 || asset.textAssetDataBytesOffset < 0) {
+      console.warn(`[rebuildSerializedFile] Skipping asset "${asset.name}": negative offsets (len=${asset.textAssetDataLenOffset}, data=${asset.textAssetDataBytesOffset})`);
+      continue;
+    }
+    if (asset.textAssetDataLenOffset + 4 > originalData.length) {
+      console.warn(`[rebuildSerializedFile] Skipping asset "${asset.name}": textAssetDataLenOffset=${asset.textAssetDataLenOffset} out of bounds (data.length=${originalData.length})`);
+      continue;
+    }
+    if (asset.textAssetDataBytesOffset > originalData.length) {
+      console.warn(`[rebuildSerializedFile] Skipping asset "${asset.name}": textAssetDataBytesOffset=${asset.textAssetDataBytesOffset} out of bounds (data.length=${originalData.length})`);
+      continue;
+    }
     // Read original data length from the serialized file
     const lenView = new DataView(
       (originalData.buffer as ArrayBuffer).slice(originalData.byteOffset, originalData.byteOffset + originalData.byteLength)
@@ -902,13 +916,13 @@ function rebuildSerializedFile(
     const originalLen = lenView.getUint32(asset.textAssetDataLenOffset, true);
     const alignedOriginalLen = originalLen + ((4 - (originalLen % 4)) % 4);
 
-    return {
+    patches.push({
       lenOffset: asset.textAssetDataLenOffset,
       dataOffset: asset.textAssetDataBytesOffset,
       originalLen: alignedOriginalLen, // include alignment padding
       newData,
-    };
-  });
+    });
+  }
 
   // Calculate new size
   let sizeDelta = 0;
