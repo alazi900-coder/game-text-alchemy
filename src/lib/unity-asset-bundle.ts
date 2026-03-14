@@ -215,7 +215,8 @@ function compressLz4(input: Uint8Array): Uint8Array {
   // Max compressed size is input.length + (input.length / 255) + 16 (worst case)
   const maxOut = Math.max(64, input.length + Math.ceil(input.length / 255) + 16);
   const output = new Uint8Array(maxOut);
-  const written = lz4.compressBlock(input, output, 0, input.length, 0);
+  const hashTable = new Uint32Array(65536);
+  const written = lz4.compressBlock(input, output, 0, input.length, hashTable);
   if (written <= 0) {
     // Compression failed or didn't help — return uncompressed
     console.warn("[compressLz4] compression returned 0, falling back to uncompressed");
@@ -231,7 +232,7 @@ async function decompressBlock(compressed: Uint8Array, decompressedSize: number,
     case COMPRESSION_LZ4:
     case COMPRESSION_LZ4HC: {
       const output = new Uint8Array(decompressedSize);
-      lz4.decompressBlock(compressed, output, 0, compressed.length, 0);
+      lz4.decompressBlock(compressed, output, 0, compressed.length, 0); // decompressBlock's last param is sIndex offset, 0 is correct
       return output;
     }
     case COMPRESSION_ZSTD: {
