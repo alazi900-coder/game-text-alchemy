@@ -461,6 +461,149 @@ export function rebuildMsbt(
   return result;
 }
 
+// ─── Build MSBT from scratch ───
+
+/**
+ * Nintendo LBL1 hash function.
+ * hash = (hash * 0x492 + charCode) for each character, then bucket = hash % numSlots
+ */
+function msbtLabelHash(label: string, numSlots: number): number {
+  let hash = 0;
+  for (let i = 0; i < label.length; i++) {
+    hash = ((hash * 0x492) + label.charCodeAt(i)) >>> 0;
+  }
+  return hash % numSlots;
+}
+
+export interface CobaltEntry {
+  label: string;
+  text: string;
+}
+
+/**
+ * Build a complete MSBT binary file from scratch given label/text pairs.
+ * Creates LBL1 + ATR1 + TXT2 sections with proper Nintendo MSBT format.
+ * Used for Cobalt mod workflow where no original MSBT template exists.
+ */
+export function buildMsbtFromEntries(entries: CobaltEntry[]): Uint8Array {
+  const le = true; // Nintendo Switch = little-endian
+  const numSlots = 101; // Standard Nintendo hash table size
+  const sectionCount = 3; // LBL1, ATR1, TXT2
+
+  // ── Encode all texts as UTF-16LE with null terminators ──
+  const encodedTexts: Uint8Array[] = entries.map(e => encodeUtf16(e.text, le));
+
+  // ── Build TXT2 section data ──
+  const txt2OffsetTableSize = 4 + entries.length * 4;
+  let txt2StringsSize = 0;
+  for (const t of encodedTexts) txt2StringsSize += t.length;
+  const txt2DataSize = txt2OffsetTableSize + txt2StringsSize;
+  const txt2Data = new Uint8Array(txt2DataSize);
+  const txt2Dv = new DataView(txt2Data.buffer);
+  writeU32(txt2Dv, 0, entries.length, le);
+  let strPos = txt2OffsetTableSize;
+  for (let i = 0; i < entries.length; i++) {
+    writeU32(txt2Dv, 4 + i * 4, strPos, le);
+    txt2Data.set(encodedTexts[i], strPos);
+    strPos += encodedTexts[i].length;
+  }
+
+  // ── Build ATR1 section data (minimal: 4 bytes per entry, all zeros) ──
+  const attrSize = 4;
+  const atr1DataSize = 8 + entries.length * attrSize;
+  const atr1Data = new Uint8Array(atr1DataSize);
+  const atr1Dv = new DataView(atr1Data.buffer);
+  writeU32(atr1Dv, 0, entries.length, le);
+  writeU32(atr1Dv, 4, attrSize, le);
+
+  // ── Build LBL1 section data ──
+  // Hash table: numSlots groups, each with (count: u32, offset: u32)
+  // Then label entries grouped by hash bucket
+  const buckets: { label: string; index: number }[][] = Array.from({ length: numSlots }, () => []);
+  for (let i = 0; i < entries.length; i++) {
+    const slot = msbtLabelHash(entries[i].label, numSlots);
+    buckets[slot].push({ label: entries[i].label, index: i });
+  }
+
+  // Calculate label data area
+  const hashTableSize = 4 + numSlots * 8; // count + slots*(labelCount + offset)
+  // Label entries: for each label: 1 byte len + N bytes name + 4 bytes index
+  let labelDataSize = 0;
+  for (const bucket of buckets) {
+    for (const item of bucket) {
+      labelDataSize += 1 + item.label.length + 4;
+    }
+  }
+  const lbl1DataSize = hashTableSize + labelDataSize;
+  const lbl1Data = new Uint8Array(lbl1DataSize);
+  const lbl1Dv = new DataView(lbl1Data.buffer);
+
+  writeU32(lbl1Dv, 0, numSlots, le);
+  let labelWritePos = hashTableSize;
+  for (let s = 0; s < numSlots; s++) {
+    const bucket = buckets[s];
+    writeU32(lbl1Dv, 4 + s * 8, bucket.length, le);
+    writeU32(lbl1Dv, 4 + s * 8 + 4, labelWritePos, le);
+    for (const item of bucket) {
+      lbl1Data[labelWritePos] = item.label.length;
+      labelWritePos++;
+      for (let c = 0; c < item.label.length; c++) {
+        lbl1Data[labelWritePos + c] = item.label.charCodeAt(c);
+      }
+      labelWritePos += item.label.length;
+      writeU32(lbl1Dv, labelWritePos, item.index, le);
+      labelWritePos += 4;
+    }
+  }
+
+  // ── Assemble full file ──
+  const sections = [
+    { magic: "LBL1", data: lbl1Data },
+    { magic: "ATR1", data: atr1Data },
+    { magic: "TXT2", data: txt2Data },
+  ];
+
+  let totalSize = 0x20; // header
+  for (const sec of sections) {
+    totalSize = align16(totalSize + 0x10 + sec.data.length);
+  }
+
+  const result = new Uint8Array(totalSize);
+  const resultDv = new DataView(result.buffer);
+
+  // Header: MsgStdBn
+  const magic = "MsgStdBn";
+  for (let i = 0; i < 8; i++) result[i] = magic.charCodeAt(i);
+  // BOM: 0xFFFE (little-endian)
+  result[0x08] = 0xFF;
+  result[0x09] = 0xFE;
+  // Reserved
+  result[0x0A] = 0x00;
+  result[0x0B] = 0x00;
+  // Encoding: 1 = UTF-16
+  result[0x0C] = 0x01;
+  // Version: 3
+  result[0x0D] = 0x03;
+  // Section count
+  writeU16(resultDv, 0x0E, sectionCount, le);
+  // Reserved
+  writeU16(resultDv, 0x10, 0, le);
+  // File size
+  writeU32(resultDv, 0x12, totalSize, le);
+  // Reserved padding (10 bytes at 0x16..0x1F)
+
+  let writeOffset = 0x20;
+  for (const sec of sections) {
+    for (let c = 0; c < 4; c++) result[writeOffset + c] = sec.magic.charCodeAt(c);
+    writeU32(resultDv, writeOffset + 4, sec.data.length, le);
+    // 8 bytes padding (zeros) at writeOffset+8..writeOffset+0xF
+    result.set(sec.data, writeOffset + 0x10);
+    writeOffset = align16(writeOffset + 0x10 + sec.data.length);
+  }
+
+  return result;
+}
+
 // ─── Extraction helpers ───
 
 export interface MsbtExtractedEntry {
