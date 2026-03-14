@@ -888,7 +888,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
               const assetData = asset.data instanceof Uint8Array ? asset.data : new Uint8Array(asset.data);
               if (!isMsbt(assetData)) continue;
               const lookupName = resolveBundleLookupName(meta, asset);
-              const rebuiltData = rebuiltMsbtFiles[lookupName];
+              const rebuiltData = findRebuiltMsbt(lookupName);
               if (rebuiltData) {
                 replacements.set(makeAssetReplacementKey(asset), rebuiltData);
               }
