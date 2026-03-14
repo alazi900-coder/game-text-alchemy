@@ -521,8 +521,8 @@ function parseTextAssetWithOffsets(data: Uint8Array): {
 }
 
 function areBytesEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.byteLength !== b.byteLength) return false;
-  for (let i = 0; i < a.byteLength; i++) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
     if (a[i] !== b[i]) return false;
   }
   return true;
@@ -644,8 +644,9 @@ export function repackBundle(
   const originalBlockCompression = info.blocks.length > 0 ? (info.blocks[0].flags & 0x3F) : COMPRESSION_NONE;
   const headerCompression = info.flags & 0x3F;
   // Prefer original style, but downgrade safely if LZ4 block compression fails.
+  // Preserve original compression type exactly (LZ4HC stays LZ4HC)
   const preferredDataCompression = (originalBlockCompression === COMPRESSION_LZ4 || originalBlockCompression === COMPRESSION_LZ4HC)
-    ? COMPRESSION_LZ4
+    ? originalBlockCompression
     : COMPRESSION_NONE;
 
   // Compress data blocks with LZ4 if needed
@@ -674,7 +675,7 @@ export function repackBundle(
 
   // Compress block info if original header used compression
   const preferredHeaderCompression = (headerCompression === COMPRESSION_LZ4 || headerCompression === COMPRESSION_LZ4HC)
-    ? COMPRESSION_LZ4
+    ? headerCompression
     : COMPRESSION_NONE;
   let headerCompressionUsed = preferredHeaderCompression;
   let compressedBlockInfo: Uint8Array;

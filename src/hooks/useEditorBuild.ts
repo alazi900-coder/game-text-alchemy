@@ -594,9 +594,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
 
         if (applied > 0) {
           rebuiltMsbtFiles[fileName] = rebuildMsbt(msbt, translationsForFile);
-        } else {
-          rebuiltMsbtFiles[fileName] = new Uint8Array(buf);
         }
+        // Files with no translations are NOT added — they stay untouched in the original bundle
       }
 
       log(`[BUILD] ═══ MSBT rebuild complete ═══`);
