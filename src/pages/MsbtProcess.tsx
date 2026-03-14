@@ -63,6 +63,7 @@ export default function MsbtProcess() {
   const cancelRef = useRef(false);
   const bundleStartTimeRef = useRef<number>(0);
   const navigate = useNavigate();
+  const autoExportedRef = useRef(false);
 
   useEffect(() => {
     (async () => {
@@ -73,6 +74,29 @@ export default function MsbtProcess() {
       setHasPreviousSession(!!(game === config.id && hasTranslations));
     })();
   }, [config.id]);
+
+  const exportLogAsFile = useCallback((logLines: string[], suffix = '') => {
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    const text = logLines.join('\n');
+    const blob = new Blob(['\uFEFF' + text], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `diagnostic-log${suffix}-${timestamp}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, []);
+
+  // Auto-export log when extraction completes (done or error)
+  useEffect(() => {
+    if ((stage === 'done' || stage === 'error') && logs.length > 0 && !autoExportedRef.current) {
+      autoExportedRef.current = true;
+      exportLogAsFile(logs, stage === 'error' ? '-error' : '');
+    }
+    if (stage === 'idle' || stage === 'uploading' || stage === 'extracting') {
+      autoExportedRef.current = false;
+    }
+  }, [stage, logs, exportLogAsFile]);
 
   const addLog = (msg: string) => setLogs(prev => [...prev, `[${new Date().toLocaleTimeString("ar-SA")}] ${msg}`]);
 
