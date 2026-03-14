@@ -840,7 +840,32 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           }
 
           log(`[BUILD] Bundle repack requested: ${replacements.size} MSBT replacements`);
-          const result = repackBundle(originalBuffer, meta.info, decompressedData, meta.assets, replacements);
+          let result: { buffer: ArrayBuffer; replacedCount: number; newSize: number; originalSize: number };
+          try {
+            result = repackBundle(originalBuffer, meta.info, decompressedData, meta.assets, replacements);
+          } catch (repackErr: any) {
+            log(`[BUILD] ❌ repackBundle threw: ${repackErr?.message || repackErr}`);
+            setLastBuildLog([...buildLog]);
+            setBuildVerification({
+              checks: [
+                { label: "خطأ في إعادة البناء", status: "fail", detail: repackErr?.message || String(repackErr) },
+                { label: "سبب محتمل", status: "warn", detail: "بنية الملف الثنائية تالفة أو غير مدعومة — جرّب إعادة رفع الملفات الأصلية." },
+              ],
+              outputSizeBytes: 0,
+              originalSizeBytes: originalBuffer.byteLength,
+              translationsApplied: modifiedCount,
+              translationsExpected: buildableTranslationsCount,
+              autoProcessedArabic: autoProcessedCount,
+              tagsFixed: tagFixCount,
+              tagsOk: tagOkCount,
+              filesBuilt: 0,
+              buildDurationMs: Date.now() - buildStartTime,
+            });
+            setShowBuildVerification(true);
+            setBuildProgress("❌ " + (repackErr?.message || "خطأ أثناء إعادة بناء الـBundle"));
+            setBuilding(false);
+            return;
+          }
           log(`[BUILD] Bundle effective replacements: ${result.replacedCount}`);
           log(`[BUILD] Bundle output size: ${result.buffer.byteLength} bytes (original: ${originalBuffer.byteLength})`);
 
