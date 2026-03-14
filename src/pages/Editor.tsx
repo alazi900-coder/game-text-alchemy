@@ -1422,6 +1422,10 @@ const Editor = () => {
                   <DropdownMenuItem onClick={editor.handleImportXLIFF}><Upload className="w-4 h-4" /> استيراد XLIFF 📥</DropdownMenuItem>
                   <DropdownMenuItem onClick={editor.handleImportTMX}><Upload className="w-4 h-4" /> استيراد TMX 📥</DropdownMenuItem>
                   <DropdownMenuSeparator />
+                  <DropdownMenuLabel className="text-xs">🎮 Cobalt (FE Engage)</DropdownMenuLabel>
+                  <DropdownMenuItem onClick={editor.handleExportCobalt}><FileDown className="w-4 h-4" /> تصدير Cobalt (.txt)</DropdownMenuItem>
+                  <DropdownMenuItem onClick={editor.handleImportCobalt}><Upload className="w-4 h-4" /> استيراد Cobalt (.txt)</DropdownMenuItem>
+                  <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={editor.handleImportLegacyJson}><Upload className="w-4 h-4" /> استيراد JSON قديم 🔄</DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
