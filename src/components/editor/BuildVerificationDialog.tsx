@@ -77,6 +77,18 @@ const BuildVerificationDialog = ({ open, onOpenChange, result, buildLog }: Build
   const [logOpen, setLogOpen] = useState(false);
   const [logFilter, setLogFilter] = useState<LogFilter>("all");
 
+  const filteredLog = useMemo(() => {
+    if (!buildLog?.length || logFilter === "all") return buildLog || [];
+    return buildLog.filter(line => {
+      if (logFilter === "errors") return isErrorLine(line);
+      if (logFilter === "unchanged") return isUnchangedLine(line);
+      return true;
+    });
+  }, [buildLog, logFilter]);
+
+  const errorCount = useMemo(() => buildLog?.filter(isErrorLine).length || 0, [buildLog]);
+  const unchangedCount = useMemo(() => buildLog?.filter(isUnchangedLine).length || 0, [buildLog]);
+
   if (!result) return null;
 
   const failCount = result.checks.filter(c => c.status === "fail").length;
@@ -89,18 +101,6 @@ const BuildVerificationDialog = ({ open, onOpenChange, result, buildLog }: Build
   const sizeRatio = result.originalSizeBytes && result.originalSizeBytes > 0
     ? (result.outputSizeBytes / result.originalSizeBytes * 100).toFixed(0)
     : null;
-
-  const filteredLog = useMemo(() => {
-    if (!buildLog?.length || logFilter === "all") return buildLog || [];
-    return buildLog.filter(line => {
-      if (logFilter === "errors") return isErrorLine(line);
-      if (logFilter === "unchanged") return isUnchangedLine(line);
-      return true;
-    });
-  }, [buildLog, logFilter]);
-
-  const errorCount = useMemo(() => buildLog?.filter(isErrorLine).length || 0, [buildLog]);
-  const unchangedCount = useMemo(() => buildLog?.filter(isUnchangedLine).length || 0, [buildLog]);
 
   const handleCopyLog = () => {
     if (!filteredLog.length) return;
