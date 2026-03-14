@@ -663,12 +663,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         if (applied > 0) {
           const rebuiltData = rebuildMsbt(msbt, translationsForFile);
           rebuiltMsbtFiles[fileName] = rebuiltData;
-          // Also store under short name for cross-lookup (SARC/Bundle repack uses scoped names)
-          const shortName = extractShortMsbtName(`msbt:${fileName}`);
-          if (shortName && shortName !== fileName) {
-            rebuiltMsbtFiles[shortName] = rebuiltData;
-            log(`[BUILD] 🔗 Cross-indexed: ${fileName} → ${shortName}`);
-          }
+          log(`[BUILD] ✅ Rebuilt: ${fileName} (${rebuiltData.byteLength} bytes, ${applied} entries)`);
         }
         // Files with no translations are NOT added — they stay untouched in the original bundle
       }
