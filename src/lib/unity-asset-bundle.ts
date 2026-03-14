@@ -520,6 +520,14 @@ function parseTextAssetWithOffsets(data: Uint8Array): {
   return { name: name || "unnamed", data: assetData, dataLenOffset, dataBytesOffset };
 }
 
+function areBytesEqual(a: Uint8Array, b: Uint8Array): boolean {
+  if (a.byteLength !== b.byteLength) return false;
+  for (let i = 0; i < a.byteLength; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
 /* ─────────────────────────────────────────────────────────────────────
    REPACK: Replace TextAssets in the decompressed stream and rebuild
    the entire UnityFS bundle.
