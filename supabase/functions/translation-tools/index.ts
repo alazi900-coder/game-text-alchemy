@@ -5,11 +5,20 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
-// --- Tag Protection ---
+// --- Unified Tag Protection (strongest pattern set) ---
 const TAG_PATTERNS: RegExp[] = [
-  /\[\s*M[A-Z]*ID_[^\]]+\]/g, /[\uE000-\uE0FF]+/g, /\$\w+\([^)]*\)/g, /\$\w+/g,
-  /\[\s*\w+\s*:[^\]]*?\s*\]/g, /\[\s*\w+\s*=\s*\w[^\]]*\]/g, /\{[\w]+\}/g,
-  /%[sd]/g, /[\uFFF9-\uFFFC]/g, /<[\w\/][^>]*>/g,
+  /\[\s*\w+:\w[^\]]*\][^[]*?\[\/\s*\w+:\w[^\]]*\]/g,
+  /\[\s*M[A-Z]*ID_[^\]]+\]/g,
+  /[\uE000-\uE0FF]+/g,
+  /\$\w+\([^)]*\)/g,
+  /\$\w+/g,
+  /\[\s*\w+\s*:[^\]]*?\s*\]/g,
+  /\[\s*\w+\s*=\s*\w[^\]]*\]/g,
+  /\{\s*\w+\s*:\s*\w[^}]*\}/g,
+  /\{[\w]+\}/g,
+  /%[sd]/g,
+  /[\uFFF9-\uFFFC]/g,
+  /<[\w\/][^>]*>/g,
 ];
 
 function shieldTags(text: string): { shielded: string; slots: string[] } {
@@ -37,14 +46,25 @@ function shieldTags(text: string): { shielded: string; slots: string[] } {
 }
 
 function unshieldTags(text: string, slots: string[]): string {
+  if (slots.length === 0) return text;
   let result = text;
   for (let i = slots.length - 1; i >= 0; i--) {
-    const variants = [`⟪T${i}⟫`, `⟪ T${i} ⟫`, `[T${i}]`, `(T${i})`, `T${i}`, `«T${i}»`, `《T${i}》`];
+    const variants = [
+      `⟪T${i}⟫`, `⟪ T${i} ⟫`, `⟪T${i} ⟫`, `⟪ T${i}⟫`,
+      `[T${i}]`, `(T${i})`, `«T${i}»`, `《T${i}》`, `〈T${i}〉`,
+      `T${i}`,
+    ];
     for (const v of variants) {
       if (result.includes(v)) { result = result.replace(v, slots[i]); break; }
     }
   }
   result = result.replace(/⟪T\d+⟫/g, '');
+  // Post-validation: re-insert lost tags
+  for (let i = 0; i < slots.length; i++) {
+    if (!result.includes(slots[i])) {
+      result = result.trimEnd() + ' ' + slots[i];
+    }
+  }
   return result;
 }
 
@@ -67,6 +87,9 @@ Deno.serve(async (req) => {
 
     let systemPrompt = '';
     let userPrompt = '';
+    // Track shielding context for response processing
+    let _transSlots: string[] | null = null;
+    let _batchSlots: string[][] | null = null;
 
     if (style === 'back-translate') {
       if (!text?.trim()) {
@@ -74,13 +97,15 @@ Deno.serve(async (req) => {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+      const { shielded, slots } = shieldTags(text);
+      _transSlots = slots;
       systemPrompt = `You are a professional Arabic-to-English translator for video game localization.
 Translate the Arabic text back to English as accurately as possible.
 - Preserve the original meaning and tone
-- Keep technical tags like [ML:...] and {variables} unchanged
+- ⚠️ Placeholders like ⟪T0⟫, ⟪T1⟫ are protected technical elements — keep them EXACTLY as-is
 - Keep game terms in their English form
 - Return ONLY the English translation, no explanations`;
-      userPrompt = `Translate this Arabic text to English:\n\n${text}`;
+      userPrompt = `Translate this Arabic text to English:\n\n${shielded}`;
 
     } else if (style === 'ai-fix') {
       const { original, translation: trans, issues } = body;
@@ -91,39 +116,45 @@ Translate the Arabic text back to English as accurately as possible.
       }
       const { shielded: shieldedOrig } = shieldTags(original);
       const { shielded: shieldedTrans, slots: transSlots } = shieldTags(trans);
-      // Store slots for unshielding after AI response
-      (body as any)._transSlots = transSlots;
+      _transSlots = transSlots;
       systemPrompt = `You are a professional Arabic video game localization expert.
 Fix the Arabic translation to resolve ALL the listed issues while preserving the meaning.
 Rules:
-- ⚠️ Placeholders like ⟪T0⟫, ⟪T1⟫ are protected technical elements — keep them EXACTLY as-is
+- ⚠️ Placeholders like ⟪T0⟫, ⟪T1⟫ are protected technical elements — keep them EXACTLY as-is, do NOT modify, translate, or remove them
 - Return ONLY the fixed Arabic translation, nothing else
 - Do NOT change parts that have no issues`;
       userPrompt = `English original: ${shieldedOrig}\n\nCurrent Arabic translation: ${shieldedTrans}\n\nDetected issues:\n${issues}\n\nProvide the fixed Arabic translation:`;
 
     } else if (style === 'context-check') {
-      // Contextual check: verify translation makes sense in game context
       if (!entries || !Array.isArray(entries)) {
         return new Response(JSON.stringify({ error: 'Missing entries array' }), {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+      // Shield tags in entries
+      const shieldedBatch = entries.map((e: any) => {
+        const { shielded: so, slots: origSlots } = shieldTags(e.original);
+        const { shielded: st, slots: transSlots } = shieldTags(e.translation);
+        return { ...e, so, st, origSlots, transSlots };
+      });
+      _batchSlots = shieldedBatch.map((e: any) => e.transSlots);
       const glossaryContext = glossary ? `\nGame glossary for reference:\n${glossary.slice(0, 3000)}` : '';
       systemPrompt = `You are a professional video game localization QA reviewer for Xenoblade Chronicles 3 Arabic translation.
 Review each translation for contextual accuracy in the game's universe.
 Check for:
 1. Character names used correctly and consistently
 2. Game terminology matching the glossary
-3. Tone appropriate for the context (battle cries, menus, dialogue)
+3. Tone appropriate for the context
 4. Gender agreement in Arabic
 5. Logical sense in game context
 
-Return a JSON array of objects. For each entry that has issues, include:
-{ "key": "entry_key", "issues": ["issue description 1", "issue description 2"], "suggestion": "suggested fix if applicable" }
+⚠️ Placeholders like ⟪T0⟫ are protected technical elements — keep them as-is in suggestions.
 
-Only include entries that have actual contextual issues. If an entry is fine, skip it.
-Return ONLY the JSON array, no other text.${glossaryContext}`;
-      userPrompt = `Review these translations:\n${entries.map((e: any) => `[${e.key}] EN: ${e.original}\nAR: ${e.translation}`).join('\n\n')}`;
+Return a JSON array of objects. For each entry that has issues, include:
+{ "key": "entry_key", "issues": ["issue description"], "suggestion": "suggested fix with ⟪T0⟫ preserved" }
+
+Only include entries with actual issues. Return ONLY the JSON array.${glossaryContext}`;
+      userPrompt = `Review these translations:\n${shieldedBatch.map((e: any) => `[${e.key}] EN: ${e.so}\nAR: ${e.st}`).join('\n\n')}`;
 
     } else if (style === 'batch-improve') {
       if (!entries || !Array.isArray(entries)) {
@@ -140,50 +171,48 @@ Return ONLY the JSON array, no other text.${glossaryContext}`;
       };
       const guide = styleGuides[improvementStyle] || styleGuides.natural;
       const glossaryContext = glossary ? `\nGame glossary:\n${glossary.slice(0, 3000)}` : '';
-      // Shield tags in entries
       const shieldedBatch = entries.map((e: any) => {
         const { shielded: so } = shieldTags(e.original);
         const { shielded: st, slots } = shieldTags(e.translation);
         return { ...e, so, st, slots };
       });
-      (body as any)._batchSlots = shieldedBatch.map((e: any) => e.slots);
+      _batchSlots = shieldedBatch.map((e: any) => e.slots);
       systemPrompt = `You are a professional Arabic video game localization expert.
 Improve the Arabic translations following this style: ${guide}
 Rules:
-- ⚠️ Placeholders like ⟪T0⟫, ⟪T1⟫ are protected technical elements — keep them EXACTLY as-is
-- Return a JSON array of objects: { "key": "entry_key", "improved": "improved Arabic text" }
+- ⚠️ Placeholders like ⟪T0⟫, ⟪T1⟫ are protected technical elements — keep them EXACTLY as-is, do NOT modify, translate, or remove them
+- Return a JSON array of objects: { "key": "entry_key", "improved": "improved Arabic text with ⟪T0⟫ preserved" }
 - Only include entries where you actually made improvements
 - Return ONLY the JSON array${glossaryContext}`;
       userPrompt = `Improve these translations:\n${shieldedBatch.map((e: any) => `[${e.key}] EN: ${e.so}\nAR: ${e.st}`).join('\n\n')}`;
 
     } else if (style === 'mismatch-detect') {
-      // Detect misplaced translations using AI
       if (!entries || !Array.isArray(entries)) {
         return new Response(JSON.stringify({ error: 'Missing entries array' }), {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+      // Shield tags for mismatch detection too
+      const shieldedBatch = entries.map((e: any) => {
+        const { shielded: so } = shieldTags(e.original);
+        const { shielded: st } = shieldTags(e.translation);
+        return { ...e, so, st };
+      });
       systemPrompt = `You are a professional video game translation QA expert.
-You are given pairs of English original text and their Arabic translations.
-Your job is to detect MISMATCHED translations — where an Arabic translation clearly does NOT correspond to its paired English original.
+Detect MISMATCHED translations — where an Arabic translation does NOT correspond to its English original.
 
 Signs of a mismatch:
-1. The translation talks about a completely different topic than the original
-2. Names/numbers/variables in the translation don't match the original
-3. The translation appears to belong to a different entry entirely
-4. The meaning is completely unrelated (not just a bad translation, but WRONG content)
+1. Translation talks about a completely different topic
+2. Names/numbers/variables don't match
+3. Translation belongs to a different entry
+4. Meaning is completely unrelated
 
-Do NOT flag:
-- Bad quality translations (those are still matched correctly)
-- Literal translations (still correct target)
-- Missing content (partial translations are OK)
+Do NOT flag: Bad quality translations, literal translations, or partial translations.
 
-Return a JSON array of objects for ONLY the mismatched entries:
-{ "key": "entry_key", "reason": "brief Arabic explanation of why this is mismatched", "confidence": "high" or "medium" }
-
-If all translations match their originals, return an empty array [].
-Return ONLY the JSON array.`;
-      userPrompt = `Check these translation pairs for mismatches:\n${entries.map((e: any) => `[${e.key}] EN: ${e.original}\nAR: ${e.translation}`).join('\n\n')}`;
+Return a JSON array for ONLY mismatched entries:
+{ "key": "entry_key", "reason": "brief Arabic explanation", "confidence": "high" or "medium" }
+Return [] if all match. Return ONLY the JSON array.`;
+      userPrompt = `Check these translation pairs for mismatches:\n${shieldedBatch.map((e: any) => `[${e.key}] EN: ${e.so}\nAR: ${e.st}`).join('\n\n')}`;
 
     } else {
       // Style translation
@@ -192,19 +221,21 @@ Return ONLY the JSON array.`;
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+      const { shielded, slots } = shieldTags(text);
+      _transSlots = slots;
       const styleGuides: Record<string, string> = {
-        formal: 'Use formal/classical Arabic (فصحى). Avoid colloquial expressions. Use dignified vocabulary suitable for epic narratives.',
-        informal: 'Use casual/colloquial Arabic. Keep it natural and conversational, like everyday speech.',
-        poetic: 'Use poetic/literary Arabic. Employ metaphors, alliteration, and rhythmic phrasing where appropriate.',
-        gaming: 'Use modern gaming Arabic terminology. Keep it punchy, action-oriented, and exciting.',
+        formal: 'Use formal/classical Arabic (فصحى).',
+        informal: 'Use casual/colloquial Arabic.',
+        poetic: 'Use poetic/literary Arabic.',
+        gaming: 'Use modern gaming Arabic terminology.',
       };
       const guide = styleGuides[style] || styleGuides.formal;
       systemPrompt = `You are a professional English-to-Arabic translator for video game localization.
 Translate the text to Arabic following this style guide:
 ${guide}
-- Preserve technical tags like [ML:...] and {variables} unchanged
+- ⚠️ Placeholders like ⟪T0⟫ are protected technical elements — keep them EXACTLY as-is
 - Return ONLY the Arabic translation, no explanations`;
-      userPrompt = `Translate to Arabic:\n\n${text}`;
+      userPrompt = `Translate to Arabic:\n\n${shielded}`;
     }
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -243,9 +274,31 @@ ${guide}
     const data = await response.json();
     let result = data.choices?.[0]?.message?.content?.trim() || '';
 
-    // Unshield tags in AI response for ai-fix style
-    if (style === 'ai-fix' && (body as any)._transSlots) {
-      result = unshieldTags(result, (body as any)._transSlots);
+    // Unshield tags in response based on style
+    if (_transSlots && _transSlots.length > 0) {
+      // Single-text responses (ai-fix, back-translate, style translation)
+      result = unshieldTags(result, _transSlots);
+    } else if (_batchSlots && _batchSlots.length > 0) {
+      // Batch responses (batch-improve, context-check): parse JSON and unshield each entry
+      try {
+        const jsonMatch = result.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          const parsed: any[] = JSON.parse(jsonMatch[0].replace(/[\x00-\x1F\x7F]/g, ' '));
+          // Find matching slots for each entry by key
+          const entriesArr = entries as any[];
+          for (const item of parsed) {
+            const entryIdx = entriesArr.findIndex((e: any) => e.key === item.key);
+            if (entryIdx >= 0 && _batchSlots[entryIdx]) {
+              if (item.improved) item.improved = unshieldTags(item.improved, _batchSlots[entryIdx]);
+              if (item.suggestion) item.suggestion = unshieldTags(item.suggestion, _batchSlots[entryIdx]);
+            }
+          }
+          result = JSON.stringify(parsed);
+        }
+      } catch (e) {
+        console.error('Error unshielding batch response:', e);
+        // Return as-is if we can't parse
+      }
     }
 
     return new Response(JSON.stringify({ result }), {
