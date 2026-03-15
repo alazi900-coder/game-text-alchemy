@@ -1497,7 +1497,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         }
 
         // Auto-trim: if enabled, trim translated texts that exceed original UTF-16 byte length
-        let trimmedCount = 0;
+        // Auto-trim reuses the outer trimmedCount
         if (autoTrimMsbt) {
           for (const [, entries] of groups) {
             for (const entry of entries) {
