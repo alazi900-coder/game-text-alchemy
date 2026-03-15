@@ -41,6 +41,7 @@ const PreBuildDiagnostic = ({ open, onOpenChange, state, onProceedToBuild, onFix
   const [running, setRunning] = useState(false);
   const [midFixes, setMidFixes] = useState<Record<string, string>>({});
   const [dollarFixes, setDollarFixes] = useState<Record<string, string>>({});
+  const [formatFixes, setFormatFixes] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!open || !state) return;
@@ -64,6 +65,7 @@ const PreBuildDiagnostic = ({ open, onOpenChange, state, onProceedToBuild, onFix
             { label: "سلامة بنية Cobalt", status: "checking" as const },
             { label: "معرفات [MID_...]", status: "checking" as const },
             { label: "وسوم $ المعرّبة", status: "checking" as const },
+            { label: "رموز %s %d المعرّبة", status: "checking" as const },
           ]
         : [{ label: "ملفات BDAT", status: "checking" as const }]),
     ];
@@ -300,6 +302,70 @@ const PreBuildDiagnostic = ({ open, onOpenChange, state, onProceedToBuild, onFix
         ? { label: "وسوم $ المعرّبة", status: "pass", detail: "كل وسوم $ سليمة ✅" }
         : { label: "وسوم $ المعرّبة", status: "fail", detail: `⛔ ${corruptedDollarTags} وسم معرّب — ${dollarFixCount} قابلة للإصلاح${dollarDetails.length > 0 ? '\n' + dollarDetails.join('، ') : ''}` };
       setChecks([...results]);
+
+      // 6d. Format specifier corruption check + auto-fix for %s and %d
+      const formatSpecifierRegex = /%[sd]/g;
+      const arabicInFormatRegex = /%[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/;
+      let corruptedFormatSpecs = 0;
+      let formatDetails: string[] = [];
+      const pendingFormatFixes: Record<string, string> = {};
+
+      for (const entry of state.entries) {
+        if (!entry.msbtFile.startsWith("cobalt:")) continue;
+        const key = `${entry.msbtFile}:${entry.index}`;
+        const trans = state.translations[key];
+        if (!trans?.trim()) continue;
+
+        // Extract original format specifiers
+        const origFormatSpecs = entry.original.match(formatSpecifierRegex);
+        if (!origFormatSpecs || origFormatSpecs.length === 0) continue;
+
+        // Check if translation has arabized format specifiers
+        if (!arabicInFormatRegex.test(trans)) continue;
+
+        let fixedTrans = trans;
+        let hadFix = false;
+
+        // Find arabized format patterns like %س, %ص, %د, etc. and restore them
+        const arabicFormatPattern = /%[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/g;
+        const corruptedMatches = [...trans.matchAll(arabicFormatPattern)];
+
+        if (corruptedMatches.length > 0) {
+          // Build a mapping: for each corrupted format specifier, find the best original match
+          const usedOriginals = new Set<number>();
+          for (const cm of corruptedMatches) {
+            const corruptedText = cm[0];
+            // Find matching original format specifier
+            const matchIdx = origFormatSpecs.findIndex((os, idx) => !usedOriginals.has(idx));
+            if (matchIdx !== -1) {
+              fixedTrans = fixedTrans.replace(corruptedText, origFormatSpecs[matchIdx]);
+              usedOriginals.add(matchIdx);
+              hadFix = true;
+              corruptedFormatSpecs++;
+              if (formatDetails.length < 3) {
+                formatDetails.push(`${corruptedText} ← ${origFormatSpecs[matchIdx]}`);
+              }
+            } else {
+              // No matching original, just count
+              corruptedFormatSpecs++;
+              if (formatDetails.length < 3) {
+                formatDetails.push(`${corruptedText} (لا يوجد مقابل أصلي)`);
+              }
+            }
+          }
+        }
+
+        if (hadFix) {
+          pendingFormatFixes[key] = fixedTrans;
+        }
+      }
+
+      setFormatFixes(pendingFormatFixes);
+      const formatFixCount = Object.keys(pendingFormatFixes).length;
+      results[8] = corruptedFormatSpecs === 0
+        ? { label: "رموز %s %d المعرّبة", status: "pass", detail: "كل رموز التنسيق سليمة ✅" }
+        : { label: "رموز %s %d المعرّبة", status: "fail", detail: `⛔ ${corruptedFormatSpecs} رمز معرّب — ${formatFixCount} قابلة للإصلاح${formatDetails.length > 0 ? '\n' + formatDetails.join('، ') : ''}` };
+      setChecks([...results]);
     } else {
       // BDAT files (non-cobalt)
       const bdatBinaryFileNames = await idbGet<string[]>("editorBdatBinaryFileNames");
@@ -372,6 +438,22 @@ const PreBuildDiagnostic = ({ open, onOpenChange, state, onProceedToBuild, onFix
           >
             <Wrench className="w-4 h-4" />
             إصلاح {Object.keys(dollarFixes).length} وسم $ معرّب تلقائياً
+          </Button>
+        )}
+
+        {/* Auto-fix format specifiers button */}
+        {!running && Object.keys(formatFixes).length > 0 && onFixTranslations && (
+          <Button
+            variant="outline"
+            className="w-full font-body gap-2 border-destructive/50 text-destructive hover:bg-destructive/10"
+            onClick={() => {
+              onFixTranslations(formatFixes);
+              setFormatFixes({});
+              runDiagnostics();
+            }}
+          >
+            <Wrench className="w-4 h-4" />
+            إصلاح {Object.keys(formatFixes).length} رمز %s/%d معرّب تلقائياً
           </Button>
         )}
 
