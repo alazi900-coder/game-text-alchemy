@@ -1736,6 +1736,9 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     showBuildVerification,
     setShowBuildVerification,
     lastBuildLog,
+    showCobaltBuildChoice,
+    setShowCobaltBuildChoice,
+    handleBuildCobaltAs,
   };
 }
 
