@@ -77,15 +77,24 @@ export default function CobaltMod() {
         const entries = parseCobaltTxt(content, name);
         if (entries.length > 0) {
           newFiles.push({ name, entries });
+        } else {
+          console.warn(`No [LABEL] entries found in ${file.name}. Content preview:`, content.slice(0, 200));
         }
         loaded++;
         if (loaded === inputFiles.length) {
+          if (newFiles.length === 0) {
+            toast({
+              title: "لم يتم العثور على مدخلات",
+              description: "تأكد أن الملف يحتوي على وسوم [LABEL] بالصيغة الصحيحة",
+              variant: "destructive",
+            });
+            return;
+          }
           setFiles(prev => {
             const merged = [...prev];
             for (const nf of newFiles) {
               const existingIdx = merged.findIndex(f => f.name === nf.name);
               if (existingIdx >= 0) {
-                // Merge: update existing entries, add new ones
                 const existing = merged[existingIdx];
                 for (const entry of nf.entries) {
                   const idx = existing.entries.findIndex(e => e.label === entry.label);
@@ -107,7 +116,11 @@ export default function CobaltMod() {
           });
         }
       };
-      reader.readAsText(file);
+      reader.onerror = () => {
+        loaded++;
+        toast({ title: `خطأ في قراءة ${file.name}`, variant: "destructive" });
+      };
+      reader.readAsText(file, 'utf-8');
     });
     e.target.value = "";
   }, [toast]);
