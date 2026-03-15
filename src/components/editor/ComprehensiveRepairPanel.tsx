@@ -220,7 +220,7 @@ const ComprehensiveRepairPanel = ({ open, onOpenChange, state, onApplyFix, onApp
           }
         }
 
-        // Check $ tags
+        // Check $ tags - arabized
         const dollarTagRegex = /\$\w+(\([^)]*\))?/g;
         const origDollarTags = entry.original.match(dollarTagRegex);
         if (origDollarTags && /\$[\u0600-\u06FF]/.test(trans)) {
@@ -239,6 +239,32 @@ const ComprehensiveRepairPanel = ({ open, onOpenChange, state, onApplyFix, onApp
             }
             if (fixedTrans !== trans) {
               allIssues.push({ key, entryLabel: entry.label, original: entry.original, translation: trans, category: "tags", type: "dollar_arabized", message: `وسم $ معرّب (${corruptedMatches.length})`, fix: fixedTrans, severity: "error" });
+            }
+          }
+        }
+
+        // Check $ tags - reversed by BiDi (e.g. $G("his","her") → G("his","her")$)
+        if (origDollarTags) {
+          // Pattern: word(args)$ or word$ where original has $word(args) or $word
+          const reversedWithArgs = /(\w+\([^)]*\))\$/g;
+          const reversedSimple = /(\b[A-Za-z]\b)\$/g;
+          const reversedMatches = [...trans.matchAll(reversedWithArgs), ...trans.matchAll(reversedSimple)];
+          if (reversedMatches.length > 0) {
+            let fixedTrans = trans;
+            const usedOrig = new Set<number>();
+            for (const rm of reversedMatches) {
+              const reversed = rm[0]; // e.g. G("his","her")$ or P$
+              const inner = rm[1];    // e.g. G("his","her") or P
+              const corrected = `$${inner}`; // e.g. $G("his","her") or $P
+              // Verify this matches an original tag
+              const matchIdx = origDollarTags.findIndex((ot, idx) => !usedOrig.has(idx) && ot === corrected);
+              if (matchIdx !== -1) {
+                fixedTrans = fixedTrans.replace(reversed, origDollarTags[matchIdx]);
+                usedOrig.add(matchIdx);
+              }
+            }
+            if (fixedTrans !== trans) {
+              allIssues.push({ key, entryLabel: entry.label, original: entry.original, translation: trans, category: "tags", type: "dollar_reversed", message: `وسم $ معكوس بسبب BiDi (${reversedMatches.length})`, fix: fixedTrans, severity: "error" });
             }
           }
         }
