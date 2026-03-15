@@ -134,6 +134,8 @@ export function useEditorTranslation({
         // Fix broken brackets around [Tag:Value] tags
         result = autoFixTagBrackets(entry.original, result);
       }
+      // Clean up literal \n that AI sometimes returns as text instead of real newlines
+      result = result.replace(/\\n/g, '\n');
       // Auto-sync line count to match English source
       result = autoSyncLines(key, result, entry);
       fixed[key] = result;
