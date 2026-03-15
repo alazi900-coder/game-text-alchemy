@@ -2084,6 +2084,7 @@ const Editor = () => {
             </div>
           </div>
         )}
+        <PreBuildDiagnostic
           open={showDiagnostic}
           onOpenChange={setShowDiagnostic}
           state={editor.state}
