@@ -1914,6 +1914,10 @@ const Editor = () => {
               <BarChart3 className="w-4 h-4" />
               <span className="hidden sm:inline">تشخيص</span>
             </Button>
+            <Button size="sm" variant="outline" onClick={() => setShowComprehensiveRepair(true)} disabled={editor.building} className="font-body gap-1 shrink-0 border-primary/50 text-primary hover:bg-primary/10" title="إصلاح شامل">
+              <Wand2 className="w-4 h-4" />
+              <span className="hidden sm:inline">إصلاح شامل</span>
+            </Button>
             <Button size="sm" variant="outline" onClick={editor.handleCheckIntegrity} disabled={editor.building} className="font-body gap-1 shrink-0" title="التحقق من سلامة الترجمة">
               <ShieldCheck className="w-4 h-4" />
               <span className="hidden sm:inline">سلامة</span>
