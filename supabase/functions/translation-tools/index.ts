@@ -126,7 +126,6 @@ Return ONLY the JSON array, no other text.${glossaryContext}`;
       userPrompt = `Review these translations:\n${entries.map((e: any) => `[${e.key}] EN: ${e.original}\nAR: ${e.translation}`).join('\n\n')}`;
 
     } else if (style === 'batch-improve') {
-      // Batch improve: improve wording of multiple translations at once
       if (!entries || !Array.isArray(entries)) {
         return new Response(JSON.stringify({ error: 'Missing entries array' }), {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -134,23 +133,28 @@ Return ONLY the JSON array, no other text.${glossaryContext}`;
       }
       const improvementStyle = body.improvementStyle || 'natural';
       const styleGuides: Record<string, string> = {
-        natural: 'Make the Arabic sound natural and fluent, avoiding literal translations.',
-        formal: 'Use formal/classical Arabic (فصحى). Dignified vocabulary for epic narratives.',
-        concise: 'Make translations more concise while preserving meaning. Shorter is better for UI.',
-        expressive: 'Make translations more expressive and engaging. Add emotional depth.',
+        natural: 'Make the Arabic sound natural and fluent.',
+        formal: 'Use formal/classical Arabic.',
+        concise: 'Make translations more concise.',
+        expressive: 'Make translations more expressive.',
       };
       const guide = styleGuides[improvementStyle] || styleGuides.natural;
-      const glossaryContext = glossary ? `\nGame glossary - use these exact terms:\n${glossary.slice(0, 3000)}` : '';
+      const glossaryContext = glossary ? `\nGame glossary:\n${glossary.slice(0, 3000)}` : '';
+      // Shield tags in entries
+      const shieldedBatch = entries.map((e: any) => {
+        const { shielded: so } = shieldTags(e.original);
+        const { shielded: st, slots } = shieldTags(e.translation);
+        return { ...e, so, st, slots };
+      });
+      (body as any)._batchSlots = shieldedBatch.map((e: any) => e.slots);
       systemPrompt = `You are a professional Arabic video game localization expert.
 Improve the Arabic translations following this style: ${guide}
 Rules:
-- Keep ALL technical tags like [ML:...], {variables}, and Unicode control characters EXACTLY as they appear
-- Keep game terminology from the glossary consistent
+- ⚠️ Placeholders like ⟪T0⟫, ⟪T1⟫ are protected technical elements — keep them EXACTLY as-is
 - Return a JSON array of objects: { "key": "entry_key", "improved": "improved Arabic text" }
 - Only include entries where you actually made improvements
-- If a translation is already good, skip it
 - Return ONLY the JSON array${glossaryContext}`;
-      userPrompt = `Improve these translations:\n${entries.map((e: any) => `[${e.key}] EN: ${e.original}\nAR: ${e.translation}`).join('\n\n')}`;
+      userPrompt = `Improve these translations:\n${shieldedBatch.map((e: any) => `[${e.key}] EN: ${e.so}\nAR: ${e.st}`).join('\n\n')}`;
 
     } else if (style === 'mismatch-detect') {
       // Detect misplaced translations using AI
