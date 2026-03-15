@@ -210,11 +210,18 @@ ${tooLongEntries.map((e, i) => {
           });
         }
 
+        // Shield tags before sending to AI
+        const shieldedEntries = translatedEntries.map(e => {
+          const { shielded: shieldedOrig, slots: origSlots } = shieldTags(e.original);
+          const { shielded: shieldedTrans, slots: transSlots } = shieldTags(e.translation);
+          return { ...e, shieldedOrig, shieldedTrans, origSlots, transSlots };
+        });
+
         const CHUNK_SIZE = 15;
         const allFindings: any[] = [];
 
-        for (let c = 0; c < translatedEntries.length; c += CHUNK_SIZE) {
-          const chunk = translatedEntries.slice(c, c + CHUNK_SIZE);
+        for (let c = 0; c < shieldedEntries.length; c += CHUNK_SIZE) {
+          const chunk = shieldedEntries.slice(c, c + CHUNK_SIZE);
 
           const prompt = `أنت مدقق لغوي متخصص في ترجمة ألعاب الفيديو (Xenoblade Chronicles 3). حلّل كل ترجمة وأبلغ عن المشاكل التالية فقط:
 
@@ -223,11 +230,13 @@ ${tooLongEntries.map((e, i) => {
 3. **inconsistency** — مصطلح مترجم بشكل مختلف عن المتوقع حسب سياق اللعبة
 4. **naturalness** — صياغة ركيكة يمكن تحسينها لتبدو أكثر سلاسة
 
+⚠️ قاعدة حرجة: الرموز مثل ⟪T0⟫ و ⟪T1⟫ هي عناصر تقنية محمية. يجب أن تبقى في مكانها تماماً بدون أي تعديل.
+
 ${glossary ? `\nالقاموس المعتمد (التزم به):\n${glossary.slice(0, 3000)}\n` : ''}
 
 النصوص:
-${chunk.map((e, i) => `[${i}] EN: "${e.original}"
-AR: "${e.translation}"`).join('\n\n')}
+${chunk.map((e, i) => `[${i}] EN: "${e.shieldedOrig}"
+AR: "${e.shieldedTrans}"`).join('\n\n')}
 
 أخرج JSON array فقط. كل عنصر:
 {"i": رقم_النص, "type": "literal"|"grammar"|"inconsistency"|"naturalness", "issue": "وصف المشكلة بالعربية", "fix": "الترجمة المقترحة"}
