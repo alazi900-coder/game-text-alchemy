@@ -52,8 +52,8 @@ const CATEGORIES: Record<string, { label: string; emoji: string }> = {
 
 // ─── Check functions (from QualityChecksPanel) ──────────────────
 function checkNumbers(original: string, translation: string): { message: string; fix?: string } | null {
-  const origNums = (original.match(/\d+/g) || []).sort();
-  const transNums = (translation.match(/\d+/g) || []).sort();
+  const origNums: string[] = (original.match(/\d+/g) || []).slice().sort();
+  const transNums: string[] = (translation.match(/\d+/g) || []).slice().sort();
   if (origNums.length === 0) return null;
   const missing = origNums.filter(n => !transNums.includes(n));
   const extra = transNums.filter(n => !origNums.includes(n));
