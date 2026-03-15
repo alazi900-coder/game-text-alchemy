@@ -951,16 +951,19 @@ ${chunk.map((e, i) => `[${i}] الأصلي: "${e.shieldedOrig}"
           for (let i = 0; i < Math.min(chunk.length, improved.length); i++) {
             const entry = chunk[i];
             const improvedText = improved[i]?.trim();
-            if (improvedText && improvedText !== entry.translation) {
-              allImprovements.push({
-                key: entry.key,
-                original: entry.original,
-                current: entry.translation,
-                currentBytes: getUtf16ByteLength(entry.translation),
-                maxBytes: entry.maxBytes,
-                improved: improvedText,
-                improvedBytes: getUtf16ByteLength(improvedText),
-              });
+            if (improvedText) {
+              const unshielded = unshieldTags(improvedText, entry.transSlots);
+              if (unshielded !== entry.translation) {
+                allImprovements.push({
+                  key: entry.key,
+                  original: entry.original,
+                  current: entry.translation,
+                  currentBytes: getUtf16ByteLength(entry.translation),
+                  maxBytes: entry.maxBytes,
+                  improved: unshielded,
+                  improvedBytes: getUtf16ByteLength(unshielded),
+                });
+              }
             }
           }
         }
