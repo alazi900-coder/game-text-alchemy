@@ -1545,7 +1545,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       URL.revokeObjectURL(url);
 
       const typeLabel = mode === "txt" ? "TXT" : "MSBT";
-      setBuildProgress(`✅ تم بناء ${builtCount} ملف ${typeLabel} بنجاح!`);
+      const trimMsg = trimmedCount > 0 ? ` (تم تقليص ${trimmedCount} نص)` : "";
+      setBuildProgress(`✅ تم بناء ${builtCount} ملف ${typeLabel} بنجاح!${trimMsg}`);
       setBuildStats({
         modifiedCount: builtCount,
         expandedCount: 0,
