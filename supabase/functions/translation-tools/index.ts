@@ -241,7 +241,12 @@ ${guide}
     }
 
     const data = await response.json();
-    const result = data.choices?.[0]?.message?.content?.trim() || '';
+    let result = data.choices?.[0]?.message?.content?.trim() || '';
+
+    // Unshield tags in AI response for ai-fix style
+    if (style === 'ai-fix' && (body as any)._transSlots) {
+      result = unshieldTags(result, (body as any)._transSlots);
+    }
 
     return new Response(JSON.stringify({ result }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
