@@ -11,11 +11,19 @@ import { FileDown, Loader2, AlertTriangle, CheckCircle2, Info, ChevronDown, Chev
 import { useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
+export interface MsbtFileDiagnostic {
+  name: string;
+  keys: number;
+  translated: number;
+  originalBytes?: number;
+  estimatedBytes?: number;
+}
+
 export interface BundleDiagnostic {
   bundleName: string;
   totalKeys: number;
   matchedTranslations: number;
-  msbtFiles: { name: string; keys: number; translated: number }[];
+  msbtFiles: MsbtFileDiagnostic[];
 }
 
 export interface BuildPreview {
