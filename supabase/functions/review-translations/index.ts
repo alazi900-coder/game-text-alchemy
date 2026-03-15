@@ -851,14 +851,17 @@ ${e.maxBytes > 0 ? `الحد: ${e.maxBytes} بايت` : ''}`).join('\n\n')}
               const entry = chunk[i];
               const result = results[i];
               const newText = result?.text?.trim();
-              if (newText && newText !== entry.translation) {
-                allRetranslations.push({
-                  key: entry.key,
-                  original: entry.original,
-                  current: entry.translation,
-                  retranslated: newText,
-                  changes: result.changes || '',
-                });
+              if (newText) {
+                const unshielded = unshieldTags(newText, entry.transSlots);
+                if (unshielded !== entry.translation) {
+                  allRetranslations.push({
+                    key: entry.key,
+                    original: entry.original,
+                    current: entry.translation,
+                    retranslated: unshielded,
+                    changes: result.changes || '',
+                  });
+                }
               }
             }
           } catch (e) {
