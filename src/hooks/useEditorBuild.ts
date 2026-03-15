@@ -1430,7 +1430,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     }
   };
 
-
+  const handleBuild = async () => {
     const currentState = stateRef.current;
     if (!currentState) return;
     setShowBuildConfirm(false);
