@@ -359,6 +359,22 @@ const PreBuildDiagnostic = ({ open, onOpenChange, state, onProceedToBuild, onFix
           </Button>
         )}
 
+        {/* Auto-fix $ tags button */}
+        {!running && Object.keys(dollarFixes).length > 0 && onFixTranslations && (
+          <Button
+            variant="outline"
+            className="w-full font-body gap-2 border-destructive/50 text-destructive hover:bg-destructive/10"
+            onClick={() => {
+              onFixTranslations(dollarFixes);
+              setDollarFixes({});
+              runDiagnostics();
+            }}
+          >
+            <Wrench className="w-4 h-4" />
+            إصلاح {Object.keys(dollarFixes).length} وسم $ معرّب تلقائياً
+          </Button>
+        )}
+
         {/* Overall status */}
         {!running && checks.length > 0 && (
           <div className={`text-center p-3 rounded-lg border ${
