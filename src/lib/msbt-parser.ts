@@ -491,7 +491,8 @@ export function buildMsbtFromEntries(entries: CobaltEntry[]): Uint8Array {
   const sectionCount = 3; // LBL1, ATR1, TXT2
 
   // ── Encode all texts as UTF-16LE with null terminators ──
-  const encodedTexts: Uint8Array[] = entries.map(e => encodeUtf16(e.text, le));
+  // Use tag-aware encoding that generates binary MSBT control codes from [MSBT:...] placeholders
+  const encodedTexts: Uint8Array[] = entries.map(e => encodeUtf16WithGeneratedTags(e.text, le));
 
   // ── Build TXT2 section data ──
   const txt2OffsetTableSize = 4 + entries.length * 4;
