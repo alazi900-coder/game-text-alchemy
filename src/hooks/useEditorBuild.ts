@@ -3,12 +3,13 @@ import type { IntegrityCheckResult } from "@/components/editor/IntegrityCheckDia
 import { idbGet } from "@/lib/idb-storage";
 import { processArabicText, hasArabicChars as hasArabicCharsProcessing, hasArabicPresentationForms, removeArabicPresentationForms, reverseBidi } from "@/lib/arabic-processing";
 import { EditorState, hasTechnicalTags, restoreTagsLocally } from "@/components/editor/types";
-import { BuildPreview, BundleDiagnostic } from "@/components/editor/BuildConfirmDialog";
+import { BuildPreview, BundleDiagnostic, MsbtFileDiagnostic } from "@/components/editor/BuildConfirmDialog";
 import type { BuildVerificationResult, VerificationCheck } from "@/components/editor/BuildVerificationDialog";
 import type { MutableRefObject } from "react";
 import { normalizeMsbtTranslations, extractShortMsbtName } from "@/lib/msbt-key-normalizer";
 import { sanitizeTranslations } from "@/lib/sanitize-translations";
 import { validateBundle, validateSarcMsbts } from "@/lib/bundle-validator";
+import { utf16leByteLength } from "@/lib/byte-utils";
 
 export interface BuildStats {
   modifiedCount: number;
@@ -328,14 +329,33 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
 
     const sampleKeys = Object.keys(nonEmptyTranslations).slice(0, 10);
 
-    // Build bundle diagnostics
+    // Build bundle diagnostics with per-file size estimation
     const bundleDiagnostics: BundleDiagnostic[] = [];
     const bundleMeta = await idbGet<any[]>("editorBundleMeta");
     const sarcArchives = await idbGet<any[]>("editorSarcArchives");
+    const msbtFilesFromIdb = await idbGet<Record<string, ArrayBuffer>>("editorMsbtFiles");
+
+    /** Estimate size delta: sum UTF-16LE bytes of translated texts vs originals */
+    const estimateFileSizeChange = (entries: EditorEntry[], translations: Record<string, string>): { originalTextBytes: number; estimatedTextBytes: number } => {
+      let originalTextBytes = 0;
+      let estimatedTextBytes = 0;
+      for (const entry of entries) {
+        const key = `${entry.msbtFile}:${entry.index}`;
+        const origBytes = utf16leByteLength(entry.original);
+        const trans = translations[key];
+        if (trans?.trim()) {
+          estimatedTextBytes += utf16leByteLength(trans);
+        } else {
+          estimatedTextBytes += origBytes;
+        }
+        originalTextBytes += origBytes;
+      }
+      return { originalTextBytes, estimatedTextBytes };
+    };
 
     if (bundleMeta && bundleMeta.length > 0) {
       for (const meta of bundleMeta) {
-        const msbtFilesInfo: BundleDiagnostic['msbtFiles'] = [];
+        const msbtFilesInfo: MsbtFileDiagnostic[] = [];
         let totalKeys = 0;
         let matchedTranslations = 0;
 
@@ -345,7 +365,6 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           const assetKey = `${asset.name}#${pathId}`;
           const lookupName = scopedMap[assetKey] || (asset.name.endsWith('.msbt') ? asset.name : `${asset.name}.msbt`);
 
-          // Count entries for this MSBT from state
           const entriesForFile = resolveEntriesForLookup(entriesByMsbtName, lookupName);
           const keys = entriesForFile.length;
           const translated = entriesForFile.filter(e => {
@@ -354,7 +373,23 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           }).length;
 
           if (keys > 0) {
-            msbtFilesInfo.push({ name: asset.name || lookupName, keys, translated });
+            // Get original MSBT size from asset data
+            const assetData = asset.data instanceof Uint8Array ? asset.data : (asset.data ? new Uint8Array(asset.data) : null);
+            const originalBytes = assetData?.byteLength ?? (msbtFilesFromIdb?.[lookupName]?.byteLength);
+
+            // Estimate translated size
+            const { originalTextBytes, estimatedTextBytes } = estimateFileSizeChange(entriesForFile, nonEmptyTranslations);
+            const estimatedBytes = originalBytes
+              ? Math.round(originalBytes + (estimatedTextBytes - originalTextBytes))
+              : undefined;
+
+            msbtFilesInfo.push({
+              name: asset.name || lookupName,
+              keys,
+              translated,
+              originalBytes,
+              estimatedBytes: estimatedBytes && estimatedBytes > 0 ? estimatedBytes : originalBytes,
+            });
             totalKeys += keys;
             matchedTranslations += translated;
           }
@@ -369,7 +404,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       }
     } else if (sarcArchives && sarcArchives.length > 0) {
       for (const archive of sarcArchives) {
-        const msbtFilesInfo: BundleDiagnostic['msbtFiles'] = [];
+        const msbtFilesInfo: MsbtFileDiagnostic[] = [];
         let totalKeys = 0;
         let matchedTranslations = 0;
 
@@ -384,7 +419,19 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           }).length;
 
           if (keys > 0) {
-            msbtFilesInfo.push({ name: shortName, keys, translated });
+            const originalBytes = msbtFilesFromIdb?.[scoped]?.byteLength ?? msbtFilesFromIdb?.[shortName]?.byteLength;
+            const { originalTextBytes, estimatedTextBytes } = estimateFileSizeChange(entriesForFile, nonEmptyTranslations);
+            const estimatedBytes = originalBytes
+              ? Math.round(originalBytes + (estimatedTextBytes - originalTextBytes))
+              : undefined;
+
+            msbtFilesInfo.push({
+              name: shortName,
+              keys,
+              translated,
+              originalBytes,
+              estimatedBytes: estimatedBytes && estimatedBytes > 0 ? estimatedBytes : originalBytes,
+            });
             totalKeys += keys;
             matchedTranslations += translated;
           }
