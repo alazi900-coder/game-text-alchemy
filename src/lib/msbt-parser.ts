@@ -244,6 +244,93 @@ function encodeUtf16WithTags(translated: string, originalRawBytes: Uint8Array, l
   return result;
 }
 
+/**
+ * Reverse lookup: tag label name → [group, type].
+ */
+const MSBT_TAG_REVERSE: Record<string, [number, number]> = {};
+for (const [key, name] of Object.entries(MSBT_TAG_NAMES)) {
+  const [g, t] = key.split('.').map(Number);
+  MSBT_TAG_REVERSE[name.toLowerCase()] = [g, t];
+}
+
+/**
+ * Encode text to UTF-16LE, generating binary MSBT control codes from [MSBT:...] / [/MSBT:...] placeholders.
+ * Used when building MSBT from scratch (no original rawBytes available).
+ */
+function encodeUtf16WithGeneratedTags(text: string, le: boolean): Uint8Array {
+  const tagPlaceholder = /\[\/?MSBT:([^\]]*)\]/g;
+  const parts: ({ type: 'text'; value: string } | { type: 'open'; label: string } | { type: 'close'; label: string })[] = [];
+  let lastIdx = 0;
+  let m: RegExpExecArray | null;
+
+  while ((m = tagPlaceholder.exec(text)) !== null) {
+    if (m.index > lastIdx) parts.push({ type: 'text', value: text.slice(lastIdx, m.index) });
+    const isClose = m[0].startsWith('[/');
+    parts.push({ type: isClose ? 'close' : 'open', label: m[1] });
+    lastIdx = m.index + m[0].length;
+  }
+  if (lastIdx < text.length) parts.push({ type: 'text', value: text.slice(lastIdx) });
+
+  const chunks: Uint8Array[] = [];
+
+  for (const part of parts) {
+    if (part.type === 'text') {
+      for (let ci = 0; ci < part.value.length; ci++) {
+        const code = part.value.charCodeAt(ci);
+        const b = new Uint8Array(2);
+        if (le) { b[0] = code & 0xFF; b[1] = (code >> 8) & 0xFF; }
+        else { b[0] = (code >> 8) & 0xFF; b[1] = code & 0xFF; }
+        chunks.push(b);
+      }
+    } else {
+      const lookup = MSBT_TAG_REVERSE[part.label.toLowerCase()];
+      const [group, type] = lookup || [0, 0];
+
+      if (part.type === 'open') {
+        // 0x0E open tag: marker(2) + group(2) + type(2) + paramSize(2) + params
+        const paramSize = 0; // no params for generated tags
+        const tagBytes = new Uint8Array(8);
+        const dv = new DataView(tagBytes.buffer);
+        if (le) {
+          dv.setUint16(0, 0x0E, true);
+          dv.setUint16(2, group, true);
+          dv.setUint16(4, type, true);
+          dv.setUint16(6, paramSize, true);
+        } else {
+          dv.setUint16(0, 0x0E, false);
+          dv.setUint16(2, group, false);
+          dv.setUint16(4, type, false);
+          dv.setUint16(6, paramSize, false);
+        }
+        chunks.push(tagBytes);
+      } else {
+        // 0x0F close tag: marker(2) + group(2) + type(2)
+        const tagBytes = new Uint8Array(6);
+        const dv = new DataView(tagBytes.buffer);
+        if (le) {
+          dv.setUint16(0, 0x0F, true);
+          dv.setUint16(2, group, true);
+          dv.setUint16(4, type, true);
+        } else {
+          dv.setUint16(0, 0x0F, false);
+          dv.setUint16(2, group, false);
+          dv.setUint16(4, type, false);
+        }
+        chunks.push(tagBytes);
+      }
+    }
+  }
+
+  // Null terminator
+  chunks.push(new Uint8Array(2));
+
+  const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+  const result = new Uint8Array(totalLen);
+  let offset = 0;
+  for (const c of chunks) { result.set(c, offset); offset += c.length; }
+  return result;
+}
+
 /** Align offset to 16-byte boundary */
 function align16(offset: number): number {
   return (offset + 15) & ~15;
