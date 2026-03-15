@@ -3376,7 +3376,7 @@ export function useEditorState() {
     previousTranslations, currentPage,
     showRetranslateConfirm, arabicNumerals, mirrorPunctuation,
     applyingArabic, improvingTranslations, improveResults,
-    fixingMixed, filtersOpen, buildStats, buildPreview, showBuildConfirm, bdatFileStats, showCobaltBuildChoice, setShowCobaltBuildChoice, handleBuildCobaltAs,
+    fixingMixed, filtersOpen, buildStats, buildPreview, showBuildConfirm, bdatFileStats, showCobaltBuildChoice, setShowCobaltBuildChoice, handleBuildCobaltAs, autoTrimMsbt, toggleAutoTrimMsbt,
     checkingConsistency, consistencyResults,
     scanningSentences, sentenceSplitResults, newlineCleanResults, diacriticsCleanResults, duplicateAlefResults, missingAlefResults, mirrorCharsResults, tagBracketFixResults, newlineSplitResults, npcSplitResults, lineSyncResults, unifiedSplitResults, sentenceOrderResults, arabicTextFixResults,
     smartReviewing, smartReviewFindings,
