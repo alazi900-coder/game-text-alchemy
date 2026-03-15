@@ -63,6 +63,7 @@ const PreBuildDiagnostic = ({ open, onOpenChange, state, onProceedToBuild, onFix
         ? [
             { label: "سلامة بنية Cobalt", status: "checking" as const },
             { label: "معرفات [MID_...]", status: "checking" as const },
+            { label: "وسوم $ المعرّبة", status: "checking" as const },
           ]
         : [{ label: "ملفات BDAT", status: "checking" as const }]),
     ];
