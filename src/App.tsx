@@ -11,7 +11,7 @@ import { lazy, Suspense } from "react";
 import { Loader2 } from "lucide-react";
 
 const GameHub = lazy(() => import("./pages/GameHub"));
-const AnimalCrossing = lazy(() => import("./pages/AnimalCrossing"));
+
 const FireEmblem = lazy(() => import("./pages/FireEmblem"));
 const MsbtProcess = lazy(() => import("./pages/MsbtProcess"));
 const Editor = lazy(() => import("./pages/Editor"));
