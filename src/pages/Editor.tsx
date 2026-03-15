@@ -2107,6 +2107,7 @@ const Editor = () => {
           onApplyBatch={(fixes) => {
             Object.entries(fixes).forEach(([key, value]) => editor.updateTranslation(key, value));
           }}
+        />
         <BuildVerificationDialog
           open={editor.showBuildVerification}
           onOpenChange={editor.setShowBuildVerification}
