@@ -1413,12 +1413,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           // Structure-preserving rebuild: replace only translated text lines
           for (const rawFile of rawFiles) {
             const fileTrans = translationsByFileLabel.get(rawFile.name);
-            if (!fileTrans) {
-              // No translations for this file — output original unchanged
-              zip.file(`${rawFile.name}.txt`, rawFile.rawLines.join("\n"));
-              builtCount++;
-              continue;
-            }
+            if (!fileTrans || fileTrans.size === 0) continue; // skip unmodified files
 
             const outputLines = [...rawFile.rawLines];
 
