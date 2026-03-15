@@ -1482,7 +1482,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         }
       } else {
         // Build MSBT binary files
-        const groups = new Map<string, CobaltEntry[]>();
+        const groups = new Map<string, { label: string; text: string; originalText: string }[]>();
         for (const entry of currentState.entries) {
           if (!entry.msbtFile.startsWith("cobalt:")) continue;
           const parts = entry.msbtFile.split(":");
@@ -1492,13 +1492,39 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           const translated = currentState.translations[key]?.trim();
           if (!translated || translated === entry.original) continue; // skip unchanged
           if (!groups.has(fileName)) groups.set(fileName, []);
-          groups.get(fileName)!.push({ label, text: translated });
+          groups.get(fileName)!.push({ label, text: translated, originalText: entry.original });
         }
+
+        // Auto-trim: if enabled, trim translated texts that exceed original UTF-16 byte length
+        let trimmedCount = 0;
+        if (autoTrimMsbt) {
+          for (const [, entries] of groups) {
+            for (const entry of entries) {
+              const origBytes = entry.originalText.length * 2; // UTF-16LE: 2 bytes per char (approximate)
+              const transBytes = entry.text.length * 2;
+              if (transBytes > origBytes && origBytes > 0) {
+                // Trim to fit: try word boundary first, then hard cut
+                const maxChars = entry.originalText.length;
+                if (entry.text.length > maxChars) {
+                  let trimmed = entry.text.slice(0, maxChars);
+                  // Try to cut at last space to avoid breaking words
+                  const lastSpace = trimmed.lastIndexOf(' ');
+                  if (lastSpace > maxChars * 0.7) {
+                    trimmed = trimmed.slice(0, lastSpace);
+                  }
+                  entry.text = trimmed;
+                  trimmedCount++;
+                }
+              }
+            }
+          }
+        }
+
         const { buildMsbtFromEntries } = await import("@/lib/msbt-parser");
         const msgFolder = zip.folder("romfs/Data/StreamingAssets/aa/Switch/fe_assets_message");
         for (const [fileName, entries] of groups) {
           if (entries.length === 0) continue;
-          const msbtBytes = buildMsbtFromEntries(entries);
+          const msbtBytes = buildMsbtFromEntries(entries.map(e => ({ label: e.label, text: e.text })));
           msgFolder!.file(`${fileName}/${fileName}.msbt`, msbtBytes);
           builtCount++;
         }
