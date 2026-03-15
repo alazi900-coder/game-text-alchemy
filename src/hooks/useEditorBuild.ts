@@ -1482,9 +1482,10 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           const fileName = parts[1];
           const label = parts[2];
           const key = `${entry.msbtFile}:${entry.index}`;
-          const text = currentState.translations[key]?.trim() || entry.original;
+          const translated = currentState.translations[key]?.trim();
+          if (!translated || translated === entry.original) continue; // skip unchanged
           if (!groups.has(fileName)) groups.set(fileName, []);
-          groups.get(fileName)!.push({ label, text });
+          groups.get(fileName)!.push({ label, text: translated });
         }
         const { buildMsbtFromEntries } = await import("@/lib/msbt-parser");
         const msgFolder = zip.folder("romfs/Data/StreamingAssets/aa/Switch/fe_assets_message");
