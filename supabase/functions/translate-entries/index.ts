@@ -115,11 +115,15 @@ function restoreTags(text: string, tags: Map<string, string>): string {
       result = result.replace(new RegExp(`\\s*${placeholder}\\s*`, 'g'), original);
     }
   }
-  // Then restore TAG_N placeholders
+  // Then restore TAG_N placeholders, wrapping with LTR marks to prevent BiDi reordering
+  const LTR = '\u200E'; // Left-to-Right Mark
   for (const [placeholder, original] of tags) {
     if (!placeholder.startsWith('NEWLINE_')) {
       const escaped = placeholder.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      result = result.replace(new RegExp(escaped, 'g'), original);
+      // Wrap technical tags with LTR marks so $ and other symbols don't get reordered by BiDi
+      const needsLtr = /[\$%<\[\{]/.test(original) || /[\uE000-\uE0FF]/.test(original);
+      const restored = needsLtr ? `${LTR}${original}${LTR}` : original;
+      result = result.replace(new RegExp(escaped, 'g'), restored);
     }
   }
   return result;
