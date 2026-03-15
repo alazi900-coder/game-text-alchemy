@@ -22,7 +22,7 @@ import {
   Upload, FileDown, Cloud, CloudUpload, LogIn, BookOpen, AlertTriangle,
   Eye, EyeOff, RotateCcw, CheckCircle2, ShieldCheck, ChevronLeft, ChevronRight,
   BarChart3, Menu, MoreVertical, Replace, Columns, Key, Type, Trash2, Package, Wand2,
-  Lock, Unlock, Rows3, Languages, StopCircle,
+  Lock, Unlock, Rows3, Languages, StopCircle, Gamepad2,
 } from "lucide-react";
 import acnhHeroBg from "@/assets/acnh-hero-bg.jpg";
 import feHeroBg from "@/assets/fe-hero-bg.jpg";
