@@ -143,9 +143,17 @@ const Editor = () => {
   const [showToolHelp, setShowToolHelp] = React.useState<ToolType>(null);
   const [detectedGame, setDetectedGame] = React.useState<GameId>("animal-crossing");
 
-  // Detect game from IDB + handle autoload URL param
+  // Detect game from IDB, URL path (/cobalt), or autoload param
   React.useEffect(() => {
     (async () => {
+      // /cobalt route always means Fire Emblem
+      if (window.location.pathname === "/cobalt") {
+        setDetectedGame("fire-emblem");
+        const { idbSet } = await import("@/lib/idb-storage");
+        await idbSet("editorGame", "fire-emblem");
+        return;
+      }
+
       const { idbGet } = await import("@/lib/idb-storage");
       const game = await idbGet<string>("editorGame");
       if (game && game in GAME_CONFIGS) {
