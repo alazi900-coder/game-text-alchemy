@@ -266,5 +266,51 @@ describe('Arabic Processing', () => {
       const result = reverseBidi(reshaped);
       expect(result).toContain('1[ML]');
     });
+    it('should preserve $Arg(0) tags intact in Arabic text', () => {
+      const input = 'اضغط $Arg(0) للتأكيد';
+      const reshaped = reshapeArabic(input);
+      const result = reverseBidi(reshaped);
+      expect(result).toContain('$Arg(0)');
+    });
+
+    it('should preserve $Icon("A") tags intact', () => {
+      const input = 'اضغط $Icon("A") للمتابعة';
+      const reshaped = reshapeArabic(input);
+      const result = reverseBidi(reshaped);
+      expect(result).toContain('$Icon("A")');
+    });
+
+    it('should preserve simple $P $n tags intact', () => {
+      const input = 'مرحبا $P اضغط $n';
+      const reshaped = reshapeArabic(input);
+      const result = reverseBidi(reshaped);
+      expect(result).toContain('$P');
+      expect(result).toContain('$n');
+    });
+
+    it('should preserve %s and %d format specifiers intact', () => {
+      const input = 'لديك %d عنصر بقيمة %s ذهب';
+      const reshaped = reshapeArabic(input);
+      const result = reverseBidi(reshaped);
+      expect(result).toContain('%d');
+      expect(result).toContain('%s');
+    });
+
+    it('should preserve [MID_MENU_YES] identifiers intact', () => {
+      const input = '[MID_MENU_YES]\nابدأ اللعبة';
+      const reshaped = reshapeArabic(input);
+      const result = reverseBidi(reshaped);
+      expect(result).toContain('[MID_MENU_YES]');
+    });
+
+    it('should not add spaces around $Arg(0) or %s', () => {
+      const input = 'حصلت على $Arg(0) واستخدمت %s';
+      const reshaped = reshapeArabic(input);
+      const result = reverseBidi(reshaped);
+      // Ensure no double spaces introduced around tags
+      expect(result).not.toMatch(/  \$Arg/);
+      expect(result).not.toMatch(/%s  /);
+      expect(result).not.toMatch(/  %s/);
+    });
   });
 });
