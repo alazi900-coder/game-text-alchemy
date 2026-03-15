@@ -213,14 +213,50 @@ const BuildConfirmDialog = ({ open, onOpenChange, preview, onConfirm, building }
 
                           {isExpanded && diag.msbtFiles.length > 0 && (
                             <div className="border-t border-border/30 px-2 py-1 space-y-0.5 bg-background/50">
-                              {diag.msbtFiles.map((msbt) => (
-                                <div key={msbt.name} className="flex justify-between items-center text-[10px] font-body px-1 py-0.5">
-                                  <span className="truncate text-muted-foreground">{msbt.name}</span>
-                                  <span className={`font-bold shrink-0 ${msbt.translated === msbt.keys ? 'text-secondary' : msbt.translated === 0 ? 'text-muted-foreground' : 'text-primary'}`}>
-                                    {msbt.translated}/{msbt.keys}
-                                  </span>
-                                </div>
-                              ))}
+                              {diag.msbtFiles.map((msbt) => {
+                                const growthRatio = msbt.originalBytes && msbt.estimatedBytes
+                                  ? msbt.estimatedBytes / msbt.originalBytes
+                                  : null;
+                                const isRisky = growthRatio !== null && growthRatio > 1.3;
+                                const isDangerous = growthRatio !== null && growthRatio > 1.5;
+
+                                return (
+                                  <div key={msbt.name} className="flex items-center gap-1 text-[10px] font-body px-1 py-0.5">
+                                    <span className="truncate text-muted-foreground flex-1">{msbt.name}</span>
+
+                                    {/* Translation count */}
+                                    <span className={`font-bold shrink-0 ${msbt.translated === msbt.keys ? 'text-secondary' : msbt.translated === 0 ? 'text-muted-foreground' : 'text-primary'}`}>
+                                      {msbt.translated}/{msbt.keys}
+                                    </span>
+
+                                    {/* Size info */}
+                                    {msbt.originalBytes != null && (
+                                      <TooltipProvider delayDuration={200}>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <span className={`shrink-0 font-mono px-1 rounded ${
+                                              isDangerous ? 'bg-destructive/15 text-destructive font-bold' :
+                                              isRisky ? 'bg-yellow-500/15 text-yellow-600 font-bold' :
+                                              'text-muted-foreground'
+                                            }`}>
+                                              {isDangerous ? '⛔' : isRisky ? '⚠️' : ''}
+                                              {growthRatio !== null ? `${Math.round(growthRatio * 100)}%` : '—'}
+                                            </span>
+                                          </TooltipTrigger>
+                                          <TooltipContent side="left" className="text-xs font-body max-w-48" dir="rtl">
+                                            <p>الأصلي: <strong>{formatBytes(msbt.originalBytes)}</strong></p>
+                                            {msbt.estimatedBytes != null && (
+                                              <p>التقديري: <strong>{formatBytes(msbt.estimatedBytes)}</strong></p>
+                                            )}
+                                            {isDangerous && <p className="text-destructive mt-1">⛔ خطر كراش — الحجم تجاوز 150%</p>}
+                                            {isRisky && !isDangerous && <p className="text-yellow-600 mt-1">⚠️ تحذير — الحجم تجاوز 130%</p>}
+                                          </TooltipContent>
+                                        </Tooltip>
+                                      </TooltipProvider>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
                           )}
                         </div>
