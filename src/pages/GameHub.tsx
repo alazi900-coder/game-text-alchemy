@@ -105,14 +105,17 @@ export default function GameHub() {
   const zipInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
 
-  const loadIntoEditor = useCallback(async (files: { name: string; entries: CobaltParsedEntry[] }[]) => {
+  const loadIntoEditor = useCallback(async (files: CobaltParsedFile[]) => {
     if (files.length === 0) {
       toast({ title: "لم يتم العثور على مدخلات", description: "الملف فارغ أو لا يحتوي على نصوص", variant: "destructive" });
       return;
     }
     const { entries, translations } = cobaltToEditorEntries(files);
+    // Store raw file data for structure-preserving rebuild
+    const rawFileData = files.map(f => ({ name: f.name, rawLines: f.rawLines, hasLabels: f.hasLabels, entries: f.entries }));
     await idbSet("editorState", { entries, translations, protectedEntries: [], technicalBypass: [] });
     await idbSet("editorGameType", "cobalt");
+    await idbSet("cobaltRawFiles", rawFileData);
     toast({ title: `تم تحميل ${files.length} ملف (${entries.length} مدخل)`, description: "جارٍ فتح المحرر..." });
     navigate("/editor");
   }, [toast, navigate]);
@@ -122,12 +125,12 @@ export default function GameHub() {
     if (!inputFiles || inputFiles.length === 0) return;
     setLoading(true);
     try {
-      const parsed: { name: string; entries: CobaltParsedEntry[] }[] = [];
+      const parsed: CobaltParsedFile[] = [];
       for (const file of Array.from(inputFiles)) {
         const content = await file.text();
         const name = file.name.replace(/\.txt$/i, "");
-        const entries = parseCobaltTxt(content);
-        if (entries.length > 0) parsed.push({ name, entries });
+        const result = parseCobaltTxt(content);
+        if (result.entries.length > 0) parsed.push({ name, ...result });
         else toast({ title: `ملف فارغ: ${file.name}`, variant: "destructive" });
       }
       await loadIntoEditor(parsed);
@@ -145,14 +148,14 @@ export default function GameHub() {
     setLoading(true);
     try {
       const zip = await JSZip.loadAsync(await file.arrayBuffer());
-      const parsed: { name: string; entries: CobaltParsedEntry[] }[] = [];
+      const parsed: CobaltParsedFile[] = [];
       const promises: Promise<void>[] = [];
       zip.forEach((path, entry) => {
         if (entry.dir || !path.endsWith(".txt")) return;
         promises.push(entry.async("string").then(content => {
           const name = path.split("/").pop()!.replace(/\.txt$/i, "");
-          const entries = parseCobaltTxt(content);
-          if (entries.length > 0) parsed.push({ name, entries });
+          const result = parseCobaltTxt(content);
+          if (result.entries.length > 0) parsed.push({ name, ...result });
         }));
       });
       await Promise.all(promises);
