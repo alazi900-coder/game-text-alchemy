@@ -48,13 +48,20 @@ const PreBuildDiagnostic = ({ open, onOpenChange, state, onProceedToBuild }: Pre
     if (!state) return;
     setRunning(true);
 
+    const isCobalt = state.entries.some(e => e.msbtFile.startsWith("cobalt:"));
+
     const results: DiagnosticCheck[] = [
       { label: "مصدر البيانات", status: "checking" },
       { label: "عدد الترجمات", status: "checking" },
       { label: "النصوص العربية غير المعالجة", status: "checking" },
       { label: "تجاوز حد البايت", status: "checking" },
       { label: "الرموز التقنية", status: "checking" },
-      { label: "ملفات BDAT", status: "checking" },
+      ...(isCobalt
+        ? [
+            { label: "سلامة بنية Cobalt", status: "checking" as const },
+            { label: "معرفات [MID_...]", status: "checking" as const },
+          ]
+        : [{ label: "ملفات BDAT", status: "checking" as const }]),
     ];
     setChecks([...results]);
 
@@ -125,13 +132,83 @@ const PreBuildDiagnostic = ({ open, onOpenChange, state, onProceedToBuild }: Pre
       : { label: "الرموز التقنية", status: "warn", detail: `${missingTagCount} ترجمة تنقصها رموز — ستُصلح تلقائياً` };
     setChecks([...results]);
 
-    // 6. BDAT files
-    const bdatBinaryFileNames = await idbGet<string[]>("editorBdatBinaryFileNames");
-    const hasBdat = !!(bdatBinaryFileNames && bdatBinaryFileNames.length > 0);
-    results[5] = hasBdat
-      ? { label: "ملفات BDAT", status: "pass", detail: `${bdatBinaryFileNames!.length} ملف مرفوع` }
-      : { label: "ملفات BDAT", status: isDemo ? "fail" : "warn", detail: "لا توجد ملفات BDAT مرفوعة" };
-    setChecks([...results]);
+    // 6. Cobalt-specific checks OR BDAT
+    if (isCobalt) {
+      const rawFiles = await idbGet<{ name: string; rawLines: string[]; hasLabels: boolean; entries: { label: string; text: string; lineIndex: number; lineCount: number }[] }[]>("cobaltRawFiles");
+
+      // 6a. Line count integrity
+      let lineCountIssues = 0;
+      let lineCountDetails: string[] = [];
+      if (rawFiles && rawFiles.length > 0) {
+        for (const rawFile of rawFiles) {
+          const originalLineCount = rawFile.rawLines.length;
+          // Check if any translation adds extra lines beyond what the entry allows
+          for (const entry of rawFile.entries) {
+            const cobaltKey = state.entries.find(e => e.msbtFile === `cobalt:${rawFile.name}:${entry.label}`);
+            if (!cobaltKey) continue;
+            const key = `${cobaltKey.msbtFile}:${cobaltKey.index}`;
+            const trans = state.translations[key];
+            if (!trans?.trim()) continue;
+            const transLineCount = trans.split("\n").length;
+            if (transLineCount > entry.lineCount) {
+              lineCountIssues++;
+              if (lineCountDetails.length < 3) {
+                lineCountDetails.push(`${entry.label}: ${transLineCount} سطر بدلاً من ${entry.lineCount}`);
+              }
+            }
+          }
+        }
+        results[5] = lineCountIssues === 0
+          ? { label: "سلامة بنية Cobalt", status: "pass", detail: `${rawFiles.length} ملف — عدد الأسطر مطابق ✅` }
+          : { label: "سلامة بنية Cobalt", status: "warn", detail: `${lineCountIssues} ترجمة بأسطر زائدة (ستُقتطع)${lineCountDetails.length > 0 ? '\n' + lineCountDetails.join('، ') : ''}` };
+      } else {
+        results[5] = { label: "سلامة بنية Cobalt", status: "warn", detail: "لا توجد بيانات خام — سيُستخدم البناء البديل" };
+      }
+      setChecks([...results]);
+
+      // 6b. MID identifiers check
+      const midRegex = /^\[MID_[^\]]+\]$/;
+      let missingMids = 0;
+      let corruptedMids = 0;
+      let midDetails: string[] = [];
+      for (const entry of state.entries) {
+        if (!entry.msbtFile.startsWith("cobalt:")) continue;
+        const key = `${entry.msbtFile}:${entry.index}`;
+        const trans = state.translations[key];
+        if (!trans?.trim()) continue;
+        // Check if translation accidentally contains translated MID identifiers
+        const arabicMidMatch = trans.match(/\[[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF_]+\]/g);
+        if (arabicMidMatch) {
+          corruptedMids++;
+          if (midDetails.length < 3) midDetails.push(`${entry.label}: ${arabicMidMatch[0]}`);
+        }
+        // Check if original had a MID that got removed in translation
+        const origLines = entry.original.split("\n");
+        const transLines = trans.split("\n");
+        for (const origLine of origLines) {
+          if (midRegex.test(origLine.trim())) {
+            const found = transLines.some(tl => tl.trim() === origLine.trim());
+            if (!found) {
+              missingMids++;
+              if (midDetails.length < 3) midDetails.push(`محذوف: ${origLine.trim()}`);
+            }
+          }
+        }
+      }
+      const totalMidIssues = missingMids + corruptedMids;
+      results[6] = totalMidIssues === 0
+        ? { label: "معرفات [MID_...]", status: "pass", detail: "كل المعرفات سليمة ✅" }
+        : { label: "معرفات [MID_...]", status: "fail", detail: `⛔ ${totalMidIssues} مشكلة (${missingMids} محذوف، ${corruptedMids} معرّب)${midDetails.length > 0 ? '\n' + midDetails.join('، ') : ''}` };
+      setChecks([...results]);
+    } else {
+      // BDAT files (non-cobalt)
+      const bdatBinaryFileNames = await idbGet<string[]>("editorBdatBinaryFileNames");
+      const hasBdat = !!(bdatBinaryFileNames && bdatBinaryFileNames.length > 0);
+      results[5] = hasBdat
+        ? { label: "ملفات BDAT", status: "pass", detail: `${bdatBinaryFileNames!.length} ملف مرفوع` }
+        : { label: "ملفات BDAT", status: isDemo ? "fail" : "warn", detail: "لا توجد ملفات BDAT مرفوعة" };
+      setChecks([...results]);
+    }
 
     setRunning(false);
   };
