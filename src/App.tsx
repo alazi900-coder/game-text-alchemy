@@ -11,7 +11,7 @@ import { lazy, Suspense } from "react";
 import { Loader2 } from "lucide-react";
 
 const GameHub = lazy(() => import("./pages/GameHub"));
-const AnimalCrossing = lazy(() => import("./pages/AnimalCrossing"));
+
 const FireEmblem = lazy(() => import("./pages/FireEmblem"));
 const MsbtProcess = lazy(() => import("./pages/MsbtProcess"));
 const Editor = lazy(() => import("./pages/Editor"));
@@ -43,8 +43,8 @@ const App = () => (
             <Suspense fallback={<PageLoader />}>
               <Routes>
                 <Route path="/" element={<GameHub />} />
-                <Route path="/animal-crossing" element={<AnimalCrossing />} />
-                <Route path="/animal-crossing/process" element={<ErrorBoundary fallbackTitle="خطأ في المعالجة"><MsbtProcess key="ac" /></ErrorBoundary>} />
+                <Route path="/animal-crossing" element={<NotFound />} />
+                <Route path="/animal-crossing/process" element={<NotFound />} />
                 <Route path="/fire-emblem" element={<FireEmblem />} />
                 <Route path="/fire-emblem/process" element={<ErrorBoundary fallbackTitle="خطأ في المعالجة"><MsbtProcess key="fe" /></ErrorBoundary>} />
                 <Route path="/editor" element={<ErrorBoundary fallbackTitle="خطأ في المحرر"><Editor /></ErrorBoundary>} />

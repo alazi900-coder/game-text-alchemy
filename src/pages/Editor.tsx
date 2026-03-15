@@ -24,7 +24,6 @@ import {
   BarChart3, Menu, MoreVertical, Replace, Columns, Key, Type, Trash2, Package, Wand2,
   Lock, Unlock, Rows3, Languages, StopCircle, Gamepad2,
 } from "lucide-react";
-import acnhHeroBg from "@/assets/acnh-hero-bg.jpg";
 import feHeroBg from "@/assets/fe-hero-bg.jpg";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -90,7 +89,7 @@ const ConsistencyCheckPanel = React.lazy(() => import("@/components/editor/Consi
 import ToolHelpDialog, { ToolType } from "@/components/editor/ToolHelpDialog";
 import { countUniqueMsbtFiles } from "@/lib/msbt-key-normalizer";
 
-type GameId = "animal-crossing" | "fire-emblem";
+type GameId = "fire-emblem";
 
 interface GameConfig {
   id: GameId;
@@ -103,15 +102,6 @@ interface GameConfig {
 }
 
 const GAME_CONFIGS: Record<GameId, GameConfig> = {
-  "animal-crossing": {
-    id: "animal-crossing",
-    title: "Animal Crossing: NH",
-    emoji: "🌿",
-    heroBg: acnhHeroBg,
-    processPath: "/animal-crossing/process",
-    fileLabel: "ملفات MSBT",
-    fileFormat: "MSBT",
-  },
   "fire-emblem": {
     id: "fire-emblem",
     title: "Fire Emblem Engage",
@@ -141,7 +131,7 @@ const Editor = () => {
   const [fontTestWord, setFontTestWord] = React.useState("");
   const [pageLocked, setPageLocked] = React.useState(false);
   const [showToolHelp, setShowToolHelp] = React.useState<ToolType>(null);
-  const [detectedGame, setDetectedGame] = React.useState<GameId>("animal-crossing");
+  const [detectedGame, setDetectedGame] = React.useState<GameId>("fire-emblem");
 
   // Detect game from IDB, URL path (/cobalt), or autoload param
   React.useEffect(() => {
@@ -376,33 +366,7 @@ const Editor = () => {
                 </Button>
               </div>
             </div>
-            <div className="flex items-center justify-center gap-2 flex-wrap">
-              <h1 className="text-2xl md:text-3xl font-display font-black mb-1 drop-shadow-lg">{gameConfig.emoji} محرر الترجمة — {gameConfig.title} ✍️</h1>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7 bg-background/30 backdrop-blur-sm border-border/40">
-                    <Gamepad2 className="w-3.5 h-3.5" />
-                    تبديل اللعبة
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="center">
-                  {(Object.keys(GAME_CONFIGS) as GameId[]).map((gid) => (
-                    <DropdownMenuItem
-                      key={gid}
-                      onClick={async () => {
-                        setDetectedGame(gid);
-                        const { idbSet } = await import("@/lib/idb-storage");
-                        await idbSet("editorGame", gid);
-                      }}
-                      className={gid === detectedGame ? "bg-primary/10 font-bold" : ""}
-                    >
-                      {GAME_CONFIGS[gid].emoji} {GAME_CONFIGS[gid].title}
-                      {gid === detectedGame && " ✓"}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            <h1 className="text-2xl md:text-3xl font-display font-black mb-1 drop-shadow-lg">{gameConfig.emoji} محرر الترجمة — {gameConfig.title} ✍️</h1>
             <p className="text-sm text-muted-foreground font-body">عدّل النصوص العربية يدوياً أو استخدم الترجمة التلقائية • {gameConfig.fileFormat}</p>
           </div>
         </header>
@@ -1524,9 +1488,6 @@ const Editor = () => {
                 <DropdownMenuContent align="end" className="bg-card border-border z-[100] min-w-[200px]">
                   <DropdownMenuLabel className="text-xs">📖 تحميل قاموس</DropdownMenuLabel>
                   <DropdownMenuItem onClick={editor.handleImportGlossary}><BookOpen className="w-4 h-4" /> قاموس مخصص (.txt)</DropdownMenuItem>
-                  {gameType === "animal-crossing" && (
-                    <DropdownMenuItem onClick={editor.handleImportGlossary}>🌿 قاموس Animal Crossing (.txt)</DropdownMenuItem>
-                  )}
                   {gameType === "fire-emblem" && (
                     <DropdownMenuItem onClick={editor.handleImportGlossary}>🗡️ قاموس Fire Emblem (.txt)</DropdownMenuItem>
                   )}
@@ -1773,9 +1734,6 @@ const Editor = () => {
                 <DropdownMenuContent align="start" className="bg-card border-border z-50 min-w-[220px]">
                   <DropdownMenuLabel className="text-xs">📖 تحميل قاموس</DropdownMenuLabel>
                   <DropdownMenuItem onClick={editor.handleImportGlossary}><BookOpen className="w-4 h-4" /> تحميل قاموس مخصص (.txt)</DropdownMenuItem>
-                  {gameType === "animal-crossing" && (
-                    <DropdownMenuItem onClick={editor.handleImportGlossary}>🌿 قاموس Animal Crossing (.txt)</DropdownMenuItem>
-                  )}
                   {gameType === "fire-emblem" && (
                     <DropdownMenuItem onClick={editor.handleImportGlossary}>🗡️ قاموس Fire Emblem (.txt)</DropdownMenuItem>
                   )}

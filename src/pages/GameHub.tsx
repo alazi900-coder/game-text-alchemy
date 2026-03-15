@@ -7,7 +7,6 @@ import { useToast } from "@/hooks/use-toast";
 import { idbSet } from "@/lib/idb-storage";
 import type { ExtractedEntry, EditorState } from "@/components/editor/types";
 import JSZip from "jszip";
-import heroBgAcnh from "@/assets/acnh-hero-bg.jpg";
 import heroBgFe from "@/assets/fe-hero-bg.jpg";
 
 interface CobaltParsedEntry { label: string; text: string; lineIndex: number; lineCount: number; }
@@ -74,17 +73,6 @@ function cobaltToEditorEntries(files: CobaltParsedFile[]) {
 }
 
 const games = [
-  {
-    id: "animal-crossing",
-    title: "Animal Crossing: New Horizons",
-    titleAr: "أنيمال كروسينج: نيو هورايزنز",
-    desc: "ملفات MSBT — حوارات، عناصر، أسماء القرويين",
-    image: heroBgAcnh,
-    href: "/animal-crossing",
-    accent: "from-[hsl(140,70%,50%)] to-[hsl(160,80%,55%)]",
-    border: "border-[hsl(140,60%,40%)]/30",
-    bg: "bg-[hsl(140,60%,40%)]/10",
-  },
   {
     id: "fire-emblem",
     title: "Fire Emblem Engage",
