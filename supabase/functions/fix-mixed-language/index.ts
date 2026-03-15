@@ -7,7 +7,7 @@ const corsHeaders = {
 
 // --- Tag Protection ---
 const TAG_PATTERNS: RegExp[] = [
-  /\[\s*MID_[^\]]+\]/g,
+  /\[\s*M[A-Z]*ID_[^\]]+\]/g,
   /[\uE000-\uE0FF]+/g,
   /\$\w+\([^)]*\)/g,
   /\$\w+/g,
