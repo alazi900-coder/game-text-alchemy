@@ -366,33 +366,7 @@ const Editor = () => {
                 </Button>
               </div>
             </div>
-            <div className="flex items-center justify-center gap-2 flex-wrap">
-              <h1 className="text-2xl md:text-3xl font-display font-black mb-1 drop-shadow-lg">{gameConfig.emoji} محرر الترجمة — {gameConfig.title} ✍️</h1>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button size="sm" variant="outline" className="gap-1.5 text-xs h-7 bg-background/30 backdrop-blur-sm border-border/40">
-                    <Gamepad2 className="w-3.5 h-3.5" />
-                    تبديل اللعبة
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="center">
-                  {(Object.keys(GAME_CONFIGS) as GameId[]).map((gid) => (
-                    <DropdownMenuItem
-                      key={gid}
-                      onClick={async () => {
-                        setDetectedGame(gid);
-                        const { idbSet } = await import("@/lib/idb-storage");
-                        await idbSet("editorGame", gid);
-                      }}
-                      className={gid === detectedGame ? "bg-primary/10 font-bold" : ""}
-                    >
-                      {GAME_CONFIGS[gid].emoji} {GAME_CONFIGS[gid].title}
-                      {gid === detectedGame && " ✓"}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
+            <h1 className="text-2xl md:text-3xl font-display font-black mb-1 drop-shadow-lg">{gameConfig.emoji} محرر الترجمة — {gameConfig.title} ✍️</h1>
             <p className="text-sm text-muted-foreground font-body">عدّل النصوص العربية يدوياً أو استخدم الترجمة التلقائية • {gameConfig.fileFormat}</p>
           </div>
         </header>
