@@ -593,22 +593,27 @@ ${contextBlock}
           });
         }
 
+        const shieldedEntries = translatedEntries.map(e => {
+          const { shielded, slots } = shieldTags(e.translation);
+          return { ...e, shielded, slots };
+        });
+
         const CHUNK_SIZE = 20;
         const allCorrections: any[] = [];
 
-        for (let c = 0; c < translatedEntries.length; c += CHUNK_SIZE) {
-          const chunk = translatedEntries.slice(c, c + CHUNK_SIZE);
+        for (let c = 0; c < shieldedEntries.length; c += CHUNK_SIZE) {
+          const chunk = shieldedEntries.slice(c, c + CHUNK_SIZE);
 
           const prompt = `أنت مصحح إملائي ونحوي آلي. صحّح كل ترجمة عربية بدون تغيير المعنى أو الأسلوب.
 
 قواعد:
 - صحّح الأخطاء الإملائية والنحوية فقط
 - لا تُغيّر الأسلوب أو الصياغة
-- حافظ على جميع الوسوم [Tags] و الرموز الخاصة كما هي
+- ⚠️ الرموز مثل ⟪T0⟫ و ⟪T1⟫ عناصر تقنية محمية — لا تعدلها أبداً
 - إذا كان النص سليماً أعد نفس النص بالضبط
 - صحّح: همزات خاطئة، تاء/هاء، ياء/ألف مقصورة، تذكير/تأنيث، "ل" → "لا"
 
-${chunk.map((e, i) => `[${i}] "${e.translation}"`).join('\n')}
+${chunk.map((e, i) => `[${i}] "${e.shielded}"`).join('\n')}
 
 أخرج JSON array فقط بنفس الترتيب يحتوي النصوص المصححة. مثال: ["نص مصحح 1", "نص مصحح 2"]`;
 
@@ -621,7 +626,7 @@ ${chunk.map((e, i) => `[${i}] "${e.translation}"`).join('\n')}
             body: JSON.stringify({
               model: resolvedModel,
               messages: [
-                { role: 'system', content: 'أنت مصحح إملائي. أخرج ONLY JSON arrays. لا تغيّر المعنى.' },
+                { role: 'system', content: 'أنت مصحح إملائي. أخرج ONLY JSON arrays. لا تغيّر المعنى. لا تعدل رموز ⟪T0⟫.' },
                 { role: 'user', content: prompt },
               ],
               temperature: 0.1,
@@ -649,7 +654,7 @@ ${chunk.map((e, i) => `[${i}] "${e.translation}"`).join('\n')}
             const corrected: string[] = JSON.parse(sanitized);
             for (let i = 0; i < Math.min(chunk.length, corrected.length); i++) {
               const entry = chunk[i];
-              const correctedText = corrected[i]?.trim();
+              const correctedText = unshieldTags(corrected[i]?.trim() || '', entry.slots);
               if (correctedText && correctedText !== entry.translation) {
                 allCorrections.push({
                   key: entry.key,
