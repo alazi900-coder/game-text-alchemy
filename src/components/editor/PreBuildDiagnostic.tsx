@@ -441,6 +441,22 @@ const PreBuildDiagnostic = ({ open, onOpenChange, state, onProceedToBuild, onFix
           </Button>
         )}
 
+        {/* Auto-fix format specifiers button */}
+        {!running && Object.keys(formatFixes).length > 0 && onFixTranslations && (
+          <Button
+            variant="outline"
+            className="w-full font-body gap-2 border-destructive/50 text-destructive hover:bg-destructive/10"
+            onClick={() => {
+              onFixTranslations(formatFixes);
+              setFormatFixes({});
+              runDiagnostics();
+            }}
+          >
+            <Wrench className="w-4 h-4" />
+            إصلاح {Object.keys(formatFixes).length} رمز %s/%d معرّب تلقائياً
+          </Button>
+        )}
+
         {/* Overall status */}
         {!running && checks.length > 0 && (
           <div className={`text-center p-3 rounded-lg border ${
