@@ -5,6 +5,49 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version',
 };
 
+// --- Tag Protection ---
+const TAG_PATTERNS: RegExp[] = [
+  /\[\s*MID_[^\]]+\]/g, /[\uE000-\uE0FF]+/g, /\$\w+\([^)]*\)/g, /\$\w+/g,
+  /\[\s*\w+\s*:[^\]]*?\s*\]/g, /\[\s*\w+\s*=\s*\w[^\]]*\]/g, /\{[\w]+\}/g,
+  /%[sd]/g, /[\uFFF9-\uFFFC]/g, /<[\w\/][^>]*>/g,
+];
+
+function shieldTags(text: string): { shielded: string; slots: string[] } {
+  const slots: string[] = [];
+  const matches: { start: number; end: number; original: string }[] = [];
+  for (const pattern of TAG_PATTERNS) {
+    const regex = new RegExp(pattern.source, pattern.flags);
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(text)) !== null) {
+      const s = m.index, e = s + m[0].length;
+      if (!matches.some(x => s < x.end && e > x.start)) matches.push({ start: s, end: e, original: m[0] });
+    }
+  }
+  matches.sort((a, b) => a.start - b.start);
+  if (matches.length === 0) return { shielded: text, slots: [] };
+  let result = '', lastEnd = 0;
+  for (const m of matches) {
+    result += text.slice(lastEnd, m.start);
+    result += `⟪T${slots.length}⟫`;
+    slots.push(m.original);
+    lastEnd = m.end;
+  }
+  result += text.slice(lastEnd);
+  return { shielded: result, slots };
+}
+
+function unshieldTags(text: string, slots: string[]): string {
+  let result = text;
+  for (let i = slots.length - 1; i >= 0; i--) {
+    const variants = [`⟪T${i}⟫`, `⟪ T${i} ⟫`, `[T${i}]`, `(T${i})`, `T${i}`, `«T${i}»`, `《T${i}》`];
+    for (const v of variants) {
+      if (result.includes(v)) { result = result.replace(v, slots[i]); break; }
+    }
+  }
+  result = result.replace(/⟪T\d+⟫/g, '');
+  return result;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
