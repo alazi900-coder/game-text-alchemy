@@ -21,30 +21,51 @@ export default defineConfig(({ mode }) => ({
       includeAssets: ["favicon.ico", "pwa-icon-192.png", "pwa-icon-512.png"],
       workbox: {
         navigateFallbackDenylist: [/^\/~oauth/],
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        // Don't precache anything — always fetch fresh from network
+        globPatterns: [],
         skipWaiting: true,
         clientsClaim: true,
-        // Disable runtime caching for navigation requests to always get fresh content
         navigateFallback: null,
         runtimeCaching: [
           {
+            // Supabase API — always network
             urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
             handler: "NetworkOnly",
           },
           {
+            // JS/CSS — network first, fall back to cache for offline
             urlPattern: /\.(?:js|css)$/i,
             handler: "NetworkFirst",
             options: {
-              cacheName: "static-assets",
-              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 },
+              cacheName: "static-assets-v2",
+              expiration: { maxEntries: 80, maxAgeSeconds: 30 * 60 },
+              networkTimeoutSeconds: 3,
+            },
+          },
+          {
+            // Images — cache first (they rarely change)
+            urlPattern: /\.(?:png|jpg|jpeg|svg|webp|ico)$/i,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "images-v2",
+              expiration: { maxEntries: 50, maxAgeSeconds: 7 * 24 * 60 * 60 },
+            },
+          },
+          {
+            // Fonts
+            urlPattern: /\.(?:woff2?|ttf|otf)$/i,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "fonts-v2",
+              expiration: { maxEntries: 10, maxAgeSeconds: 30 * 24 * 60 * 60 },
             },
           },
         ],
       },
       manifest: {
-        name: "أداة تعريب Xenoblade Chronicles 3",
-        short_name: "تعريب XC3",
-        description: "أداة لتعريب ملفات لعبة Xenoblade Chronicles 3 تلقائياً",
+        name: "أداة تعريب Fire Emblem Engage",
+        short_name: "تعريب FE",
+        description: "أداة لتعريب ملفات لعبة Fire Emblem Engage تلقائياً",
         theme_color: "#0f2617",
         background_color: "#0f2617",
         display: "standalone",
