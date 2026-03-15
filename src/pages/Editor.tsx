@@ -1514,9 +1514,6 @@ const Editor = () => {
                 <DropdownMenuContent align="end" className="bg-card border-border z-[100] min-w-[200px]">
                   <DropdownMenuLabel className="text-xs">📖 تحميل قاموس</DropdownMenuLabel>
                   <DropdownMenuItem onClick={editor.handleImportGlossary}><BookOpen className="w-4 h-4" /> قاموس مخصص (.txt)</DropdownMenuItem>
-                  {gameType === "animal-crossing" && (
-                    <DropdownMenuItem onClick={editor.handleImportGlossary}>🌿 قاموس Animal Crossing (.txt)</DropdownMenuItem>
-                  )}
                   {gameType === "fire-emblem" && (
                     <DropdownMenuItem onClick={editor.handleImportGlossary}>🗡️ قاموس Fire Emblem (.txt)</DropdownMenuItem>
                   )}
