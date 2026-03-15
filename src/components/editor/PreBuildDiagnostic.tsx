@@ -66,6 +66,7 @@ const PreBuildDiagnostic = ({ open, onOpenChange, state, onProceedToBuild, onFix
             { label: "معرفات [MID_...]", status: "checking" as const },
             { label: "وسوم $ المعرّبة", status: "checking" as const },
             { label: "رموز %s %d المعرّبة", status: "checking" as const },
+            { label: "أحرف BOM وغير مرئية", status: "checking" as const },
           ]
         : [{ label: "ملفات BDAT", status: "checking" as const }]),
     ];
@@ -366,6 +367,34 @@ const PreBuildDiagnostic = ({ open, onOpenChange, state, onProceedToBuild, onFix
         ? { label: "رموز %s %d المعرّبة", status: "pass", detail: "كل رموز التنسيق سليمة ✅" }
         : { label: "رموز %s %d المعرّبة", status: "fail", detail: `⛔ ${corruptedFormatSpecs} رمز معرّب — ${formatFixCount} قابلة للإصلاح${formatDetails.length > 0 ? '\n' + formatDetails.join('، ') : ''}` };
       setChecks([...results]);
+
+      // 6e. BOM and invisible characters check
+      const invisiblePattern = /[\uFEFF\u200B\u200C\u200D\u200E\u200F\u202A-\u202E\u2060\u2066-\u2069\uFFF9-\uFFFC]/;
+      let bomCount = 0;
+      let invisibleCount = 0;
+      const bomDetails: string[] = [];
+      for (const entry of state.entries) {
+        if (!entry.msbtFile.startsWith("cobalt:")) continue;
+        const key = `${entry.msbtFile}:${entry.index}`;
+        const trans = state.translations[key];
+        if (!trans?.trim()) continue;
+        const lines = trans.split("\n");
+        for (const line of lines) {
+          if (line.startsWith("\uFEFF")) {
+            bomCount++;
+            if (bomDetails.length < 3) bomDetails.push(`${entry.label}: BOM في بداية السطر`);
+          } else if (invisiblePattern.test(line.charAt(0))) {
+            invisibleCount++;
+            if (bomDetails.length < 3) bomDetails.push(`${entry.label}: حرف غير مرئي U+${line.charCodeAt(0).toString(16).toUpperCase()}`);
+          }
+        }
+      }
+      const totalInvisible = bomCount + invisibleCount;
+      results[9] = totalInvisible === 0
+        ? { label: "أحرف BOM وغير مرئية", status: "pass", detail: "لا توجد أحرف غير مرئية ✅" }
+        : { label: "أحرف BOM وغير مرئية", status: "warn", detail: `${totalInvisible} سطر يحتوي أحرف غير مرئية (BOM: ${bomCount})${bomDetails.length > 0 ? '\n' + bomDetails.join('، ') : ''}` };
+      setChecks([...results]);
+
     } else {
       // BDAT files (non-cobalt)
       const bdatBinaryFileNames = await idbGet<string[]>("editorBdatBinaryFileNames");
