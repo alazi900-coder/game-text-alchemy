@@ -38,16 +38,19 @@ function protectTags(text: string): { cleaned: string; tags: Map<string, string>
   }
 
   const patterns: RegExp[] = [
+    /\[\s*M[A-Z]*ID_[^\]]+\]/g,               // Cobalt identifiers: [MID_...], [MAID_...], [MSID_...]
     /[\uE000-\uE0FF]+/g,                     // PUA icons (consecutive = atomic block)
-    /\[\s*\w+\s*:[^\]]*?\s*\]/g,                     // [Tag:Value] only (no trailing parentheses)
+    /\$\w+\([^)]*\)/g,                        // Cobalt tags with args: $Window(...), $Anim(...), $Wait(...), $Type(...), $Arg(...), $Icon(...)
+    /\$\w+/g,                                 // Cobalt simple tags: $P, $n, $t
+    /\[\s*\w+\s*:[^\]]*?\s*\]/g,             // [Tag:Value] only (no trailing parentheses)
     /\d+\s*\[[A-Z]{2,10}\]/g,              // N[TAG] patterns (e.g. 1[ML], 1 [ML])
     /\[[A-Z]{2,10}\]\s*\d+/g,              // [TAG]N patterns (e.g. [ML]1, [ML] 1)
     /\[\s*\w+\s*=\s*\w[^\]]*\]/g,       // [TAG=Value] patterns (e.g. [Color=Red])
     /\{\s*\w+\s*:\s*\w[^}]*\}/g,         // {TAG:Value} patterns (e.g. {player:name})
     /\{[\w]+\}/g,                            // {variable} placeholders
+    /%[sd]/g,                                // Format specifiers: %s, %d
     /[\uFFF9-\uFFFC]/g,                       // Unicode special markers
     /<[\w\/][^>]*>/g,                         // HTML-like tags
-    // Removed: standalone descriptive parentheses - these are translatable content
     ABBREV_PATTERN,                             // Game abbreviations
   ];
 
