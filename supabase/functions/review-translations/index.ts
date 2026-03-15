@@ -317,27 +317,35 @@ AR: "${e.shieldedTrans}"`).join('\n\n')}
           });
         }
 
+        const shieldedEntries = translatedEntries.map(e => {
+          const { shielded: shieldedOrig, slots: origSlots } = shieldTags(e.original);
+          const { shielded: shieldedTrans, slots: transSlots } = shieldTags(e.translation);
+          return { ...e, shieldedOrig, shieldedTrans, origSlots, transSlots };
+        });
+
         const CHUNK_SIZE = 15;
         const allFindings: any[] = [];
 
-        for (let c = 0; c < translatedEntries.length; c += CHUNK_SIZE) {
-          const chunk = translatedEntries.slice(c, c + CHUNK_SIZE);
+        for (let c = 0; c < shieldedEntries.length; c += CHUNK_SIZE) {
+          const chunk = shieldedEntries.slice(c, c + CHUNK_SIZE);
 
           const prompt = `أنت مدقق نحوي وإملائي متخصص في اللغة العربية. حلّل كل ترجمة وأبلغ عن الأخطاء التالية فقط:
 
-1. **gender** — خطأ في التذكير والتأنيث (مثل: "هذا القرية" بدل "هذه القرية")
-2. **conjugation** — خطأ في تصريف الفعل (مثل: "هم ذهب" بدل "هم ذهبوا")
-3. **case** — خطأ إعرابي (مثل: "رأيت الرجلُ" بدل "رأيت الرجلَ")
-4. **spelling** — خطأ إملائي (مثل: "إنشاء الله" بدل "إن شاء الله"، "لاكن" بدل "لكن")
-5. **hamza** — خطأ في الهمزات (مثل: "مسائل" بدل "مسائل"، "إنتصار" بدل "انتصار")
-6. **negation** — خطأ في أداة النفي (مثل: "ل يمكن" بدل "لا يمكن"، "ل تذهب" بدل "لا تذهب")
-7. **preposition** — خطأ في حرف الجر أو استخدامه
+1. **gender** — خطأ في التذكير والتأنيث
+2. **conjugation** — خطأ في تصريف الفعل
+3. **case** — خطأ إعرابي
+4. **spelling** — خطأ إملائي
+5. **hamza** — خطأ في الهمزات
+6. **negation** — خطأ في أداة النفي
+7. **preposition** — خطأ في حرف الجر
+
+⚠️ قاعدة حرجة: الرموز مثل ⟪T0⟫ و ⟪T1⟫ هي عناصر تقنية محمية. يجب أن تبقى في مكانها تماماً بدون أي تعديل.
 
 ${glossary ? `\nالقاموس المعتمد:\n${glossary.slice(0, 2000)}\n` : ''}
 
 النصوص:
-${chunk.map((e, i) => `[${i}] EN: "${e.original}"
-AR: "${e.translation}"`).join('\n\n')}
+${chunk.map((e, i) => `[${i}] EN: "${e.shieldedOrig}"
+AR: "${e.shieldedTrans}"`).join('\n\n')}
 
 أخرج JSON array فقط. كل عنصر:
 {"i": رقم_النص, "type": "gender"|"conjugation"|"case"|"spelling"|"hamza"|"negation"|"preposition", "issue": "شرح الخطأ", "fix": "الترجمة المصحّحة"}
