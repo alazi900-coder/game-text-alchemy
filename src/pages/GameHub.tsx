@@ -74,17 +74,6 @@ function cobaltToEditorEntries(files: CobaltParsedFile[]) {
 
 const games = [
   {
-    id: "animal-crossing",
-    title: "Animal Crossing: New Horizons",
-    titleAr: "أنيمال كروسينج: نيو هورايزنز",
-    desc: "ملفات MSBT — حوارات، عناصر، أسماء القرويين",
-    image: heroBgAcnh,
-    href: "/animal-crossing",
-    accent: "from-[hsl(140,70%,50%)] to-[hsl(160,80%,55%)]",
-    border: "border-[hsl(140,60%,40%)]/30",
-    bg: "bg-[hsl(140,60%,40%)]/10",
-  },
-  {
     id: "fire-emblem",
     title: "Fire Emblem Engage",
     titleAr: "فاير إمبلم إنغيج",
