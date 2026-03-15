@@ -8,7 +8,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, AlertTriangle, XCircle, Loader2, Stethoscope } from "lucide-react";
+import { CheckCircle2, AlertTriangle, XCircle, Loader2, Stethoscope, Wrench } from "lucide-react";
 import { idbGet } from "@/lib/idb-storage";
 import type { EditorState } from "@/components/editor/types";
 import { normalizeMsbtTranslations } from "@/lib/msbt-key-normalizer";
@@ -24,6 +24,7 @@ interface PreBuildDiagnosticProps {
   onOpenChange: (open: boolean) => void;
   state: EditorState | null;
   onProceedToBuild: () => void;
+  onFixTranslations?: (fixes: Record<string, string>) => void;
 }
 
 const StatusIcon = ({ status }: { status: DiagnosticCheck["status"] }) => {
@@ -35,9 +36,10 @@ const StatusIcon = ({ status }: { status: DiagnosticCheck["status"] }) => {
   }
 };
 
-const PreBuildDiagnostic = ({ open, onOpenChange, state, onProceedToBuild }: PreBuildDiagnosticProps) => {
+const PreBuildDiagnostic = ({ open, onOpenChange, state, onProceedToBuild, onFixTranslations }: PreBuildDiagnosticProps) => {
   const [checks, setChecks] = useState<DiagnosticCheck[]>([]);
   const [running, setRunning] = useState(false);
+  const [midFixes, setMidFixes] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!open || !state) return;
@@ -166,39 +168,67 @@ const PreBuildDiagnostic = ({ open, onOpenChange, state, onProceedToBuild }: Pre
       }
       setChecks([...results]);
 
-      // 6b. MID identifiers check
+      // 6b. MID identifiers check + auto-fix collection
       const midRegex = /^\[MID_[^\]]+\]$/;
       let missingMids = 0;
       let corruptedMids = 0;
       let midDetails: string[] = [];
+      const pendingFixes: Record<string, string> = {};
       for (const entry of state.entries) {
         if (!entry.msbtFile.startsWith("cobalt:")) continue;
         const key = `${entry.msbtFile}:${entry.index}`;
         const trans = state.translations[key];
         if (!trans?.trim()) continue;
-        // Check if translation accidentally contains translated MID identifiers
-        const arabicMidMatch = trans.match(/\[[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF_]+\]/g);
-        if (arabicMidMatch) {
-          corruptedMids++;
-          if (midDetails.length < 3) midDetails.push(`${entry.label}: ${arabicMidMatch[0]}`);
-        }
-        // Check if original had a MID that got removed in translation
+        
         const origLines = entry.original.split("\n");
         const transLines = trans.split("\n");
-        for (const origLine of origLines) {
-          if (midRegex.test(origLine.trim())) {
-            const found = transLines.some(tl => tl.trim() === origLine.trim());
-            if (!found) {
-              missingMids++;
-              if (midDetails.length < 3) midDetails.push(`محذوف: ${origLine.trim()}`);
+        let needsFix = false;
+        const fixedLines = [...transLines];
+        
+        // Check for translated/corrupted MID identifiers
+        for (let li = 0; li < transLines.length; li++) {
+          const arabicMidMatch = transLines[li].match(/^\[[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\w_]+\]$/);
+          if (arabicMidMatch && /[\u0600-\u06FF]/.test(arabicMidMatch[0])) {
+            // Find the corresponding original MID line
+            const origMid = origLines.find(ol => midRegex.test(ol.trim()));
+            if (origMid) {
+              fixedLines[li] = origMid.trim();
+              needsFix = true;
+              corruptedMids++;
+              if (midDetails.length < 3) midDetails.push(`معرّب: ${arabicMidMatch[0]} ← ${origMid.trim()}`);
             }
           }
         }
+        
+        // Check for missing MID lines and restore them
+        for (const origLine of origLines) {
+          if (midRegex.test(origLine.trim())) {
+            const found = fixedLines.some(tl => tl.trim() === origLine.trim());
+            if (!found) {
+              missingMids++;
+              needsFix = true;
+              if (midDetails.length < 3) midDetails.push(`محذوف: ${origLine.trim()}`);
+              // Try to find the right position to insert
+              const origIdx = origLines.indexOf(origLine);
+              if (origIdx <= fixedLines.length) {
+                fixedLines.splice(origIdx, 0, origLine.trim());
+              } else {
+                fixedLines.push(origLine.trim());
+              }
+            }
+          }
+        }
+        
+        if (needsFix) {
+          pendingFixes[key] = fixedLines.join("\n");
+        }
       }
+      setMidFixes(pendingFixes);
       const totalMidIssues = missingMids + corruptedMids;
+      const fixCount = Object.keys(pendingFixes).length;
       results[6] = totalMidIssues === 0
         ? { label: "معرفات [MID_...]", status: "pass", detail: "كل المعرفات سليمة ✅" }
-        : { label: "معرفات [MID_...]", status: "fail", detail: `⛔ ${totalMidIssues} مشكلة (${missingMids} محذوف، ${corruptedMids} معرّب)${midDetails.length > 0 ? '\n' + midDetails.join('، ') : ''}` };
+        : { label: "معرفات [MID_...]", status: "fail", detail: `⛔ ${totalMidIssues} مشكلة (${missingMids} محذوف، ${corruptedMids} معرّب) — ${fixCount} قابلة للإصلاح${midDetails.length > 0 ? '\n' + midDetails.join('، ') : ''}` };
       setChecks([...results]);
     } else {
       // BDAT files (non-cobalt)
@@ -242,6 +272,22 @@ const PreBuildDiagnostic = ({ open, onOpenChange, state, onProceedToBuild }: Pre
             </div>
           ))}
         </div>
+
+        {/* Auto-fix MID button */}
+        {!running && Object.keys(midFixes).length > 0 && onFixTranslations && (
+          <Button
+            variant="outline"
+            className="w-full font-body gap-2 border-destructive/50 text-destructive hover:bg-destructive/10"
+            onClick={() => {
+              onFixTranslations(midFixes);
+              setMidFixes({});
+              runDiagnostics();
+            }}
+          >
+            <Wrench className="w-4 h-4" />
+            إصلاح {Object.keys(midFixes).length} معرف [MID_...] تلقائياً
+          </Button>
+        )}
 
         {/* Overall status */}
         {!running && checks.length > 0 && (

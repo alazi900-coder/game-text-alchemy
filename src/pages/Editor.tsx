@@ -2089,6 +2089,9 @@ const Editor = () => {
           onOpenChange={setShowDiagnostic}
           state={editor.state}
           onProceedToBuild={() => { setShowDiagnostic(false); editor.handlePreBuild(); }}
+          onFixTranslations={(fixes) => {
+            Object.entries(fixes).forEach(([key, value]) => editor.updateTranslation(key, value));
+          }}
         />
         <BuildVerificationDialog
           open={editor.showBuildVerification}
