@@ -388,13 +388,14 @@ AR: "${e.shieldedTrans}"`).join('\n\n')}
             const findings: any[] = JSON.parse(sanitized);
             for (const f of findings) {
               if (typeof f.i === 'number' && f.i >= 0 && f.i < chunk.length) {
+                const entry = chunk[f.i];
                 allFindings.push({
-                  key: chunk[f.i].key,
-                  original: chunk[f.i].original,
-                  current: chunk[f.i].translation,
+                  key: entry.key,
+                  original: entry.original,
+                  current: entry.translation,
                   type: f.type || 'spelling',
                   issue: f.issue || '',
-                  fix: f.fix || '',
+                  fix: f.fix ? unshieldTags(f.fix, entry.transSlots) : '',
                 });
               }
             }
