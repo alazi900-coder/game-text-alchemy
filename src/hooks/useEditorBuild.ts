@@ -1397,9 +1397,10 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         const fileName = parts[1];
         const label = parts[2];
         const key = `${entry.msbtFile}:${entry.index}`;
-        const text = currentState.translations[key]?.trim() || entry.original;
+        const translated = currentState.translations[key]?.trim();
+        if (!translated || translated === entry.original) continue; // skip unchanged
         if (!translationsByFileLabel.has(fileName)) translationsByFileLabel.set(fileName, new Map());
-        translationsByFileLabel.get(fileName)!.set(label, text);
+        translationsByFileLabel.get(fileName)!.set(label, translated);
       }
 
       let builtCount = 0;
