@@ -20,22 +20,29 @@ interface CobaltFile {
 
 /** Parse a Cobalt .txt file: [LABEL] followed by text lines */
 function parseCobaltTxt(content: string, fileName: string): CobaltEntry[] {
-  const lines = content.split(/\r?\n/);
+  // Strip BOM if present
+  const clean = content.replace(/^\uFEFF/, '');
+  const lines = clean.split(/\r?\n/);
   const entries: CobaltEntry[] = [];
   let currentLabel: string | null = null;
   let currentLines: string[] = [];
 
   const flush = () => {
     if (currentLabel !== null) {
+      // Trim trailing empty lines
+      while (currentLines.length > 0 && currentLines[currentLines.length - 1].trim() === '') {
+        currentLines.pop();
+      }
       entries.push({ label: currentLabel, text: currentLines.join("\n") });
     }
   };
 
   for (const line of lines) {
+    // Match [LABEL] — allow spaces inside brackets and trailing whitespace
     const labelMatch = line.match(/^\[([^\]]+)\]\s*$/);
     if (labelMatch) {
       flush();
-      currentLabel = labelMatch[1];
+      currentLabel = labelMatch[1].trim();
       currentLines = [];
     } else if (currentLabel !== null) {
       currentLines.push(line);
@@ -70,15 +77,24 @@ export default function CobaltMod() {
         const entries = parseCobaltTxt(content, name);
         if (entries.length > 0) {
           newFiles.push({ name, entries });
+        } else {
+          console.warn(`No [LABEL] entries found in ${file.name}. Content preview:`, content.slice(0, 200));
         }
         loaded++;
         if (loaded === inputFiles.length) {
+          if (newFiles.length === 0) {
+            toast({
+              title: "لم يتم العثور على مدخلات",
+              description: "تأكد أن الملف يحتوي على وسوم [LABEL] بالصيغة الصحيحة",
+              variant: "destructive",
+            });
+            return;
+          }
           setFiles(prev => {
             const merged = [...prev];
             for (const nf of newFiles) {
               const existingIdx = merged.findIndex(f => f.name === nf.name);
               if (existingIdx >= 0) {
-                // Merge: update existing entries, add new ones
                 const existing = merged[existingIdx];
                 for (const entry of nf.entries) {
                   const idx = existing.entries.findIndex(e => e.label === entry.label);
@@ -100,7 +116,11 @@ export default function CobaltMod() {
           });
         }
       };
-      reader.readAsText(file);
+      reader.onerror = () => {
+        loaded++;
+        toast({ title: `خطأ في قراءة ${file.name}`, variant: "destructive" });
+      };
+      reader.readAsText(file, 'utf-8');
     });
     e.target.value = "";
   }, [toast]);
