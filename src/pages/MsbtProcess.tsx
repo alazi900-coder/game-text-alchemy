@@ -29,14 +29,6 @@ interface GameConfig {
 }
 
 const gameConfigs: Record<string, GameConfig> = {
-  "animal-crossing": {
-    id: "animal-crossing",
-    title: "Animal Crossing: NH",
-    emoji: "🌿",
-    accentClass: "text-[hsl(140,70%,50%)]",
-    landingPath: "/animal-crossing",
-    heroBg: "",
-  },
   "fire-emblem": {
     id: "fire-emblem",
     title: "Fire Emblem Engage",
@@ -49,7 +41,7 @@ const gameConfigs: Record<string, GameConfig> = {
 
 export default function MsbtProcess() {
   const location = useLocation();
-  const gameId = location.pathname.includes("fire-emblem") ? "fire-emblem" : "animal-crossing";
+  const gameId = "fire-emblem";
   const config = gameConfigs[gameId];
   
   const [msbtFiles, setMsbtFiles] = useState<{ name: string; size: number; data: ArrayBuffer }[]>([]);
