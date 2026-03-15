@@ -779,6 +779,12 @@ AR: "${e.translation}"`).join('\n\n')}
           });
         }
 
+        const shieldedEntries = translatedEntries.map(e => {
+          const { shielded: shieldedOrig, slots: origSlots } = shieldTags(e.original);
+          const { shielded: shieldedTrans, slots: transSlots } = shieldTags(e.translation);
+          return { ...e, shieldedOrig, shieldedTrans, origSlots, transSlots };
+        });
+
         const contextBlock = contextEntries && contextEntries.length > 0
           ? `\nسياق من نفس المشهد/الملف:\n${contextEntries.slice(0, 20).map(ce => `  EN: "${ce.original}" → AR: "${ce.translation}"`).join('\n')}\n`
           : '';
@@ -786,8 +792,8 @@ AR: "${e.translation}"`).join('\n\n')}
         const CHUNK_SIZE = 10;
         const allRetranslations: any[] = [];
 
-        for (let c = 0; c < translatedEntries.length; c += CHUNK_SIZE) {
-          const chunk = translatedEntries.slice(c, c + CHUNK_SIZE);
+        for (let c = 0; c < shieldedEntries.length; c += CHUNK_SIZE) {
+          const chunk = shieldedEntries.slice(c, c + CHUNK_SIZE);
 
           const prompt = `أنت مترجم ألعاب فيديو محترف. أعد ترجمة النصوص التالية مع مراعاة السياق المحيط.
 
@@ -797,11 +803,11 @@ ${contextBlock}
 قواعد:
 - استخدم السياق المحيط لفهم المشهد والشخصية المتحدثة
 - قدّم ترجمة طبيعية وسلسة تناسب سياق اللعبة
-- حافظ على جميع الوسوم [Tags] والرموز الخاصة
+- ⚠️ الرموز مثل ⟪T0⟫ و ⟪T1⟫ عناصر تقنية محمية — لا تعدلها أبداً، أبقها في مكانها
 - الترجمة الحالية قد تكون حرفية أو ركيكة — حسّنها
 
-${chunk.map((e, i) => `[${i}] EN: "${e.original}"
-الترجمة الحالية: "${e.translation}"
+${chunk.map((e, i) => `[${i}] EN: "${e.shieldedOrig}"
+الترجمة الحالية: "${e.shieldedTrans}"
 ${e.maxBytes > 0 ? `الحد: ${e.maxBytes} بايت` : ''}`).join('\n\n')}
 
 أخرج JSON array فقط بنفس الترتيب. كل عنصر: {"text": "الترجمة الجديدة", "changes": "ملخص التغييرات"}`;
