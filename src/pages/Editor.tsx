@@ -2074,6 +2074,15 @@ const Editor = () => {
                     <div className="text-xs text-muted-foreground">جاهزة للاستخدام مع مود Cobalt في اللعبة</div>
                   </div>
                 </button>
+                <label className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={editor.autoTrimMsbt}
+                    onChange={e => editor.toggleAutoTrimMsbt(e.target.checked)}
+                    className="rounded border-border accent-primary"
+                  />
+                  تقليص النصوص تلقائياً إذا تجاوزت حجم النص الأصلي (MSBT)
+                </label>
               </div>
               <button
                 className="w-full text-center text-sm text-muted-foreground hover:text-foreground py-2"
