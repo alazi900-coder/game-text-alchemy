@@ -20,22 +20,29 @@ interface CobaltFile {
 
 /** Parse a Cobalt .txt file: [LABEL] followed by text lines */
 function parseCobaltTxt(content: string, fileName: string): CobaltEntry[] {
-  const lines = content.split(/\r?\n/);
+  // Strip BOM if present
+  const clean = content.replace(/^\uFEFF/, '');
+  const lines = clean.split(/\r?\n/);
   const entries: CobaltEntry[] = [];
   let currentLabel: string | null = null;
   let currentLines: string[] = [];
 
   const flush = () => {
     if (currentLabel !== null) {
+      // Trim trailing empty lines
+      while (currentLines.length > 0 && currentLines[currentLines.length - 1].trim() === '') {
+        currentLines.pop();
+      }
       entries.push({ label: currentLabel, text: currentLines.join("\n") });
     }
   };
 
   for (const line of lines) {
+    // Match [LABEL] — allow spaces inside brackets and trailing whitespace
     const labelMatch = line.match(/^\[([^\]]+)\]\s*$/);
     if (labelMatch) {
       flush();
-      currentLabel = labelMatch[1];
+      currentLabel = labelMatch[1].trim();
       currentLines = [];
     } else if (currentLabel !== null) {
       currentLines.push(line);
