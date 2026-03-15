@@ -10,36 +10,51 @@ import JSZip from "jszip";
 import heroBgAcnh from "@/assets/acnh-hero-bg.jpg";
 import heroBgFe from "@/assets/fe-hero-bg.jpg";
 
-interface CobaltParsedEntry { label: string; text: string; }
+interface CobaltParsedEntry { label: string; text: string; lineIndex: number; lineCount: number; }
+interface CobaltParsedFile { name: string; entries: CobaltParsedEntry[]; rawLines: string[]; hasLabels: boolean; }
 
-function parseCobaltTxt(content: string): CobaltParsedEntry[] {
+function parseCobaltTxt(content: string): { entries: CobaltParsedEntry[]; rawLines: string[]; hasLabels: boolean } {
   const clean = content.replace(/^\uFEFF/, '');
-  const lines = clean.split(/\r?\n/);
+  const rawLines = clean.split(/\r?\n/);
   const entries: CobaltParsedEntry[] = [];
-  let currentLabel: string | null = null;
-  let currentLines: string[] = [];
-  const flush = () => {
-    if (currentLabel !== null) {
-      while (currentLines.length > 0 && currentLines[currentLines.length - 1].trim() === '') currentLines.pop();
-      entries.push({ label: currentLabel, text: currentLines.join("\n") });
-    }
-  };
-  const hasLabels = lines.some(l => /^\[([^\]]+)\]\s*$/.test(l));
+  const hasLabels = rawLines.some(l => /^\[([^\]]+)\]\s*$/.test(l));
+
   if (hasLabels) {
-    for (const line of lines) {
-      const m = line.match(/^\[([^\]]+)\]\s*$/);
-      if (m) { flush(); currentLabel = m[1].trim(); currentLines = []; }
-      else if (currentLabel !== null) currentLines.push(line);
+    let currentLabel: string | null = null;
+    let textStartLine = -1;
+    let currentLines: string[] = [];
+
+    const flush = () => {
+      if (currentLabel !== null && textStartLine >= 0) {
+        // Keep trailing empty lines as part of the entry to preserve structure
+        entries.push({ label: currentLabel, text: currentLines.join("\n"), lineIndex: textStartLine, lineCount: currentLines.length });
+      }
+    };
+
+    for (let i = 0; i < rawLines.length; i++) {
+      const m = rawLines[i].match(/^\[([^\]]+)\]\s*$/);
+      if (m) {
+        flush();
+        currentLabel = m[1].trim();
+        textStartLine = i + 1;
+        currentLines = [];
+      } else if (currentLabel !== null) {
+        currentLines.push(rawLines[i]);
+      }
     }
     flush();
   } else {
+    // Each non-empty line is an entry; track its exact position
     let idx = 0;
-    for (const line of lines) {
-      const t = line.trim();
-      if (t) { idx++; entries.push({ label: `Line_${idx}`, text: t }); }
+    for (let i = 0; i < rawLines.length; i++) {
+      if (rawLines[i].trim()) {
+        idx++;
+        entries.push({ label: `Line_${idx}`, text: rawLines[i], lineIndex: i, lineCount: 1 });
+      }
     }
   }
-  return entries;
+
+  return { entries, rawLines, hasLabels };
 }
 
 function cobaltToEditorEntries(files: { name: string; entries: CobaltParsedEntry[] }[]) {
