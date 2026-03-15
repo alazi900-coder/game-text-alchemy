@@ -57,8 +57,42 @@ describe("Translation edge cases", () => {
   it("handles nested/complex tag patterns", () => {
     const text = "[System:Ruby rt=カタカナ ]テスト[/System:Ruby]";
     const { cleanText, tags } = protectTags(text);
-    // The paired tag should be protected as one unit
     expect(tags.length).toBeGreaterThan(0);
+    const restored = restoreTags(cleanText, tags);
+    expect(restored).toBe(text);
+  });
+
+  it("protects Cobalt $Arg(0) and $Icon tags", () => {
+    const text = 'Press $Icon("A") to confirm $Arg(0)';
+    const { cleanText, tags } = protectTags(text);
+    expect(cleanText).not.toContain("$Icon");
+    expect(cleanText).not.toContain("$Arg");
+    const restored = restoreTags(cleanText, tags);
+    expect(restored).toBe(text);
+  });
+
+  it("protects simple Cobalt $ tags like $P $n $t", () => {
+    const text = "Hello $P, press $n to continue";
+    const { cleanText, tags } = protectTags(text);
+    expect(cleanText).not.toContain("$P");
+    expect(cleanText).not.toContain("$n");
+    const restored = restoreTags(cleanText, tags);
+    expect(restored).toBe(text);
+  });
+
+  it("protects format specifiers %s and %d", () => {
+    const text = "You have %d items worth %s gold";
+    const { cleanText, tags } = protectTags(text);
+    expect(cleanText).not.toContain("%d");
+    expect(cleanText).not.toContain("%s");
+    const restored = restoreTags(cleanText, tags);
+    expect(restored).toBe(text);
+  });
+
+  it("protects [MID_...] identifiers", () => {
+    const text = "[MID_MENU_YES]\nابدأ اللعبة";
+    const { cleanText, tags } = protectTags(text);
+    expect(cleanText).not.toContain("[MID_MENU_YES]");
     const restored = restoreTags(cleanText, tags);
     expect(restored).toBe(text);
   });

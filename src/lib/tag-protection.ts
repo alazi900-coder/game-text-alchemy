@@ -18,11 +18,15 @@ export interface ProtectedText {
 // Patterns to match technical tags in order of priority
 const TAG_PATTERNS: RegExp[] = [
   /\[\s*\w+:\w[^\]]*\][^[]*?\[\/\s*\w+:\w[^\]]*\]/g, // Paired tags: [System:Ruby rt=x ]content[/System:Ruby]
+  /^\[MID_[^\]]+\]$/gm,                     // Cobalt line identifiers [MID_...]
   /[\uE000-\uE0FF]+/g,                     // PUA icons (consecutive = atomic block)
+  /\$\w+\([^)]*\)/g,                        // Cobalt tags with args: $Arg(0), $Icon("A")
+  /\$\w+/g,                                 // Cobalt simple tags: $P, $n, $t
   /\[\s*\w+\s*:[^\]]*?\s*\]/g,             // [Tag:Value] / [MSBT:label]
   /\[\s*\w+\s*=\s*\w[^\]]*\]/g,            // [TAG=Value] patterns
   /\{\s*\w+\s*:\s*\w[^}]*\}/g,             // {TAG:Value} patterns
   /\{[\w]+\}/g,                              // {variable} placeholders
+  /%[sd]/g,                                  // Format specifiers: %s, %d
   /[\uFFF9-\uFFFC]/g,                       // Unicode special markers
   /<[\w\/][^>]*>/g,                          // HTML-like tags
 ];
