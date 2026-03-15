@@ -2047,6 +2047,43 @@ const Editor = () => {
           onConfirm={editor.handleBuild}
           building={editor.building}
         />
+        {/* Cobalt build choice dialog */}
+        {editor.showCobaltBuildChoice && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => editor.setShowCobaltBuildChoice(false)}>
+            <div className="bg-background border border-border rounded-xl p-6 max-w-sm w-full mx-4 space-y-4 shadow-xl" dir="rtl" onClick={e => e.stopPropagation()}>
+              <h3 className="text-lg font-bold text-foreground">اختر صيغة التصدير</h3>
+              <p className="text-sm text-muted-foreground">كل ملف سيحتفظ باسمه الأصلي</p>
+              <div className="grid gap-3">
+                <button
+                  className="flex items-center gap-3 p-4 rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors text-right"
+                  onClick={() => editor.handleBuildCobaltAs("txt")}
+                >
+                  <span className="text-2xl">📄</span>
+                  <div>
+                    <div className="font-bold text-foreground">ملفات TXT معربة</div>
+                    <div className="text-xs text-muted-foreground">نفس صيغة الملفات المرفوعة لكن بالترجمة العربية</div>
+                  </div>
+                </button>
+                <button
+                  className="flex items-center gap-3 p-4 rounded-lg border border-border hover:border-primary hover:bg-primary/5 transition-colors text-right"
+                  onClick={() => editor.handleBuildCobaltAs("msbt")}
+                >
+                  <span className="text-2xl">🔧</span>
+                  <div>
+                    <div className="font-bold text-foreground">ملفات MSBT ثنائية</div>
+                    <div className="text-xs text-muted-foreground">جاهزة للاستخدام مع مود Cobalt في اللعبة</div>
+                  </div>
+                </button>
+              </div>
+              <button
+                className="w-full text-center text-sm text-muted-foreground hover:text-foreground py-2"
+                onClick={() => editor.setShowCobaltBuildChoice(false)}
+              >
+                إلغاء
+              </button>
+            </div>
+          </div>
+        )}
         <PreBuildDiagnostic
           open={showDiagnostic}
           onOpenChange={setShowDiagnostic}

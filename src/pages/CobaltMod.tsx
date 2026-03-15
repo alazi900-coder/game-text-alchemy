@@ -16,7 +16,11 @@ interface CobaltParsedEntry {
   text: string;
 }
 
-/** Parse a Cobalt .txt file: [LABEL] followed by text lines */
+/** Parse a Cobalt .txt file: [LABEL] followed by text lines.
+ *  If no [LABEL] headers found, treat each non-empty line as a separate entry
+ *  with auto-generated labels (Line_1, Line_2, …).
+ *  If file has only one block of text with no labels, treat whole file as single entry.
+ */
 function parseCobaltTxt(content: string): CobaltParsedEntry[] {
   // Strip BOM
   const clean = content.replace(/^\uFEFF/, '');
@@ -34,17 +38,33 @@ function parseCobaltTxt(content: string): CobaltParsedEntry[] {
     }
   };
 
-  for (const line of lines) {
-    const labelMatch = line.match(/^\[([^\]]+)\]\s*$/);
-    if (labelMatch) {
-      flush();
-      currentLabel = labelMatch[1].trim();
-      currentLines = [];
-    } else if (currentLabel !== null) {
-      currentLines.push(line);
+  // Check if file has ANY [LABEL] headers
+  const hasLabels = lines.some(l => /^\[([^\]]+)\]\s*$/.test(l));
+
+  if (hasLabels) {
+    for (const line of lines) {
+      const labelMatch = line.match(/^\[([^\]]+)\]\s*$/);
+      if (labelMatch) {
+        flush();
+        currentLabel = labelMatch[1].trim();
+        currentLines = [];
+      } else if (currentLabel !== null) {
+        currentLines.push(line);
+      }
+    }
+    flush();
+  } else {
+    // No [LABEL] headers — treat each non-empty line as an entry
+    let lineIndex = 0;
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed) {
+        lineIndex++;
+        entries.push({ label: `Line_${lineIndex}`, text: trimmed });
+      }
     }
   }
-  flush();
+
   return entries;
 }
 
@@ -90,7 +110,7 @@ export default function CobaltMod() {
     if (files.length === 0) {
       toast({
         title: "لم يتم العثور على مدخلات",
-        description: "تأكد أن الملف يحتوي على وسوم [LABEL] بالصيغة الصحيحة",
+        description: "الملف فارغ أو لا يحتوي على نصوص",
         variant: "destructive",
       });
       return;
@@ -119,6 +139,10 @@ export default function CobaltMod() {
     // Store game type hint
     await idbSet("editorGameType", "cobalt");
 
+    // Store original file names for build
+    const fileNames = files.map(f => f.name);
+    await idbSet("cobaltFileNames", fileNames);
+
     toast({
       title: `تم تحميل ${files.length} ملف (${totalEntries} مدخل)`,
       description: "جارٍ فتح المحرر...",
@@ -144,7 +168,12 @@ export default function CobaltMod() {
         if (entries.length > 0) {
           parsed.push({ name, entries });
         } else {
-          console.warn(`No [LABEL] entries in ${file.name}. Preview:`, content.slice(0, 300));
+          console.warn(`No entries found in ${file.name}. Preview:`, content.slice(0, 300));
+          toast({
+            title: `ملف فارغ: ${file.name}`,
+            description: "لا يحتوي على نصوص",
+            variant: "destructive",
+          });
         }
       }
 
@@ -207,7 +236,7 @@ export default function CobaltMod() {
         </div>
 
         <p className="text-muted-foreground text-sm">
-          استورد ملفات TXT بصيغة Cobalt (تحتوي وسوم [LABEL]) وسيتم فتحها في المحرر الرئيسي بكل الميزات — الترجمة، فحص الجودة، البناء، والتصدير.
+          استورد ملفات TXT (بوسوم [LABEL] أو بدونها) وسيتم فتحها في المحرر الرئيسي. عند البناء يمكنك اختيار التصدير كملفات TXT معربة أو ملفات MSBT ثنائية.
         </p>
 
         {loading ? (
@@ -251,22 +280,32 @@ export default function CobaltMod() {
             {/* Format guide */}
             <Card className="border-border/50">
               <CardContent className="p-4 space-y-3">
-                <p className="font-display font-semibold text-sm text-foreground">صيغة ملف TXT المدعومة:</p>
-                <pre className="bg-muted/30 rounded-lg p-3 text-left font-mono text-[11px] leading-relaxed overflow-x-auto" dir="ltr">
+                <p className="font-display font-semibold text-sm text-foreground">صيغ الملفات المدعومة:</p>
+                
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-primary">① ملفات بوسوم [LABEL]:</p>
+                  <pre className="bg-muted/30 rounded-lg p-3 text-left font-mono text-[11px] leading-relaxed overflow-x-auto" dir="ltr">
 {`[MID_Tutorial_Begin]
-مرحباً بك في عالم إمبلم!
+Welcome to the world of Emblem!
 
 [MID_Tutorial_Move]
-حرّك الشخصية باستخدام عصا التحكم.
+Move the character using the joystick.`}
+                  </pre>
+                </div>
 
-[MID_SomeLabel]
-نص الترجمة هنا...`}
-                </pre>
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-primary">② ملفات نص عادية (بدون وسوم):</p>
+                  <pre className="bg-muted/30 rounded-lg p-3 text-left font-mono text-[11px] leading-relaxed overflow-x-auto" dir="ltr">
+{`Hello, traveler!
+Welcome to our village.
+Please rest here.`}
+                  </pre>
+                  <p className="text-[10px] text-muted-foreground">كل سطر يصبح مدخلاً منفصلاً</p>
+                </div>
 
                 <div className="text-xs text-muted-foreground space-y-1">
-                  <p>• كل وسم <code className="text-primary">[LABEL]</code> يمثل مدخلاً في ملف MSBT</p>
-                  <p>• يدعم وسوم التحكم مثل <code className="text-primary">[MSBT:Color]</code> و <code className="text-primary">[MSBT:PageBreak]</code></p>
-                  <p>• بعد الاستيراد ستفتح الملفات في المحرر الرئيسي بجميع أدوات الترجمة</p>
+                  <p>• عند البناء يمكنك التصدير كـ <strong>TXT معربة</strong> أو <strong>MSBT ثنائية</strong></p>
+                  <p>• كل ملف يحتفظ باسمه الأصلي</p>
                 </div>
               </CardContent>
             </Card>

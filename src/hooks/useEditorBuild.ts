@@ -1369,15 +1369,25 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       setCheckingIntegrity(false);
     }
   };
+  const [showCobaltBuildChoice, setShowCobaltBuildChoice] = useState(false);
+  const cobaltStateRef = useRef<EditorState | null>(null);
+
   const handleBuildCobalt = async (currentState: EditorState) => {
+    cobaltStateRef.current = currentState;
+    setShowCobaltBuildChoice(true);
+  };
+
+  const handleBuildCobaltAs = async (mode: "txt" | "msbt") => {
+    const currentState = cobaltStateRef.current;
+    if (!currentState) return;
+    setShowCobaltBuildChoice(false);
     setBuilding(true);
-    setBuildProgress("جارٍ بناء ملفات MSBT من Cobalt...");
+    setBuildProgress(mode === "txt" ? "جارٍ بناء ملفات TXT معربة..." : "جارٍ بناء ملفات MSBT...");
+
     try {
-      const { buildMsbtFromEntries } = await import("@/lib/msbt-parser");
       type CobaltEntry = { label: string; text: string };
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
-      const msgFolder = zip.folder("romfs/Data/StreamingAssets/aa/Switch/fe_assets_message");
 
       // Group entries by cobalt file name
       const groups = new Map<string, CobaltEntry[]>();
@@ -1393,11 +1403,32 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       }
 
       let builtCount = 0;
-      for (const [fileName, entries] of groups) {
-        if (entries.length === 0) continue;
-        const msbtBytes = buildMsbtFromEntries(entries);
-        msgFolder!.file(`${fileName}/${fileName}.msbt`, msbtBytes);
-        builtCount++;
+
+      if (mode === "txt") {
+        // Build translated TXT files — same format as input
+        for (const [fileName, entries] of groups) {
+          if (entries.length === 0) continue;
+          // Check if original had [LABEL] format (labels aren't auto-generated Line_N)
+          const hasRealLabels = entries.some(e => !e.label.startsWith("Line_"));
+          let content: string;
+          if (hasRealLabels) {
+            content = entries.map(e => `[${e.label}]\n${e.text}`).join("\n\n");
+          } else {
+            content = entries.map(e => e.text).join("\n");
+          }
+          zip.file(`${fileName}.txt`, content);
+          builtCount++;
+        }
+      } else {
+        // Build MSBT binary files
+        const { buildMsbtFromEntries } = await import("@/lib/msbt-parser");
+        const msgFolder = zip.folder("romfs/Data/StreamingAssets/aa/Switch/fe_assets_message");
+        for (const [fileName, entries] of groups) {
+          if (entries.length === 0) continue;
+          const msbtBytes = buildMsbtFromEntries(entries);
+          msgFolder!.file(`${fileName}/${fileName}.msbt`, msbtBytes);
+          builtCount++;
+        }
       }
 
       if (builtCount === 0) {
@@ -1410,11 +1441,12 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "cobalt-msbt-mod.zip";
+      a.download = mode === "txt" ? "cobalt-translated-txt.zip" : "cobalt-msbt-mod.zip";
       a.click();
       URL.revokeObjectURL(url);
 
-      setBuildProgress(`✅ تم بناء ${builtCount} ملف MSBT بنجاح!`);
+      const typeLabel = mode === "txt" ? "TXT" : "MSBT";
+      setBuildProgress(`✅ تم بناء ${builtCount} ملف ${typeLabel} بنجاح!`);
       setBuildStats({
         modifiedCount: builtCount,
         expandedCount: 0,
@@ -1704,6 +1736,9 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     showBuildVerification,
     setShowBuildVerification,
     lastBuildLog,
+    showCobaltBuildChoice,
+    setShowCobaltBuildChoice,
+    handleBuildCobaltAs,
   };
 }
 
