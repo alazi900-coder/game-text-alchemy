@@ -8,7 +8,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, AlertTriangle, XCircle, Loader2, Stethoscope } from "lucide-react";
+import { CheckCircle2, AlertTriangle, XCircle, Loader2, Stethoscope, Wrench } from "lucide-react";
 import { idbGet } from "@/lib/idb-storage";
 import type { EditorState } from "@/components/editor/types";
 import { normalizeMsbtTranslations } from "@/lib/msbt-key-normalizer";
