@@ -1447,7 +1447,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
               }
             }
 
-            zip.file(`${rawFile.name}.txt`, "\uFEFF" + outputLines.join("\n"));
+            zip.file(`${rawFile.name}.txt`, outputLines.join("\n"));
             builtCount++;
           }
         } else {
