@@ -2099,6 +2099,14 @@ const Editor = () => {
             Object.entries(fixes).forEach(([key, value]) => editor.updateTranslation(key, value));
           }}
         />
+        <ComprehensiveRepairPanel
+          open={showComprehensiveRepair}
+          onOpenChange={setShowComprehensiveRepair}
+          state={editor.state}
+          onApplyFix={(key, fix) => editor.updateTranslation(key, fix)}
+          onApplyBatch={(fixes) => {
+            Object.entries(fixes).forEach(([key, value]) => editor.updateTranslation(key, value));
+          }}
         <BuildVerificationDialog
           open={editor.showBuildVerification}
           onOpenChange={editor.setShowBuildVerification}
