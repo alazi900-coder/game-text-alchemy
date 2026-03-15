@@ -36,9 +36,10 @@ const StatusIcon = ({ status }: { status: DiagnosticCheck["status"] }) => {
   }
 };
 
-const PreBuildDiagnostic = ({ open, onOpenChange, state, onProceedToBuild }: PreBuildDiagnosticProps) => {
+const PreBuildDiagnostic = ({ open, onOpenChange, state, onProceedToBuild, onFixTranslations }: PreBuildDiagnosticProps) => {
   const [checks, setChecks] = useState<DiagnosticCheck[]>([]);
   const [running, setRunning] = useState(false);
+  const [midFixes, setMidFixes] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!open || !state) return;
