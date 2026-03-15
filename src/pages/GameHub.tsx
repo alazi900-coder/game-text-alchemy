@@ -7,7 +7,6 @@ import { useToast } from "@/hooks/use-toast";
 import { idbSet } from "@/lib/idb-storage";
 import type { ExtractedEntry, EditorState } from "@/components/editor/types";
 import JSZip from "jszip";
-import heroBgAcnh from "@/assets/acnh-hero-bg.jpg";
 import heroBgFe from "@/assets/fe-hero-bg.jpg";
 
 interface CobaltParsedEntry { label: string; text: string; lineIndex: number; lineCount: number; }
