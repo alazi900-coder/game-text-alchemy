@@ -43,8 +43,8 @@ const App = () => (
             <Suspense fallback={<PageLoader />}>
               <Routes>
                 <Route path="/" element={<GameHub />} />
-                <Route path="/animal-crossing" element={<AnimalCrossing />} />
-                <Route path="/animal-crossing/process" element={<ErrorBoundary fallbackTitle="خطأ في المعالجة"><MsbtProcess key="ac" /></ErrorBoundary>} />
+                <Route path="/animal-crossing" element={<NotFound />} />
+                <Route path="/animal-crossing/process" element={<NotFound />} />
                 <Route path="/fire-emblem" element={<FireEmblem />} />
                 <Route path="/fire-emblem/process" element={<ErrorBoundary fallbackTitle="خطأ في المعالجة"><MsbtProcess key="fe" /></ErrorBoundary>} />
                 <Route path="/editor" element={<ErrorBoundary fallbackTitle="خطأ في المحرر"><Editor /></ErrorBoundary>} />
