@@ -1411,6 +1411,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       }
 
       let builtCount = 0;
+      let trimmedCount = 0;
 
       if (mode === "txt") {
         // Try to load raw file data for structure-preserving rebuild
