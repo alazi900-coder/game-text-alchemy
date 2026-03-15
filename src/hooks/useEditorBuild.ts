@@ -1397,9 +1397,10 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         const fileName = parts[1];
         const label = parts[2];
         const key = `${entry.msbtFile}:${entry.index}`;
-        const text = currentState.translations[key]?.trim() || entry.original;
+        const translated = currentState.translations[key]?.trim();
+        if (!translated || translated === entry.original) continue; // skip unchanged
         if (!translationsByFileLabel.has(fileName)) translationsByFileLabel.set(fileName, new Map());
-        translationsByFileLabel.get(fileName)!.set(label, text);
+        translationsByFileLabel.get(fileName)!.set(label, translated);
       }
 
       let builtCount = 0;
@@ -1412,12 +1413,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           // Structure-preserving rebuild: replace only translated text lines
           for (const rawFile of rawFiles) {
             const fileTrans = translationsByFileLabel.get(rawFile.name);
-            if (!fileTrans) {
-              // No translations for this file — output original unchanged
-              zip.file(`${rawFile.name}.txt`, rawFile.rawLines.join("\n"));
-              builtCount++;
-              continue;
-            }
+            if (!fileTrans || fileTrans.size === 0) continue; // skip unmodified files
 
             const outputLines = [...rawFile.rawLines];
 
@@ -1459,9 +1455,10 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
             const fileName = parts[1];
             const label = parts[2];
             const key = `${entry.msbtFile}:${entry.index}`;
-            const text = currentState.translations[key]?.trim() || entry.original;
+            const translated = currentState.translations[key]?.trim();
+            if (!translated || translated === entry.original) continue; // skip unchanged
             if (!groups.has(fileName)) groups.set(fileName, []);
-            groups.get(fileName)!.push({ label, text });
+            groups.get(fileName)!.push({ label, text: translated });
           }
           for (const [fileName, entries] of groups) {
             if (entries.length === 0) continue;
@@ -1485,9 +1482,10 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           const fileName = parts[1];
           const label = parts[2];
           const key = `${entry.msbtFile}:${entry.index}`;
-          const text = currentState.translations[key]?.trim() || entry.original;
+          const translated = currentState.translations[key]?.trim();
+          if (!translated || translated === entry.original) continue; // skip unchanged
           if (!groups.has(fileName)) groups.set(fileName, []);
-          groups.get(fileName)!.push({ label, text });
+          groups.get(fileName)!.push({ label, text: translated });
         }
         const { buildMsbtFromEntries } = await import("@/lib/msbt-parser");
         const msgFolder = zip.folder("romfs/Data/StreamingAssets/aa/Switch/fe_assets_message");
