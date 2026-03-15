@@ -57,6 +57,13 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
   const [buildVerification, setBuildVerification] = useState<BuildVerificationResult | null>(null);
   const [showBuildVerification, setShowBuildVerification] = useState(false);
   const [lastBuildLog, setLastBuildLog] = useState<string[]>([]);
+  const [autoTrimMsbt, setAutoTrimMsbt] = useState(() => {
+    try { return localStorage.getItem('autoTrimMsbt') === 'true'; } catch { return false; }
+  });
+  const toggleAutoTrimMsbt = (v: boolean) => {
+    setAutoTrimMsbt(v);
+    try { localStorage.setItem('autoTrimMsbt', v ? 'true' : 'false'); } catch {}
+  };
 
   const handleApplyArabicProcessing = () => {
     const currentState = stateRef.current;
