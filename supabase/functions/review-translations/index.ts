@@ -5,6 +5,61 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// --- Tag Protection: shield technical tags before AI, restore after ---
+const TAG_PATTERNS: RegExp[] = [
+  /\[\s*MID_[^\]]+\]/g,
+  /[\uE000-\uE0FF]+/g,
+  /\$\w+\([^)]*\)/g,
+  /\$\w+/g,
+  /\[\s*\w+\s*:[^\]]*?\s*\]/g,
+  /\[\s*\w+\s*=\s*\w[^\]]*\]/g,
+  /\{[\w]+\}/g,
+  /%[sd]/g,
+  /[\uFFF9-\uFFFC]/g,
+  /<[\w\/][^>]*>/g,
+];
+
+function shieldTags(text: string): { shielded: string; slots: string[] } {
+  const slots: string[] = [];
+  const matches: { start: number; end: number; original: string }[] = [];
+  for (const pattern of TAG_PATTERNS) {
+    const regex = new RegExp(pattern.source, pattern.flags);
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(text)) !== null) {
+      const s = m.index, e = s + m[0].length;
+      if (!matches.some(x => s < x.end && e > x.start)) matches.push({ start: s, end: e, original: m[0] });
+    }
+  }
+  matches.sort((a, b) => a.start - b.start);
+  if (matches.length === 0) return { shielded: text, slots: [] };
+  let result = '', lastEnd = 0;
+  for (const m of matches) {
+    result += text.slice(lastEnd, m.start);
+    result += `⟪T${slots.length}⟫`;
+    slots.push(m.original);
+    lastEnd = m.end;
+  }
+  result += text.slice(lastEnd);
+  return { shielded: result, slots };
+}
+
+function unshieldTags(text: string, slots: string[]): string {
+  let result = text;
+  for (let i = slots.length - 1; i >= 0; i--) {
+    // Normalize AI mangling of placeholders
+    const variants = [
+      `⟪T${i}⟫`, `⟪ T${i} ⟫`, `⟪T${i}⟫`, `[T${i}]`, `(T${i})`, `T${i}`,
+      `«T${i}»`, `《T${i}》`,
+    ];
+    for (const v of variants) {
+      if (result.includes(v)) { result = result.replace(v, slots[i]); break; }
+    }
+  }
+  // Clean any remaining unmatched placeholders
+  result = result.replace(/⟪T\d+⟫/g, '');
+  return result;
+}
+
 interface ReviewEntry {
   key: string;
   original: string;
@@ -31,7 +86,6 @@ function extractPlaceholders(text: string): string[] {
 }
 
 function getUtf16ByteLength(text: string): number {
-  // MSBT uses UTF-16LE encoding
   return text.length * 2;
 }
 
