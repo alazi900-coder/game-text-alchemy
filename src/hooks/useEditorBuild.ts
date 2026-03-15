@@ -1422,6 +1422,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         avgBytePercent: 0,
         maxBytePercent: 0,
         longest: null,
+        shortest: null,
+        categories: {},
       });
     } catch (err) {
       setBuildProgress(`❌ خطأ في البناء: ${err}`);
