@@ -66,6 +66,7 @@ const PreBuildDiagnostic = ({ open, onOpenChange, state, onProceedToBuild, onFix
             { label: "معرفات [MID_...]", status: "checking" as const },
             { label: "وسوم $ المعرّبة", status: "checking" as const },
             { label: "رموز %s %d المعرّبة", status: "checking" as const },
+            { label: "أحرف BOM وغير مرئية", status: "checking" as const },
           ]
         : [{ label: "ملفات BDAT", status: "checking" as const }]),
     ];
