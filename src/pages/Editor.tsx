@@ -89,7 +89,7 @@ const ConsistencyCheckPanel = React.lazy(() => import("@/components/editor/Consi
 import ToolHelpDialog, { ToolType } from "@/components/editor/ToolHelpDialog";
 import { countUniqueMsbtFiles } from "@/lib/msbt-key-normalizer";
 
-type GameId = "animal-crossing" | "fire-emblem";
+type GameId = "fire-emblem";
 
 interface GameConfig {
   id: GameId;
@@ -102,15 +102,6 @@ interface GameConfig {
 }
 
 const GAME_CONFIGS: Record<GameId, GameConfig> = {
-  "animal-crossing": {
-    id: "animal-crossing",
-    title: "Animal Crossing: NH",
-    emoji: "🌿",
-    heroBg: acnhHeroBg,
-    processPath: "/animal-crossing/process",
-    fileLabel: "ملفات MSBT",
-    fileFormat: "MSBT",
-  },
   "fire-emblem": {
     id: "fire-emblem",
     title: "Fire Emblem Engage",
