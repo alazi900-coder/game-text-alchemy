@@ -10,39 +10,54 @@ import JSZip from "jszip";
 import heroBgAcnh from "@/assets/acnh-hero-bg.jpg";
 import heroBgFe from "@/assets/fe-hero-bg.jpg";
 
-interface CobaltParsedEntry { label: string; text: string; }
+interface CobaltParsedEntry { label: string; text: string; lineIndex: number; lineCount: number; }
+interface CobaltParsedFile { name: string; entries: CobaltParsedEntry[]; rawLines: string[]; hasLabels: boolean; }
 
-function parseCobaltTxt(content: string): CobaltParsedEntry[] {
+function parseCobaltTxt(content: string): { entries: CobaltParsedEntry[]; rawLines: string[]; hasLabels: boolean } {
   const clean = content.replace(/^\uFEFF/, '');
-  const lines = clean.split(/\r?\n/);
+  const rawLines = clean.split(/\r?\n/);
   const entries: CobaltParsedEntry[] = [];
-  let currentLabel: string | null = null;
-  let currentLines: string[] = [];
-  const flush = () => {
-    if (currentLabel !== null) {
-      while (currentLines.length > 0 && currentLines[currentLines.length - 1].trim() === '') currentLines.pop();
-      entries.push({ label: currentLabel, text: currentLines.join("\n") });
-    }
-  };
-  const hasLabels = lines.some(l => /^\[([^\]]+)\]\s*$/.test(l));
+  const hasLabels = rawLines.some(l => /^\[([^\]]+)\]\s*$/.test(l));
+
   if (hasLabels) {
-    for (const line of lines) {
-      const m = line.match(/^\[([^\]]+)\]\s*$/);
-      if (m) { flush(); currentLabel = m[1].trim(); currentLines = []; }
-      else if (currentLabel !== null) currentLines.push(line);
+    let currentLabel: string | null = null;
+    let textStartLine = -1;
+    let currentLines: string[] = [];
+
+    const flush = () => {
+      if (currentLabel !== null && textStartLine >= 0) {
+        // Keep trailing empty lines as part of the entry to preserve structure
+        entries.push({ label: currentLabel, text: currentLines.join("\n"), lineIndex: textStartLine, lineCount: currentLines.length });
+      }
+    };
+
+    for (let i = 0; i < rawLines.length; i++) {
+      const m = rawLines[i].match(/^\[([^\]]+)\]\s*$/);
+      if (m) {
+        flush();
+        currentLabel = m[1].trim();
+        textStartLine = i + 1;
+        currentLines = [];
+      } else if (currentLabel !== null) {
+        currentLines.push(rawLines[i]);
+      }
     }
     flush();
   } else {
+    // Each non-empty line is an entry; track its exact position
     let idx = 0;
-    for (const line of lines) {
-      const t = line.trim();
-      if (t) { idx++; entries.push({ label: `Line_${idx}`, text: t }); }
+    for (let i = 0; i < rawLines.length; i++) {
+      if (rawLines[i].trim()) {
+        idx++;
+        entries.push({ label: `Line_${idx}`, text: rawLines[i], lineIndex: i, lineCount: 1 });
+      }
     }
   }
-  return entries;
+
+  return { entries, rawLines, hasLabels };
 }
 
-function cobaltToEditorEntries(files: { name: string; entries: CobaltParsedEntry[] }[]) {
+function cobaltToEditorEntries(files: CobaltParsedFile[]) {
   const editorEntries: ExtractedEntry[] = [];
   const translations: Record<string, string> = {};
   for (const file of files) {
@@ -90,14 +105,17 @@ export default function GameHub() {
   const zipInputRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
 
-  const loadIntoEditor = useCallback(async (files: { name: string; entries: CobaltParsedEntry[] }[]) => {
+  const loadIntoEditor = useCallback(async (files: CobaltParsedFile[]) => {
     if (files.length === 0) {
       toast({ title: "لم يتم العثور على مدخلات", description: "الملف فارغ أو لا يحتوي على نصوص", variant: "destructive" });
       return;
     }
     const { entries, translations } = cobaltToEditorEntries(files);
+    // Store raw file data for structure-preserving rebuild
+    const rawFileData = files.map(f => ({ name: f.name, rawLines: f.rawLines, hasLabels: f.hasLabels, entries: f.entries }));
     await idbSet("editorState", { entries, translations, protectedEntries: [], technicalBypass: [] });
     await idbSet("editorGameType", "cobalt");
+    await idbSet("cobaltRawFiles", rawFileData);
     toast({ title: `تم تحميل ${files.length} ملف (${entries.length} مدخل)`, description: "جارٍ فتح المحرر..." });
     navigate("/editor");
   }, [toast, navigate]);
@@ -107,12 +125,12 @@ export default function GameHub() {
     if (!inputFiles || inputFiles.length === 0) return;
     setLoading(true);
     try {
-      const parsed: { name: string; entries: CobaltParsedEntry[] }[] = [];
+      const parsed: CobaltParsedFile[] = [];
       for (const file of Array.from(inputFiles)) {
         const content = await file.text();
         const name = file.name.replace(/\.txt$/i, "");
-        const entries = parseCobaltTxt(content);
-        if (entries.length > 0) parsed.push({ name, entries });
+        const result = parseCobaltTxt(content);
+        if (result.entries.length > 0) parsed.push({ name, ...result });
         else toast({ title: `ملف فارغ: ${file.name}`, variant: "destructive" });
       }
       await loadIntoEditor(parsed);
@@ -130,14 +148,14 @@ export default function GameHub() {
     setLoading(true);
     try {
       const zip = await JSZip.loadAsync(await file.arrayBuffer());
-      const parsed: { name: string; entries: CobaltParsedEntry[] }[] = [];
+      const parsed: CobaltParsedFile[] = [];
       const promises: Promise<void>[] = [];
       zip.forEach((path, entry) => {
         if (entry.dir || !path.endsWith(".txt")) return;
         promises.push(entry.async("string").then(content => {
           const name = path.split("/").pop()!.replace(/\.txt$/i, "");
-          const entries = parseCobaltTxt(content);
-          if (entries.length > 0) parsed.push({ name, entries });
+          const result = parseCobaltTxt(content);
+          if (result.entries.length > 0) parsed.push({ name, ...result });
         }));
       });
       await Promise.all(promises);

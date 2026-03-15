@@ -1389,38 +1389,106 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
 
-      // Group entries by cobalt file name
-      const groups = new Map<string, CobaltEntry[]>();
+      // Build translation lookup: cobalt:fileName:label -> translated text
+      const translationsByFileLabel = new Map<string, Map<string, string>>();
       for (const entry of currentState.entries) {
         if (!entry.msbtFile.startsWith("cobalt:")) continue;
         const parts = entry.msbtFile.split(":");
-        const fileName = parts[1]; // cobalt:filename:label
+        const fileName = parts[1];
         const label = parts[2];
         const key = `${entry.msbtFile}:${entry.index}`;
         const text = currentState.translations[key]?.trim() || entry.original;
-        if (!groups.has(fileName)) groups.set(fileName, []);
-        groups.get(fileName)!.push({ label, text });
+        if (!translationsByFileLabel.has(fileName)) translationsByFileLabel.set(fileName, new Map());
+        translationsByFileLabel.get(fileName)!.set(label, text);
       }
 
       let builtCount = 0;
 
       if (mode === "txt") {
-        // Build translated TXT files — same format as input
-        for (const [fileName, entries] of groups) {
-          if (entries.length === 0) continue;
-          // Check if original had [LABEL] format (labels aren't auto-generated Line_N)
-          const hasRealLabels = entries.some(e => !e.label.startsWith("Line_"));
-          let content: string;
-          if (hasRealLabels) {
-            content = entries.map(e => `[${e.label}]\n${e.text}`).join("\n\n");
-          } else {
-            content = entries.map(e => e.text).join("\n");
+        // Try to load raw file data for structure-preserving rebuild
+        const rawFiles = await idbGet<{ name: string; rawLines: string[]; hasLabels: boolean; entries: { label: string; text: string; lineIndex: number; lineCount: number }[] }[]>("cobaltRawFiles");
+
+        if (rawFiles && rawFiles.length > 0) {
+          // Structure-preserving rebuild: replace only translated text lines
+          for (const rawFile of rawFiles) {
+            const fileTrans = translationsByFileLabel.get(rawFile.name);
+            if (!fileTrans) {
+              // No translations for this file — output original unchanged
+              zip.file(`${rawFile.name}.txt`, rawFile.rawLines.join("\n"));
+              builtCount++;
+              continue;
+            }
+
+            const outputLines = [...rawFile.rawLines];
+
+            if (rawFile.hasLabels) {
+              // For label-based files: replace text lines after each label
+              for (const entry of rawFile.entries) {
+                const translation = fileTrans.get(entry.label);
+                if (!translation) continue;
+                const translatedLines = translation.split("\n");
+                // Replace exactly the lines that belong to this entry
+                for (let i = 0; i < entry.lineCount; i++) {
+                  const lineIdx = entry.lineIndex + i;
+                  if (lineIdx < outputLines.length) {
+                    outputLines[lineIdx] = i < translatedLines.length ? translatedLines[i] : "";
+                  }
+                }
+                // If translation has more lines than original, we DON'T add extra lines (preserve line count)
+              }
+            } else {
+              // For plain text files: replace each entry's line
+              for (const entry of rawFile.entries) {
+                const translation = fileTrans.get(entry.label);
+                if (!translation) continue;
+                if (entry.lineIndex < outputLines.length) {
+                  outputLines[entry.lineIndex] = translation;
+                }
+              }
+            }
+
+            zip.file(`${rawFile.name}.txt`, outputLines.join("\n"));
+            builtCount++;
           }
-          zip.file(`${fileName}.txt`, content);
-          builtCount++;
+        } else {
+          // Fallback: no raw data, rebuild from entries (legacy behavior)
+          const groups = new Map<string, CobaltEntry[]>();
+          for (const entry of currentState.entries) {
+            if (!entry.msbtFile.startsWith("cobalt:")) continue;
+            const parts = entry.msbtFile.split(":");
+            const fileName = parts[1];
+            const label = parts[2];
+            const key = `${entry.msbtFile}:${entry.index}`;
+            const text = currentState.translations[key]?.trim() || entry.original;
+            if (!groups.has(fileName)) groups.set(fileName, []);
+            groups.get(fileName)!.push({ label, text });
+          }
+          for (const [fileName, entries] of groups) {
+            if (entries.length === 0) continue;
+            const hasRealLabels = entries.some(e => !e.label.startsWith("Line_"));
+            let content: string;
+            if (hasRealLabels) {
+              content = entries.map(e => `[${e.label}]\n${e.text}`).join("\n\n");
+            } else {
+              content = entries.map(e => e.text).join("\n");
+            }
+            zip.file(`${fileName}.txt`, content);
+            builtCount++;
+          }
         }
       } else {
         // Build MSBT binary files
+        const groups = new Map<string, CobaltEntry[]>();
+        for (const entry of currentState.entries) {
+          if (!entry.msbtFile.startsWith("cobalt:")) continue;
+          const parts = entry.msbtFile.split(":");
+          const fileName = parts[1];
+          const label = parts[2];
+          const key = `${entry.msbtFile}:${entry.index}`;
+          const text = currentState.translations[key]?.trim() || entry.original;
+          if (!groups.has(fileName)) groups.set(fileName, []);
+          groups.get(fileName)!.push({ label, text });
+        }
         const { buildMsbtFromEntries } = await import("@/lib/msbt-parser");
         const msgFolder = zip.folder("romfs/Data/StreamingAssets/aa/Switch/fe_assets_message");
         for (const [fileName, entries] of groups) {
