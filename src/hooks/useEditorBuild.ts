@@ -1389,7 +1389,12 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     };
     const sarcArchivesCheck = await idbGet<SarcMetaCheck[]>("editorSarcArchives");
     const hasMsbtEntries = currentState.entries.some(entry => entry.msbtFile.startsWith("msbt:"));
+    const hasCobaltEntries = currentState.entries.some(entry => entry.msbtFile.startsWith("cobalt:"));
     const hasSarcArchives = !!(hasMsbtEntries && sarcArchivesCheck && sarcArchivesCheck.length > 0);
+    
+    if (hasCobaltEntries) {
+      return handleBuildCobalt(currentState);
+    }
     
     if (isXenoblade || hasMsbtEntries || hasSarcArchives) {
       return handleBuildXenoblade();
