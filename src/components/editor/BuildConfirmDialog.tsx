@@ -50,6 +50,12 @@ interface BuildConfirmDialogProps {
   building: boolean;
 }
 
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 const BuildConfirmDialog = ({ open, onOpenChange, preview, onConfirm, building }: BuildConfirmDialogProps) => {
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [expandedBundle, setExpandedBundle] = useState<string | null>(null);
