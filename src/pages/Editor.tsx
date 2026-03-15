@@ -2006,6 +2006,7 @@ const Editor = () => {
 
           {/* Pagination Footer */}
           <PaginationControls currentPage={editor.currentPage} totalPages={editor.totalPages} totalItems={editor.filteredEntries.length} pageSize={PAGE_SIZE} setCurrentPage={editor.setCurrentPage} />
+          <div className="text-center text-[10px] text-muted-foreground/50 py-1">v{APP_VERSION}</div>
         </div>
         </div>
 
