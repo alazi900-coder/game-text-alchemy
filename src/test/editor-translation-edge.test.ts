@@ -36,13 +36,12 @@ describe("Translation edge cases", () => {
     expect(result.tags).toHaveLength(0);
   });
 
-  it("preserves game abbreviations as protected tags", () => {
+  it("does not protect plain game abbreviations (they should be translated)", () => {
     const text = "You gained 500 EXP and 10 SP";
     const { cleanText, tags } = protectTags(text);
-    const hasEXP = tags.some(t => t.original === "EXP");
-    const hasSP = tags.some(t => t.original === "SP");
-    expect(hasEXP).toBe(true);
-    expect(hasSP).toBe(true);
+    // Plain words like EXP/SP are not technical tags — they should pass through for translation
+    expect(tags).toHaveLength(0);
+    expect(cleanText).toBe(text);
   });
 
   it("handles multiple consecutive PUA icons as single block", () => {
