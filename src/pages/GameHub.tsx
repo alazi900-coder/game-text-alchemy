@@ -57,7 +57,7 @@ function parseCobaltTxt(content: string): { entries: CobaltParsedEntry[]; rawLin
   return { entries, rawLines, hasLabels };
 }
 
-function cobaltToEditorEntries(files: { name: string; entries: CobaltParsedEntry[] }[]) {
+function cobaltToEditorEntries(files: CobaltParsedFile[]) {
   const editorEntries: ExtractedEntry[] = [];
   const translations: Record<string, string> = {};
   for (const file of files) {
