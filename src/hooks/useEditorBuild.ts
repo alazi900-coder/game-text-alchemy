@@ -1369,6 +1369,68 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       setCheckingIntegrity(false);
     }
   };
+  const handleBuildCobalt = async (currentState: EditorState) => {
+    setBuilding(true);
+    setBuildProgress("جارٍ بناء ملفات MSBT من Cobalt...");
+    try {
+      const { buildMsbtFromEntries } = await import("@/lib/msbt-parser");
+      type CobaltEntry = { label: string; text: string };
+      const JSZip = (await import("jszip")).default;
+      const zip = new JSZip();
+      const msgFolder = zip.folder("romfs/Data/StreamingAssets/aa/Switch/fe_assets_message");
+
+      // Group entries by cobalt file name
+      const groups = new Map<string, CobaltEntry[]>();
+      for (const entry of currentState.entries) {
+        if (!entry.msbtFile.startsWith("cobalt:")) continue;
+        const parts = entry.msbtFile.split(":");
+        const fileName = parts[1]; // cobalt:filename:label
+        const label = parts[2];
+        const key = `${entry.msbtFile}:${entry.index}`;
+        const text = currentState.translations[key]?.trim() || entry.original;
+        if (!groups.has(fileName)) groups.set(fileName, []);
+        groups.get(fileName)!.push({ label, text });
+      }
+
+      let builtCount = 0;
+      for (const [fileName, entries] of groups) {
+        if (entries.length === 0) continue;
+        const msbtBytes = buildMsbtFromEntries(entries);
+        msgFolder!.file(`${fileName}/${fileName}.msbt`, msbtBytes);
+        builtCount++;
+      }
+
+      if (builtCount === 0) {
+        setBuildProgress("❌ لا توجد ملفات للبناء");
+        setBuilding(false);
+        return;
+      }
+
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "cobalt-msbt-mod.zip";
+      a.click();
+      URL.revokeObjectURL(url);
+
+      setBuildProgress(`✅ تم بناء ${builtCount} ملف MSBT بنجاح!`);
+      setBuildStats({
+        modifiedCount: builtCount,
+        expandedCount: 0,
+        fileSize: blob.size,
+        avgBytePercent: 0,
+        maxBytePercent: 0,
+        longest: null,
+        shortest: null,
+        categories: {},
+      });
+    } catch (err) {
+      setBuildProgress(`❌ خطأ في البناء: ${err}`);
+    } finally {
+      setBuilding(false);
+    }
+  };
 
   const handleBuild = async () => {
     const currentState = stateRef.current;
@@ -1389,7 +1451,12 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     };
     const sarcArchivesCheck = await idbGet<SarcMetaCheck[]>("editorSarcArchives");
     const hasMsbtEntries = currentState.entries.some(entry => entry.msbtFile.startsWith("msbt:"));
+    const hasCobaltEntries = currentState.entries.some(entry => entry.msbtFile.startsWith("cobalt:"));
     const hasSarcArchives = !!(hasMsbtEntries && sarcArchivesCheck && sarcArchivesCheck.length > 0);
+    
+    if (hasCobaltEntries) {
+      return handleBuildCobalt(currentState);
+    }
     
     if (isXenoblade || hasMsbtEntries || hasSarcArchives) {
       return handleBuildXenoblade();
