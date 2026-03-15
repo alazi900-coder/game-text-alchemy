@@ -5,6 +5,56 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// --- Tag Protection ---
+const TAG_PATTERNS: RegExp[] = [
+  /\[\s*MID_[^\]]+\]/g,
+  /[\uE000-\uE0FF]+/g,
+  /\$\w+\([^)]*\)/g,
+  /\$\w+/g,
+  /\[\s*\w+\s*:[^\]]*?\s*\]/g,
+  /\[\s*\w+\s*=\s*\w[^\]]*\]/g,
+  /\{[\w]+\}/g,
+  /%[sd]/g,
+  /[\uFFF9-\uFFFC]/g,
+  /<[\w\/][^>]*>/g,
+];
+
+function shieldTags(text: string): { shielded: string; slots: string[] } {
+  const slots: string[] = [];
+  const matches: { start: number; end: number; original: string }[] = [];
+  for (const pattern of TAG_PATTERNS) {
+    const regex = new RegExp(pattern.source, pattern.flags);
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(text)) !== null) {
+      const s = m.index, e = s + m[0].length;
+      if (!matches.some(x => s < x.end && e > x.start)) matches.push({ start: s, end: e, original: m[0] });
+    }
+  }
+  matches.sort((a, b) => a.start - b.start);
+  if (matches.length === 0) return { shielded: text, slots: [] };
+  let result = '', lastEnd = 0;
+  for (const m of matches) {
+    result += text.slice(lastEnd, m.start);
+    result += `⟪T${slots.length}⟫`;
+    slots.push(m.original);
+    lastEnd = m.end;
+  }
+  result += text.slice(lastEnd);
+  return { shielded: result, slots };
+}
+
+function unshieldTags(text: string, slots: string[]): string {
+  let result = text;
+  for (let i = slots.length - 1; i >= 0; i--) {
+    const variants = [`⟪T${i}⟫`, `⟪ T${i} ⟫`, `[T${i}]`, `(T${i})`, `T${i}`, `«T${i}»`, `《T${i}》`];
+    for (const v of variants) {
+      if (result.includes(v)) { result = result.replace(v, slots[i]); break; }
+    }
+  }
+  result = result.replace(/⟪T\d+⟫/g, '');
+  return result;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -22,8 +72,15 @@ Deno.serve(async (req) => {
       });
     }
 
-    const textsBlock = entries.map((e, i) => 
-      `[${i}]\nOriginal: ${e.original}\nCurrent translation (mixed): ${e.translation}`
+    // Shield tags before sending to AI
+    const shieldedEntries = entries.map(e => {
+      const { shielded: shieldedOrig } = shieldTags(e.original);
+      const { shielded: shieldedTrans, slots } = shieldTags(e.translation);
+      return { ...e, shieldedOrig, shieldedTrans, slots };
+    });
+
+    const textsBlock = shieldedEntries.map((e, i) => 
+      `[${i}]\nOriginal: ${e.shieldedOrig}\nCurrent translation (mixed): ${e.shieldedTrans}`
     ).join('\n\n');
 
     let glossarySection = '';
@@ -40,7 +97,7 @@ CRITICAL RULES:
   - Proper nouns that are commonly kept in English in Arabic gaming (Link, Zelda, Ganon, Hyrule, etc.)
   - Technical gaming abbreviations: HP, MP, ATK, DEF, NPC, XP, DLC, HUD, FPS
   - Controller button names: A, B, X, Y, L, R, ZL, ZR
-  - Tags like [Color:Red], [Icon:Heart], etc. must stay exactly as-is
+- ⚠️ Placeholders like ⟪T0⟫, ⟪T1⟫ are protected technical elements — keep them EXACTLY as-is, do NOT modify, translate, or remove them
 - Keep the translation length close to the original
 - Maintain the existing Arabic text structure and style
 - Return ONLY a JSON array of the fixed translations in the same order. No explanations.${glossarySection}
@@ -60,7 +117,7 @@ ${textsBlock}`;
       body: JSON.stringify({
         model: 'google/gemini-2.5-flash',
         messages: [
-          { role: 'system', content: 'You are a game text translator. Fix mixed Arabic/English translations by translating remaining English words. Output only valid JSON arrays.' },
+          { role: 'system', content: 'You are a game text translator. Fix mixed Arabic/English translations by translating remaining English words. Output only valid JSON arrays. Never modify ⟪T0⟫ placeholders.' },
           { role: 'user', content: prompt },
         ],
         temperature: 0.3,
@@ -95,9 +152,10 @@ ${textsBlock}`;
     const translations: string[] = JSON.parse(sanitized);
 
     const result: Record<string, string> = {};
-    for (let i = 0; i < Math.min(entries.length, translations.length); i++) {
+    for (let i = 0; i < Math.min(shieldedEntries.length, translations.length); i++) {
       if (translations[i]?.trim()) {
-        result[entries[i].key] = translations[i];
+        // Unshield tags in AI output
+        result[shieldedEntries[i].key] = unshieldTags(translations[i], shieldedEntries[i].slots);
       }
     }
 

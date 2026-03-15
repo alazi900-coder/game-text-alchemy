@@ -5,6 +5,61 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// --- Tag Protection: shield technical tags before AI, restore after ---
+const TAG_PATTERNS: RegExp[] = [
+  /\[\s*MID_[^\]]+\]/g,
+  /[\uE000-\uE0FF]+/g,
+  /\$\w+\([^)]*\)/g,
+  /\$\w+/g,
+  /\[\s*\w+\s*:[^\]]*?\s*\]/g,
+  /\[\s*\w+\s*=\s*\w[^\]]*\]/g,
+  /\{[\w]+\}/g,
+  /%[sd]/g,
+  /[\uFFF9-\uFFFC]/g,
+  /<[\w\/][^>]*>/g,
+];
+
+function shieldTags(text: string): { shielded: string; slots: string[] } {
+  const slots: string[] = [];
+  const matches: { start: number; end: number; original: string }[] = [];
+  for (const pattern of TAG_PATTERNS) {
+    const regex = new RegExp(pattern.source, pattern.flags);
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(text)) !== null) {
+      const s = m.index, e = s + m[0].length;
+      if (!matches.some(x => s < x.end && e > x.start)) matches.push({ start: s, end: e, original: m[0] });
+    }
+  }
+  matches.sort((a, b) => a.start - b.start);
+  if (matches.length === 0) return { shielded: text, slots: [] };
+  let result = '', lastEnd = 0;
+  for (const m of matches) {
+    result += text.slice(lastEnd, m.start);
+    result += `⟪T${slots.length}⟫`;
+    slots.push(m.original);
+    lastEnd = m.end;
+  }
+  result += text.slice(lastEnd);
+  return { shielded: result, slots };
+}
+
+function unshieldTags(text: string, slots: string[]): string {
+  let result = text;
+  for (let i = slots.length - 1; i >= 0; i--) {
+    // Normalize AI mangling of placeholders
+    const variants = [
+      `⟪T${i}⟫`, `⟪ T${i} ⟫`, `⟪T${i}⟫`, `[T${i}]`, `(T${i})`, `T${i}`,
+      `«T${i}»`, `《T${i}》`,
+    ];
+    for (const v of variants) {
+      if (result.includes(v)) { result = result.replace(v, slots[i]); break; }
+    }
+  }
+  // Clean any remaining unmatched placeholders
+  result = result.replace(/⟪T\d+⟫/g, '');
+  return result;
+}
+
 interface ReviewEntry {
   key: string;
   original: string;
@@ -31,7 +86,6 @@ function extractPlaceholders(text: string): string[] {
 }
 
 function getUtf16ByteLength(text: string): number {
-  // MSBT uses UTF-16LE encoding
   return text.length * 2;
 }
 
@@ -156,11 +210,18 @@ ${tooLongEntries.map((e, i) => {
           });
         }
 
+        // Shield tags before sending to AI
+        const shieldedEntries = translatedEntries.map(e => {
+          const { shielded: shieldedOrig, slots: origSlots } = shieldTags(e.original);
+          const { shielded: shieldedTrans, slots: transSlots } = shieldTags(e.translation);
+          return { ...e, shieldedOrig, shieldedTrans, origSlots, transSlots };
+        });
+
         const CHUNK_SIZE = 15;
         const allFindings: any[] = [];
 
-        for (let c = 0; c < translatedEntries.length; c += CHUNK_SIZE) {
-          const chunk = translatedEntries.slice(c, c + CHUNK_SIZE);
+        for (let c = 0; c < shieldedEntries.length; c += CHUNK_SIZE) {
+          const chunk = shieldedEntries.slice(c, c + CHUNK_SIZE);
 
           const prompt = `أنت مدقق لغوي متخصص في ترجمة ألعاب الفيديو (Xenoblade Chronicles 3). حلّل كل ترجمة وأبلغ عن المشاكل التالية فقط:
 
@@ -169,11 +230,13 @@ ${tooLongEntries.map((e, i) => {
 3. **inconsistency** — مصطلح مترجم بشكل مختلف عن المتوقع حسب سياق اللعبة
 4. **naturalness** — صياغة ركيكة يمكن تحسينها لتبدو أكثر سلاسة
 
+⚠️ قاعدة حرجة: الرموز مثل ⟪T0⟫ و ⟪T1⟫ هي عناصر تقنية محمية. يجب أن تبقى في مكانها تماماً بدون أي تعديل.
+
 ${glossary ? `\nالقاموس المعتمد (التزم به):\n${glossary.slice(0, 3000)}\n` : ''}
 
 النصوص:
-${chunk.map((e, i) => `[${i}] EN: "${e.original}"
-AR: "${e.translation}"`).join('\n\n')}
+${chunk.map((e, i) => `[${i}] EN: "${e.shieldedOrig}"
+AR: "${e.shieldedTrans}"`).join('\n\n')}
 
 أخرج JSON array فقط. كل عنصر:
 {"i": رقم_النص, "type": "literal"|"grammar"|"inconsistency"|"naturalness", "issue": "وصف المشكلة بالعربية", "fix": "الترجمة المقترحة"}
@@ -221,13 +284,14 @@ AR: "${e.translation}"`).join('\n\n')}
             const findings: any[] = JSON.parse(sanitized);
             for (const f of findings) {
               if (typeof f.i === 'number' && f.i >= 0 && f.i < chunk.length) {
+                const entry = chunk[f.i];
                 allFindings.push({
-                  key: chunk[f.i].key,
-                  original: chunk[f.i].original,
-                  current: chunk[f.i].translation,
+                  key: entry.key,
+                  original: entry.original,
+                  current: entry.translation,
                   type: f.type || 'naturalness',
                   issue: f.issue || '',
-                  fix: f.fix || '',
+                  fix: f.fix ? unshieldTags(f.fix, entry.transSlots) : '',
                 });
               }
             }
@@ -253,27 +317,35 @@ AR: "${e.translation}"`).join('\n\n')}
           });
         }
 
+        const shieldedEntries = translatedEntries.map(e => {
+          const { shielded: shieldedOrig, slots: origSlots } = shieldTags(e.original);
+          const { shielded: shieldedTrans, slots: transSlots } = shieldTags(e.translation);
+          return { ...e, shieldedOrig, shieldedTrans, origSlots, transSlots };
+        });
+
         const CHUNK_SIZE = 15;
         const allFindings: any[] = [];
 
-        for (let c = 0; c < translatedEntries.length; c += CHUNK_SIZE) {
-          const chunk = translatedEntries.slice(c, c + CHUNK_SIZE);
+        for (let c = 0; c < shieldedEntries.length; c += CHUNK_SIZE) {
+          const chunk = shieldedEntries.slice(c, c + CHUNK_SIZE);
 
           const prompt = `أنت مدقق نحوي وإملائي متخصص في اللغة العربية. حلّل كل ترجمة وأبلغ عن الأخطاء التالية فقط:
 
-1. **gender** — خطأ في التذكير والتأنيث (مثل: "هذا القرية" بدل "هذه القرية")
-2. **conjugation** — خطأ في تصريف الفعل (مثل: "هم ذهب" بدل "هم ذهبوا")
-3. **case** — خطأ إعرابي (مثل: "رأيت الرجلُ" بدل "رأيت الرجلَ")
-4. **spelling** — خطأ إملائي (مثل: "إنشاء الله" بدل "إن شاء الله"، "لاكن" بدل "لكن")
-5. **hamza** — خطأ في الهمزات (مثل: "مسائل" بدل "مسائل"، "إنتصار" بدل "انتصار")
-6. **negation** — خطأ في أداة النفي (مثل: "ل يمكن" بدل "لا يمكن"، "ل تذهب" بدل "لا تذهب")
-7. **preposition** — خطأ في حرف الجر أو استخدامه
+1. **gender** — خطأ في التذكير والتأنيث
+2. **conjugation** — خطأ في تصريف الفعل
+3. **case** — خطأ إعرابي
+4. **spelling** — خطأ إملائي
+5. **hamza** — خطأ في الهمزات
+6. **negation** — خطأ في أداة النفي
+7. **preposition** — خطأ في حرف الجر
+
+⚠️ قاعدة حرجة: الرموز مثل ⟪T0⟫ و ⟪T1⟫ هي عناصر تقنية محمية. يجب أن تبقى في مكانها تماماً بدون أي تعديل.
 
 ${glossary ? `\nالقاموس المعتمد:\n${glossary.slice(0, 2000)}\n` : ''}
 
 النصوص:
-${chunk.map((e, i) => `[${i}] EN: "${e.original}"
-AR: "${e.translation}"`).join('\n\n')}
+${chunk.map((e, i) => `[${i}] EN: "${e.shieldedOrig}"
+AR: "${e.shieldedTrans}"`).join('\n\n')}
 
 أخرج JSON array فقط. كل عنصر:
 {"i": رقم_النص, "type": "gender"|"conjugation"|"case"|"spelling"|"hamza"|"negation"|"preposition", "issue": "شرح الخطأ", "fix": "الترجمة المصحّحة"}
@@ -316,13 +388,14 @@ AR: "${e.translation}"`).join('\n\n')}
             const findings: any[] = JSON.parse(sanitized);
             for (const f of findings) {
               if (typeof f.i === 'number' && f.i >= 0 && f.i < chunk.length) {
+                const entry = chunk[f.i];
                 allFindings.push({
-                  key: chunk[f.i].key,
-                  original: chunk[f.i].original,
-                  current: chunk[f.i].translation,
+                  key: entry.key,
+                  original: entry.original,
+                  current: entry.translation,
                   type: f.type || 'spelling',
                   issue: f.issue || '',
-                  fix: f.fix || '',
+                  fix: f.fix ? unshieldTags(f.fix, entry.transSlots) : '',
                 });
               }
             }
@@ -520,22 +593,27 @@ ${contextBlock}
           });
         }
 
+        const shieldedEntries = translatedEntries.map(e => {
+          const { shielded, slots } = shieldTags(e.translation);
+          return { ...e, shielded, slots };
+        });
+
         const CHUNK_SIZE = 20;
         const allCorrections: any[] = [];
 
-        for (let c = 0; c < translatedEntries.length; c += CHUNK_SIZE) {
-          const chunk = translatedEntries.slice(c, c + CHUNK_SIZE);
+        for (let c = 0; c < shieldedEntries.length; c += CHUNK_SIZE) {
+          const chunk = shieldedEntries.slice(c, c + CHUNK_SIZE);
 
           const prompt = `أنت مصحح إملائي ونحوي آلي. صحّح كل ترجمة عربية بدون تغيير المعنى أو الأسلوب.
 
 قواعد:
 - صحّح الأخطاء الإملائية والنحوية فقط
 - لا تُغيّر الأسلوب أو الصياغة
-- حافظ على جميع الوسوم [Tags] و الرموز الخاصة كما هي
+- ⚠️ الرموز مثل ⟪T0⟫ و ⟪T1⟫ عناصر تقنية محمية — لا تعدلها أبداً
 - إذا كان النص سليماً أعد نفس النص بالضبط
 - صحّح: همزات خاطئة، تاء/هاء، ياء/ألف مقصورة، تذكير/تأنيث، "ل" → "لا"
 
-${chunk.map((e, i) => `[${i}] "${e.translation}"`).join('\n')}
+${chunk.map((e, i) => `[${i}] "${e.shielded}"`).join('\n')}
 
 أخرج JSON array فقط بنفس الترتيب يحتوي النصوص المصححة. مثال: ["نص مصحح 1", "نص مصحح 2"]`;
 
@@ -548,7 +626,7 @@ ${chunk.map((e, i) => `[${i}] "${e.translation}"`).join('\n')}
             body: JSON.stringify({
               model: resolvedModel,
               messages: [
-                { role: 'system', content: 'أنت مصحح إملائي. أخرج ONLY JSON arrays. لا تغيّر المعنى.' },
+                { role: 'system', content: 'أنت مصحح إملائي. أخرج ONLY JSON arrays. لا تغيّر المعنى. لا تعدل رموز ⟪T0⟫.' },
                 { role: 'user', content: prompt },
               ],
               temperature: 0.1,
@@ -576,7 +654,7 @@ ${chunk.map((e, i) => `[${i}] "${e.translation}"`).join('\n')}
             const corrected: string[] = JSON.parse(sanitized);
             for (let i = 0; i < Math.min(chunk.length, corrected.length); i++) {
               const entry = chunk[i];
-              const correctedText = corrected[i]?.trim();
+              const correctedText = unshieldTags(corrected[i]?.trim() || '', entry.slots);
               if (correctedText && correctedText !== entry.translation) {
                 allCorrections.push({
                   key: entry.key,
@@ -701,6 +779,12 @@ AR: "${e.translation}"`).join('\n\n')}
           });
         }
 
+        const shieldedEntries = translatedEntries.map(e => {
+          const { shielded: shieldedOrig, slots: origSlots } = shieldTags(e.original);
+          const { shielded: shieldedTrans, slots: transSlots } = shieldTags(e.translation);
+          return { ...e, shieldedOrig, shieldedTrans, origSlots, transSlots };
+        });
+
         const contextBlock = contextEntries && contextEntries.length > 0
           ? `\nسياق من نفس المشهد/الملف:\n${contextEntries.slice(0, 20).map(ce => `  EN: "${ce.original}" → AR: "${ce.translation}"`).join('\n')}\n`
           : '';
@@ -708,8 +792,8 @@ AR: "${e.translation}"`).join('\n\n')}
         const CHUNK_SIZE = 10;
         const allRetranslations: any[] = [];
 
-        for (let c = 0; c < translatedEntries.length; c += CHUNK_SIZE) {
-          const chunk = translatedEntries.slice(c, c + CHUNK_SIZE);
+        for (let c = 0; c < shieldedEntries.length; c += CHUNK_SIZE) {
+          const chunk = shieldedEntries.slice(c, c + CHUNK_SIZE);
 
           const prompt = `أنت مترجم ألعاب فيديو محترف. أعد ترجمة النصوص التالية مع مراعاة السياق المحيط.
 
@@ -719,11 +803,11 @@ ${contextBlock}
 قواعد:
 - استخدم السياق المحيط لفهم المشهد والشخصية المتحدثة
 - قدّم ترجمة طبيعية وسلسة تناسب سياق اللعبة
-- حافظ على جميع الوسوم [Tags] والرموز الخاصة
+- ⚠️ الرموز مثل ⟪T0⟫ و ⟪T1⟫ عناصر تقنية محمية — لا تعدلها أبداً، أبقها في مكانها
 - الترجمة الحالية قد تكون حرفية أو ركيكة — حسّنها
 
-${chunk.map((e, i) => `[${i}] EN: "${e.original}"
-الترجمة الحالية: "${e.translation}"
+${chunk.map((e, i) => `[${i}] EN: "${e.shieldedOrig}"
+الترجمة الحالية: "${e.shieldedTrans}"
 ${e.maxBytes > 0 ? `الحد: ${e.maxBytes} بايت` : ''}`).join('\n\n')}
 
 أخرج JSON array فقط بنفس الترتيب. كل عنصر: {"text": "الترجمة الجديدة", "changes": "ملخص التغييرات"}`;
@@ -767,14 +851,17 @@ ${e.maxBytes > 0 ? `الحد: ${e.maxBytes} بايت` : ''}`).join('\n\n')}
               const entry = chunk[i];
               const result = results[i];
               const newText = result?.text?.trim();
-              if (newText && newText !== entry.translation) {
-                allRetranslations.push({
-                  key: entry.key,
-                  original: entry.original,
-                  current: entry.translation,
-                  retranslated: newText,
-                  changes: result.changes || '',
-                });
+              if (newText) {
+                const unshielded = unshieldTags(newText, entry.transSlots);
+                if (unshielded !== entry.translation) {
+                  allRetranslations.push({
+                    key: entry.key,
+                    original: entry.original,
+                    current: entry.translation,
+                    retranslated: unshielded,
+                    changes: result.changes || '',
+                  });
+                }
               }
             }
           } catch (e) {
@@ -800,31 +887,33 @@ ${e.maxBytes > 0 ? `الحد: ${e.maxBytes} بايت` : ''}`).join('\n\n')}
           });
         }
 
+        const shieldedEntries = translatedEntries.map(e => {
+          const { shielded: shieldedOrig } = shieldTags(e.original);
+          const { shielded: shieldedTrans, slots: transSlots } = shieldTags(e.translation);
+          return { ...e, shieldedOrig, shieldedTrans, transSlots };
+        });
+
         // Process in chunks of 25
         const CHUNK_SIZE = 25;
         const allImprovements: any[] = [];
 
-        for (let c = 0; c < translatedEntries.length; c += CHUNK_SIZE) {
-          const chunk = translatedEntries.slice(c, c + CHUNK_SIZE);
+        for (let c = 0; c < shieldedEntries.length; c += CHUNK_SIZE) {
+          const chunk = shieldedEntries.slice(c, c + CHUNK_SIZE);
 
-          const prompt = `أنت مترجم ألعاب فيديو محترف متخصص في سلسلة زيلدا. مهمتك: إعادة صياغة وتحسين كل ترجمة عربية بشكل ملحوظ.
+          const prompt = `أنت مترجم ألعاب فيديو محترف. مهمتك: إعادة صياغة وتحسين كل ترجمة عربية بشكل ملحوظ.
 
 قواعد صارمة:
 - يجب أن تقدم صياغة مختلفة وأفضل لكل نص — لا تُعِد نفس النص أبداً
-- أعد صياغة الجملة بالكامل بأسلوب عربي طبيعي وسلس كأنها كُتبت بالعربية أصلاً
-- صحّح أي أخطاء نحوية أو إملائية أو ركاكة في الأسلوب
-- استخدم مفردات أغنى وأدق — تجنب الترجمة الحرفية
-- استخدم مصطلحات مجتمع الألعاب العربي المعروفة (مثل: تريفورس، سيف الماستر، هايرول)
-- حافظ على جميع الوسوم [Tags] و ￼ كما هي بدون أي تغيير
-- حافظ على طول الترجمة قريباً من الأصل لتناسب صناديق النص في اللعبة
+- أعد صياغة الجملة بأسلوب عربي طبيعي وسلس
+- صحّح أي أخطاء نحوية أو إملائية
+- ⚠️ الرموز مثل ⟪T0⟫ و ⟪T1⟫ عناصر تقنية محمية — لا تعدلها أبداً، أبقها في مكانها
+- حافظ على طول الترجمة قريباً من الأصل
 - الحد الأقصى بالبايت مذكور لكل نص — لا تتجاوزه (كل حرف عربي = 2 بايت)
-- لا تترجم الأسماء العلم المعروفة (Link, Zelda, Ganon) إلا إذا كان لها مقابل عربي شائع
-- حتى لو كانت الترجمة جيدة، قدّم بديلاً أفضل أو مختلفاً في الأسلوب
 
 ${glossary ? `\nالقاموس:\n${glossary}\n` : ''}
 
-${chunk.map((e, i) => `[${i}] الأصلي: "${e.original}"
-الترجمة الحالية: "${e.translation}"
+${chunk.map((e, i) => `[${i}] الأصلي: "${e.shieldedOrig}"
+الترجمة الحالية: "${e.shieldedTrans}"
 الحد: ${e.maxBytes} بايت`).join('\n\n')}
 
 أخرج JSON array فقط بنفس الترتيب يحتوي الترجمات المحسّنة. مثال: ["ترجمة محسنة 1", "ترجمة محسنة 2"]`;
@@ -862,16 +951,19 @@ ${chunk.map((e, i) => `[${i}] الأصلي: "${e.original}"
           for (let i = 0; i < Math.min(chunk.length, improved.length); i++) {
             const entry = chunk[i];
             const improvedText = improved[i]?.trim();
-            if (improvedText && improvedText !== entry.translation) {
-              allImprovements.push({
-                key: entry.key,
-                original: entry.original,
-                current: entry.translation,
-                currentBytes: getUtf16ByteLength(entry.translation),
-                maxBytes: entry.maxBytes,
-                improved: improvedText,
-                improvedBytes: getUtf16ByteLength(improvedText),
-              });
+            if (improvedText) {
+              const unshielded = unshieldTags(improvedText, entry.transSlots);
+              if (unshielded !== entry.translation) {
+                allImprovements.push({
+                  key: entry.key,
+                  original: entry.original,
+                  current: entry.translation,
+                  currentBytes: getUtf16ByteLength(entry.translation),
+                  maxBytes: entry.maxBytes,
+                  improved: unshielded,
+                  improvedBytes: getUtf16ByteLength(unshielded),
+                });
+              }
             }
           }
         }
