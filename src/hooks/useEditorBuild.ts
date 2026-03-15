@@ -9,6 +9,7 @@ import type { MutableRefObject } from "react";
 import { normalizeMsbtTranslations, extractShortMsbtName } from "@/lib/msbt-key-normalizer";
 import { sanitizeTranslations } from "@/lib/sanitize-translations";
 import { validateBundle, validateSarcMsbts } from "@/lib/bundle-validator";
+import { utf16leByteLength } from "@/lib/byte-utils";
 
 export interface BuildStats {
   modifiedCount: number;
