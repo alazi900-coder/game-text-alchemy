@@ -1840,6 +1840,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     showCobaltBuildChoice,
     setShowCobaltBuildChoice,
     handleBuildCobaltAs,
+    autoTrimMsbt,
+    toggleAutoTrimMsbt,
   };
 }
 
