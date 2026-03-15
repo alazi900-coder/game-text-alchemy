@@ -232,6 +232,74 @@ const PreBuildDiagnostic = ({ open, onOpenChange, state, onProceedToBuild, onFix
         ? { label: "معرفات [MID_...]", status: "pass", detail: "كل المعرفات سليمة ✅" }
         : { label: "معرفات [MID_...]", status: "fail", detail: `⛔ ${totalMidIssues} مشكلة (${missingMids} محذوف، ${corruptedMids} معرّب) — ${fixCount} قابلة للإصلاح${midDetails.length > 0 ? '\n' + midDetails.join('، ') : ''}` };
       setChecks([...results]);
+
+      // 6c. Dollar tag corruption check + auto-fix
+      const dollarTagRegex = /\$\w+(\([^)]*\))?/g;
+      const arabicInDollarRegex = /\$[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/;
+      let corruptedDollarTags = 0;
+      let dollarDetails: string[] = [];
+      const pendingDollarFixes: Record<string, string> = {};
+
+      for (const entry of state.entries) {
+        if (!entry.msbtFile.startsWith("cobalt:")) continue;
+        const key = `${entry.msbtFile}:${entry.index}`;
+        const trans = state.translations[key];
+        if (!trans?.trim()) continue;
+
+        // Extract original $ tags
+        const origDollarTags = entry.original.match(dollarTagRegex);
+        if (!origDollarTags || origDollarTags.length === 0) continue;
+
+        // Check if translation has arabized $ tags
+        if (!arabicInDollarRegex.test(trans)) continue;
+
+        let fixedTrans = trans;
+        let hadFix = false;
+
+        // Find arabized $ patterns and try to restore them
+        // Match patterns like $أرج(0) or $أيقونة("A") or $ع etc.
+        const arabicDollarPattern = /\$[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\w]+(\([^)]*\))?/g;
+        const corruptedMatches = [...trans.matchAll(arabicDollarPattern)].filter(m => /[\u0600-\u06FF]/.test(m[0]));
+
+        if (corruptedMatches.length > 0) {
+          // Build a mapping: for each corrupted tag, find the best original match
+          const usedOriginals = new Set<number>();
+          for (const cm of corruptedMatches) {
+            const hasArgs = cm[0].includes("(");
+            // Find matching original tag (with/without args)
+            const matchIdx = origDollarTags.findIndex((ot, idx) => {
+              if (usedOriginals.has(idx)) return false;
+              return hasArgs ? ot.includes("(") : !ot.includes("(");
+            });
+            if (matchIdx !== -1) {
+              fixedTrans = fixedTrans.replace(cm[0], origDollarTags[matchIdx]);
+              usedOriginals.add(matchIdx);
+              hadFix = true;
+              corruptedDollarTags++;
+              if (dollarDetails.length < 3) {
+                dollarDetails.push(`${cm[0]} ← ${origDollarTags[matchIdx]}`);
+              }
+            } else {
+              // No matching original, just count
+              corruptedDollarTags++;
+              if (dollarDetails.length < 3) {
+                dollarDetails.push(`${cm[0]} (لا يوجد مقابل أصلي)`);
+              }
+            }
+          }
+        }
+
+        if (hadFix) {
+          pendingDollarFixes[key] = fixedTrans;
+        }
+      }
+
+      setDollarFixes(pendingDollarFixes);
+      const dollarFixCount = Object.keys(pendingDollarFixes).length;
+      results[7] = corruptedDollarTags === 0
+        ? { label: "وسوم $ المعرّبة", status: "pass", detail: "كل وسوم $ سليمة ✅" }
+        : { label: "وسوم $ المعرّبة", status: "fail", detail: `⛔ ${corruptedDollarTags} وسم معرّب — ${dollarFixCount} قابلة للإصلاح${dollarDetails.length > 0 ? '\n' + dollarDetails.join('، ') : ''}` };
+      setChecks([...results]);
     } else {
       // BDAT files (non-cobalt)
       const bdatBinaryFileNames = await idbGet<string[]>("editorBdatBinaryFileNames");
