@@ -40,6 +40,7 @@ const PreBuildDiagnostic = ({ open, onOpenChange, state, onProceedToBuild, onFix
   const [checks, setChecks] = useState<DiagnosticCheck[]>([]);
   const [running, setRunning] = useState(false);
   const [midFixes, setMidFixes] = useState<Record<string, string>>({});
+  const [dollarFixes, setDollarFixes] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!open || !state) return;
