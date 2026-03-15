@@ -1373,7 +1373,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     setBuilding(true);
     setBuildProgress("جارٍ بناء ملفات MSBT من Cobalt...");
     try {
-      const { buildMsbtFromEntries, type CobaltEntry } = await import("@/lib/msbt-parser");
+      const { buildMsbtFromEntries } = await import("@/lib/msbt-parser");
+      type CobaltEntry = { label: string; text: string };
       const JSZip = (await import("jszip")).default;
       const zip = new JSZip();
       const msgFolder = zip.folder("romfs/Data/StreamingAssets/aa/Switch/fe_assets_message");
