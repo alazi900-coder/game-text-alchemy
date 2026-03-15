@@ -67,9 +67,9 @@ function checkNumbers(original: string, translation: string): { message: string;
 }
 
 function checkVariables(original: string, translation: string): { message: string } | null {
-  const origVars = (original.match(/\{[^}]+\}/g) || []).sort();
+  const origVars: string[] = (original.match(/\{[^}]+\}/g) || []).slice().sort();
   if (origVars.length === 0) return null;
-  const transVars = (translation.match(/\{[^}]+\}/g) || []).sort();
+  const transVars: string[] = (translation.match(/\{[^}]+\}/g) || []).slice().sort();
   const missing = origVars.filter(v => !transVars.includes(v));
   if (missing.length > 0) return { message: `متغيرات مفقودة: ${missing.join(', ')}` };
   return null;
