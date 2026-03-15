@@ -887,31 +887,33 @@ ${e.maxBytes > 0 ? `الحد: ${e.maxBytes} بايت` : ''}`).join('\n\n')}
           });
         }
 
+        const shieldedEntries = translatedEntries.map(e => {
+          const { shielded: shieldedOrig } = shieldTags(e.original);
+          const { shielded: shieldedTrans, slots: transSlots } = shieldTags(e.translation);
+          return { ...e, shieldedOrig, shieldedTrans, transSlots };
+        });
+
         // Process in chunks of 25
         const CHUNK_SIZE = 25;
         const allImprovements: any[] = [];
 
-        for (let c = 0; c < translatedEntries.length; c += CHUNK_SIZE) {
-          const chunk = translatedEntries.slice(c, c + CHUNK_SIZE);
+        for (let c = 0; c < shieldedEntries.length; c += CHUNK_SIZE) {
+          const chunk = shieldedEntries.slice(c, c + CHUNK_SIZE);
 
-          const prompt = `أنت مترجم ألعاب فيديو محترف متخصص في سلسلة زيلدا. مهمتك: إعادة صياغة وتحسين كل ترجمة عربية بشكل ملحوظ.
+          const prompt = `أنت مترجم ألعاب فيديو محترف. مهمتك: إعادة صياغة وتحسين كل ترجمة عربية بشكل ملحوظ.
 
 قواعد صارمة:
 - يجب أن تقدم صياغة مختلفة وأفضل لكل نص — لا تُعِد نفس النص أبداً
-- أعد صياغة الجملة بالكامل بأسلوب عربي طبيعي وسلس كأنها كُتبت بالعربية أصلاً
-- صحّح أي أخطاء نحوية أو إملائية أو ركاكة في الأسلوب
-- استخدم مفردات أغنى وأدق — تجنب الترجمة الحرفية
-- استخدم مصطلحات مجتمع الألعاب العربي المعروفة (مثل: تريفورس، سيف الماستر، هايرول)
-- حافظ على جميع الوسوم [Tags] و ￼ كما هي بدون أي تغيير
-- حافظ على طول الترجمة قريباً من الأصل لتناسب صناديق النص في اللعبة
+- أعد صياغة الجملة بأسلوب عربي طبيعي وسلس
+- صحّح أي أخطاء نحوية أو إملائية
+- ⚠️ الرموز مثل ⟪T0⟫ و ⟪T1⟫ عناصر تقنية محمية — لا تعدلها أبداً، أبقها في مكانها
+- حافظ على طول الترجمة قريباً من الأصل
 - الحد الأقصى بالبايت مذكور لكل نص — لا تتجاوزه (كل حرف عربي = 2 بايت)
-- لا تترجم الأسماء العلم المعروفة (Link, Zelda, Ganon) إلا إذا كان لها مقابل عربي شائع
-- حتى لو كانت الترجمة جيدة، قدّم بديلاً أفضل أو مختلفاً في الأسلوب
 
 ${glossary ? `\nالقاموس:\n${glossary}\n` : ''}
 
-${chunk.map((e, i) => `[${i}] الأصلي: "${e.original}"
-الترجمة الحالية: "${e.translation}"
+${chunk.map((e, i) => `[${i}] الأصلي: "${e.shieldedOrig}"
+الترجمة الحالية: "${e.shieldedTrans}"
 الحد: ${e.maxBytes} بايت`).join('\n\n')}
 
 أخرج JSON array فقط بنفس الترتيب يحتوي الترجمات المحسّنة. مثال: ["ترجمة محسنة 1", "ترجمة محسنة 2"]`;
