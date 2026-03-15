@@ -24,6 +24,7 @@ interface PreBuildDiagnosticProps {
   onOpenChange: (open: boolean) => void;
   state: EditorState | null;
   onProceedToBuild: () => void;
+  onFixTranslations?: (fixes: Record<string, string>) => void;
 }
 
 const StatusIcon = ({ status }: { status: DiagnosticCheck["status"] }) => {
