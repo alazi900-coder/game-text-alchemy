@@ -83,26 +83,23 @@ Translate the Arabic text back to English as accurately as possible.
       userPrompt = `Translate this Arabic text to English:\n\n${text}`;
 
     } else if (style === 'ai-fix') {
-      // AI Fix suggestion: given original + translation + issue description, suggest a fix
       const { original, translation: trans, issues } = body;
       if (!original || !trans) {
         return new Response(JSON.stringify({ error: 'Missing original or translation' }), {
           status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
+      const { shielded: shieldedOrig } = shieldTags(original);
+      const { shielded: shieldedTrans, slots: transSlots } = shieldTags(trans);
+      // Store slots for unshielding after AI response
+      (body as any)._transSlots = transSlots;
       systemPrompt = `You are a professional Arabic video game localization expert.
-You are given an English original text, its Arabic translation, and a list of detected quality issues.
 Fix the Arabic translation to resolve ALL the listed issues while preserving the meaning.
 Rules:
-- Keep ALL technical tags like [ML:...], {variables}, and Unicode control characters EXACTLY as they appear
-- Keep game terminology consistent
+- ⚠️ Placeholders like ⟪T0⟫, ⟪T1⟫ are protected technical elements — keep them EXACTLY as-is
 - Return ONLY the fixed Arabic translation, nothing else
-- If the issues mention missing numbers, add them back
-- If the issues mention missing variables, add them back
-- If the issues mention extra spaces, remove them
-- If the issues mention punctuation, fix it
 - Do NOT change parts that have no issues`;
-      userPrompt = `English original: ${original}\n\nCurrent Arabic translation: ${trans}\n\nDetected issues:\n${issues}\n\nProvide the fixed Arabic translation:`;
+      userPrompt = `English original: ${shieldedOrig}\n\nCurrent Arabic translation: ${shieldedTrans}\n\nDetected issues:\n${issues}\n\nProvide the fixed Arabic translation:`;
 
     } else if (style === 'context-check') {
       // Contextual check: verify translation makes sense in game context
