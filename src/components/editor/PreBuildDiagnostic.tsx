@@ -273,6 +273,22 @@ const PreBuildDiagnostic = ({ open, onOpenChange, state, onProceedToBuild, onFix
           ))}
         </div>
 
+        {/* Auto-fix MID button */}
+        {!running && Object.keys(midFixes).length > 0 && onFixTranslations && (
+          <Button
+            variant="outline"
+            className="w-full font-body gap-2 border-destructive/50 text-destructive hover:bg-destructive/10"
+            onClick={() => {
+              onFixTranslations(midFixes);
+              setMidFixes({});
+              runDiagnostics();
+            }}
+          >
+            <Wrench className="w-4 h-4" />
+            إصلاح {Object.keys(midFixes).length} معرف [MID_...] تلقائياً
+          </Button>
+        )}
+
         {/* Overall status */}
         {!running && checks.length > 0 && (
           <div className={`text-center p-3 rounded-lg border ${
