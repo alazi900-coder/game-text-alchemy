@@ -7,12 +7,14 @@ const corsHeaders = {
 
 // --- Tag Protection: shield technical tags before AI, restore after ---
 const TAG_PATTERNS: RegExp[] = [
+  /\[\s*\w+:\w[^\]]*\][^[]*?\[\/\s*\w+:\w[^\]]*\]/g, // Paired tags
   /\[\s*M[A-Z]*ID_[^\]]+\]/g,
   /[\uE000-\uE0FF]+/g,
   /\$\w+\([^)]*\)/g,
   /\$\w+/g,
   /\[\s*\w+\s*:[^\]]*?\s*\]/g,
   /\[\s*\w+\s*=\s*\w[^\]]*\]/g,
+  /\{\s*\w+\s*:\s*\w[^}]*\}/g,
   /\{[\w]+\}/g,
   /%[sd]/g,
   /[\uFFF9-\uFFFC]/g,
@@ -44,19 +46,25 @@ function shieldTags(text: string): { shielded: string; slots: string[] } {
 }
 
 function unshieldTags(text: string, slots: string[]): string {
+  if (slots.length === 0) return text;
   let result = text;
   for (let i = slots.length - 1; i >= 0; i--) {
-    // Normalize AI mangling of placeholders
     const variants = [
-      `⟪T${i}⟫`, `⟪ T${i} ⟫`, `⟪T${i}⟫`, `[T${i}]`, `(T${i})`, `T${i}`,
-      `«T${i}»`, `《T${i}》`,
+      `⟪T${i}⟫`, `⟪ T${i} ⟫`, `⟪T${i} ⟫`, `⟪ T${i}⟫`,
+      `[T${i}]`, `(T${i})`, `«T${i}»`, `《T${i}》`, `〈T${i}〉`,
+      `T${i}`,
     ];
     for (const v of variants) {
       if (result.includes(v)) { result = result.replace(v, slots[i]); break; }
     }
   }
-  // Clean any remaining unmatched placeholders
   result = result.replace(/⟪T\d+⟫/g, '');
+  // Post-validation: re-insert lost tags
+  for (let i = 0; i < slots.length; i++) {
+    if (!result.includes(slots[i])) {
+      result = result.trimEnd() + ' ' + slots[i];
+    }
+  }
   return result;
 }
 

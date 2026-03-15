@@ -21,22 +21,83 @@ const gatewayModelMap: Record<string, string> = {
   'gpt-5': 'openai/gpt-5',
 };
 
-function buildPrompt(action: AnalysisAction, entries: AnalysisEntry[], glossary?: string, styleGuide?: string): string {
+// --- Unified Tag Protection ---
+const TAG_PATTERNS: RegExp[] = [
+  /\[\s*\w+:\w[^\]]*\][^[]*?\[\/\s*\w+:\w[^\]]*\]/g,
+  /\[\s*M[A-Z]*ID_[^\]]+\]/g,
+  /[\uE000-\uE0FF]+/g,
+  /\$\w+\([^)]*\)/g,
+  /\$\w+/g,
+  /\[\s*\w+\s*:[^\]]*?\s*\]/g,
+  /\[\s*\w+\s*=\s*\w[^\]]*\]/g,
+  /\{\s*\w+\s*:\s*\w[^}]*\}/g,
+  /\{[\w]+\}/g,
+  /%[sd]/g,
+  /[\uFFF9-\uFFFC]/g,
+  /<[\w\/][^>]*>/g,
+];
+
+function shieldTags(text: string): { shielded: string; slots: string[] } {
+  const slots: string[] = [];
+  const matches: { start: number; end: number; original: string }[] = [];
+  for (const pattern of TAG_PATTERNS) {
+    const regex = new RegExp(pattern.source, pattern.flags);
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(text)) !== null) {
+      const s = m.index, e = s + m[0].length;
+      if (!matches.some(x => s < x.end && e > x.start)) matches.push({ start: s, end: e, original: m[0] });
+    }
+  }
+  matches.sort((a, b) => a.start - b.start);
+  if (matches.length === 0) return { shielded: text, slots: [] };
+  let result = '', lastEnd = 0;
+  for (const m of matches) {
+    result += text.slice(lastEnd, m.start);
+    result += `⟪T${slots.length}⟫`;
+    slots.push(m.original);
+    lastEnd = m.end;
+  }
+  result += text.slice(lastEnd);
+  return { shielded: result, slots };
+}
+
+function unshieldTags(text: string, slots: string[]): string {
+  if (slots.length === 0) return text;
+  let result = text;
+  for (let i = slots.length - 1; i >= 0; i--) {
+    const variants = [
+      `⟪T${i}⟫`, `⟪ T${i} ⟫`, `⟪T${i} ⟫`, `⟪ T${i}⟫`,
+      `[T${i}]`, `(T${i})`, `«T${i}»`, `《T${i}》`, `〈T${i}〉`,
+      `T${i}`,
+    ];
+    for (const v of variants) {
+      if (result.includes(v)) { result = result.replace(v, slots[i]); break; }
+    }
+  }
+  result = result.replace(/⟪T\d+⟫/g, '');
+  // Post-validation: re-insert lost tags
+  for (let i = 0; i < slots.length; i++) {
+    if (!result.includes(slots[i])) {
+      result = result.trimEnd() + ' ' + slots[i];
+    }
+  }
+  return result;
+}
+
+const TAG_PROTECTION_RULE = `⚠️ قاعدة حرجة: الرموز مثل ⟪T0⟫ و ⟪T1⟫ هي عناصر تقنية محمية. يجب أن تبقى في مكانها تماماً بدون أي تعديل أو حذف أو ترجمة. انسخها حرفياً كما هي.`;
+
+function buildPrompt(action: AnalysisAction, entries: { shieldedOrig: string; shieldedTrans: string; fileName?: string }[], glossary?: string, styleGuide?: string): string {
   const glossarySection = glossary ? `\nالقاموس المعتمد (التزم بهذه المصطلحات):\n${glossary.split('\n').slice(0, 100).join('\n')}` : '';
 
   if (action === 'literal-detect') {
     return `أنت خبير في كشف الترجمات الحرفية من الإنجليزية للعربية في ألعاب الفيديو (Xenoblade Chronicles 3).
 
 مهمتك: فحص كل ترجمة وتحديد إن كانت حرفية (word-by-word) أو طبيعية.
-الترجمة الحرفية تتميز بـ:
-- اتباع ترتيب الكلمات الإنجليزي
-- استخدام تعابير غير مألوفة بالعربية
-- عدم مراعاة السياق الثقافي
-- الجمود والركاكة
+${TAG_PROTECTION_RULE}
 ${glossarySection}
 
 النصوص:
-${entries.map((e, i) => `[${i}] EN: ${e.original}\nAR: ${e.translation}`).join('\n\n')}
+${entries.map((e, i) => `[${i}] EN: ${e.shieldedOrig}\nAR: ${e.shieldedTrans}`).join('\n\n')}
 
 أجب بـ JSON فقط:
 {
@@ -46,7 +107,7 @@ ${entries.map((e, i) => `[${i}] EN: ${e.original}\nAR: ${e.translation}`).join('
       "isLiteral": true/false,
       "literalScore": 0-100,
       "issues": ["وصف المشكلة"],
-      "naturalVersion": "الترجمة الطبيعية المقترحة",
+      "naturalVersion": "الترجمة الطبيعية (مع ⟪T0⟫ في مكانها)",
       "explanation": "شرح التحسين"
     }
   ]
@@ -54,18 +115,13 @@ ${entries.map((e, i) => `[${i}] EN: ${e.original}\nAR: ${e.translation}`).join('
   }
 
   if (action === 'style-unify') {
-    return `أنت خبير في توحيد أسلوب الترجمة للعربية في ألعاب الفيديو (Xenoblade Chronicles 3).
-
-مهمتك: مراجعة مجموعة الترجمات وتوحيد أسلوبها:
-- توحيد النبرة (رسمية/ودية) عبر كل النصوص
-- توحيد أسلوب المخاطبة (أنت/أنتم)
-- توحيد المصطلحات والتعابير المتكررة
-- ضمان اتساق مستوى الرسمية
+    return `أنت خبير في توحيد أسلوب الترجمة للعربية في ألعاب الفيديو.
+${TAG_PROTECTION_RULE}
 ${styleGuide ? `\nالأسلوب المطلوب: ${styleGuide}` : '\nالأسلوب: رسمي ملائم لعالم خيالي'}
 ${glossarySection}
 
 النصوص:
-${entries.map((e, i) => `[${i}] EN: ${e.original}\nAR: ${e.translation}\nملف: ${e.fileName || 'غير محدد'}`).join('\n\n')}
+${entries.map((e, i) => `[${i}] EN: ${e.shieldedOrig}\nAR: ${e.shieldedTrans}\nملف: ${e.fileName || 'غير محدد'}`).join('\n\n')}
 
 أجب بـ JSON فقط:
 {
@@ -75,7 +131,7 @@ ${entries.map((e, i) => `[${i}] EN: ${e.original}\nAR: ${e.translation}\nملف:
       "styleIssues": ["وصف مشكلة الأسلوب"],
       "currentTone": "formal/casual/mixed",
       "suggestedTone": "formal/casual",
-      "unifiedVersion": "النص بعد توحيد الأسلوب",
+      "unifiedVersion": "النص بعد توحيد الأسلوب (مع ⟪T0⟫ في مكانها)",
       "changes": ["التغيير المحدد"]
     }
   ],
@@ -84,17 +140,12 @@ ${entries.map((e, i) => `[${i}] EN: ${e.original}\nAR: ${e.translation}\nملف:
   }
 
   if (action === 'consistency-check') {
-    return `أنت خبير في فحص اتساق الترجمة في ألعاب الفيديو (Xenoblade Chronicles 3).
-
-مهمتك: فحص الاتساق الشامل:
-1. المصطلحات: هل نفس الكلمة الإنجليزية مترجمة بنفس الطريقة دائماً؟
-2. الشخصيات: هل أسماء الشخصيات متسقة؟
-3. الأسلوب: هل مستوى الرسمية متسق؟
-4. القاموس: هل الترجمات تلتزم بالقاموس المعتمد؟
+    return `أنت خبير في فحص اتساق الترجمة في ألعاب الفيديو.
+${TAG_PROTECTION_RULE}
 ${glossarySection}
 
 النصوص:
-${entries.map((e, i) => `[${i}] EN: ${e.original}\nAR: ${e.translation}\nملف: ${e.fileName || '?'}`).join('\n\n')}
+${entries.map((e, i) => `[${i}] EN: ${e.shieldedOrig}\nAR: ${e.shieldedTrans}\nملف: ${e.fileName || '?'}`).join('\n\n')}
 
 أجب بـ JSON فقط:
 {
@@ -114,16 +165,11 @@ ${entries.map((e, i) => `[${i}] EN: ${e.original}\nAR: ${e.translation}\nملف:
 
   if (action === 'alternatives') {
     return `أنت مترجم ألعاب محترف متخصص في Xenoblade Chronicles 3.
-
-مهمتك: تقديم 4 بدائل مختلفة الأسلوب لكل ترجمة:
-1. أدبي (literary): صياغة أدبية راقية
-2. طبيعي (natural): كما يتحدث العرب يومياً
-3. مختصر (concise): أقصر ما يمكن مع الحفاظ على المعنى
-4. درامي (dramatic): مناسب للمشاهد المهمة
+${TAG_PROTECTION_RULE}
 ${glossarySection}
 
 النصوص:
-${entries.map((e, i) => `[${i}] EN: ${e.original}\nAR الحالي: ${e.translation}`).join('\n\n')}
+${entries.map((e, i) => `[${i}] EN: ${e.shieldedOrig}\nAR الحالي: ${e.shieldedTrans}`).join('\n\n')}
 
 أجب بـ JSON فقط:
 {
@@ -131,7 +177,7 @@ ${entries.map((e, i) => `[${i}] EN: ${e.original}\nAR الحالي: ${e.translat
     {
       "index": 0,
       "alternatives": [
-        {"style": "literary", "text": "...", "note": "سبب الاختيار"},
+        {"style": "literary", "text": "... (مع ⟪T0⟫)", "note": "سبب الاختيار"},
         {"style": "natural", "text": "...", "note": "..."},
         {"style": "concise", "text": "...", "note": "..."},
         {"style": "dramatic", "text": "...", "note": "..."}
@@ -143,18 +189,13 @@ ${entries.map((e, i) => `[${i}] EN: ${e.original}\nAR الحالي: ${e.translat
 }`;
   }
 
-  // full-analysis: combines everything
-  return `أنت خبير شامل في تحليل وتحسين ترجمات ألعاب الفيديو من الإنجليزية للعربية (Xenoblade Chronicles 3).
-
-أجرِ تحليلاً شاملاً لكل ترجمة يشمل:
-1. كشف الترجمة الحرفية (هل هي word-by-word؟)
-2. تحليل السياق (من المتحدث؟ ما نوع المشهد؟)
-3. فحص الاتساق (هل المصطلحات متسقة مع باقي المشروع؟)
-4. تقديم 3 بدائل بأساليب مختلفة
+  // full-analysis
+  return `أنت خبير شامل في تحليل وتحسين ترجمات ألعاب الفيديو من الإنجليزية للعربية.
+${TAG_PROTECTION_RULE}
 ${glossarySection}
 
 النصوص:
-${entries.map((e, i) => `[${i}] EN: ${e.original}\nAR: ${e.translation}\nملف: ${e.fileName || '?'}`).join('\n\n')}
+${entries.map((e, i) => `[${i}] EN: ${e.shieldedOrig}\nAR: ${e.shieldedTrans}\nملف: ${e.fileName || '?'}`).join('\n\n')}
 
 أجب بـ JSON فقط:
 {
@@ -168,11 +209,11 @@ ${entries.map((e, i) => `[${i}] EN: ${e.original}\nAR: ${e.translation}\nملف:
       "tone": "formal/casual/dramatic/neutral",
       "issues": [{"type": "literal/awkward/inconsistent/style", "message": "...", "severity": "high/medium/low"}],
       "alternatives": [
-        {"style": "literary", "text": "...", "note": "..."},
+        {"style": "literary", "text": "... (مع ⟪T0⟫)", "note": "..."},
         {"style": "natural", "text": "...", "note": "..."},
         {"style": "concise", "text": "...", "note": "..."}
       ],
-      "recommended": "أفضل ترجمة مقترحة"
+      "recommended": "أفضل ترجمة مقترحة (مع ⟪T0⟫)"
     }
   ],
   "consistencyNotes": ["ملاحظات عن الاتساق العام"]
@@ -184,7 +225,6 @@ function parseAIResponse(content: string): any {
     const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) || [null, content];
     return JSON.parse((jsonMatch[1] || content).trim());
   } catch {
-    // Try extracting results array
     const m = content.match(/"results"\s*:\s*(\[[\s\S]*?\])/);
     if (m) {
       try { return { results: JSON.parse(m[1]) }; } catch { /* ignore */ }
@@ -195,6 +235,29 @@ function parseAIResponse(content: string): any {
     }
     return {};
   }
+}
+
+/** Recursively unshield all string values in parsed AI response */
+function unshieldAllStrings(obj: any, slots: string[][]): any {
+  if (typeof obj === 'string') {
+    // Try each entry's slots to find the right one
+    for (const entrySlots of slots) {
+      if (entrySlots.length > 0) {
+        const unshielded = unshieldTags(obj, entrySlots);
+        if (unshielded !== obj) return unshielded;
+      }
+    }
+    return obj;
+  }
+  if (Array.isArray(obj)) return obj.map(item => unshieldAllStrings(item, slots));
+  if (obj && typeof obj === 'object') {
+    const result: any = {};
+    for (const [key, value] of Object.entries(obj)) {
+      result[key] = unshieldAllStrings(value, slots);
+    }
+    return result;
+  }
+  return obj;
 }
 
 Deno.serve(async (req) => {
@@ -222,7 +285,19 @@ Deno.serve(async (req) => {
       });
     }
 
-    const prompt = buildPrompt(action, entries, glossary, styleGuide);
+    // Shield tags before sending to AI
+    const shieldedEntries = entries.map(e => {
+      const { shielded: shieldedOrig, slots: origSlots } = shieldTags(e.original);
+      const { shielded: shieldedTrans, slots: transSlots } = shieldTags(e.translation);
+      return { ...e, shieldedOrig, shieldedTrans, origSlots, transSlots };
+    });
+
+    const prompt = buildPrompt(
+      action,
+      shieldedEntries.map(e => ({ shieldedOrig: e.shieldedOrig, shieldedTrans: e.shieldedTrans, fileName: e.fileName })),
+      glossary,
+      styleGuide,
+    );
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -233,7 +308,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model: resolvedModel,
         messages: [
-          { role: 'system', content: 'أنت محلل ترجمات ألعاب محترف. أجب دائماً بصيغة JSON صالحة فقط بدون أي نص إضافي.' },
+          { role: 'system', content: 'أنت محلل ترجمات ألعاب محترف. أجب دائماً بصيغة JSON صالحة فقط. لا تعدل أو تحذف الرموز ⟪T0⟫ أبداً.' },
           { role: 'user', content: prompt },
         ],
         temperature: 0.6,
@@ -246,14 +321,12 @@ Deno.serve(async (req) => {
       console.error('AI Gateway error:', response.status, errorText);
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: 'تم تجاوز حد الطلبات، حاول لاحقاً' }), {
-          status: 429,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
       if (response.status === 402) {
         return new Response(JSON.stringify({ error: 'يرجى شحن رصيد الذكاء الاصطناعي' }), {
-          status: 402,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         });
       }
       throw new Error(`AI error: ${response.status}`);
@@ -261,7 +334,11 @@ Deno.serve(async (req) => {
 
     const aiResult = await response.json();
     const content = aiResult.choices?.[0]?.message?.content || '';
-    const parsed = parseAIResponse(content);
+    let parsed = parseAIResponse(content);
+
+    // Unshield tags in all string fields of the response
+    const allSlots = shieldedEntries.map(e => e.transSlots);
+    parsed = unshieldAllStrings(parsed, allSlots);
 
     return new Response(JSON.stringify({ action, ...parsed }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
