@@ -2090,7 +2090,7 @@ const Editor = () => {
           state={editor.state}
           onProceedToBuild={() => { setShowDiagnostic(false); editor.handlePreBuild(); }}
           onFixTranslations={(fixes) => {
-            editor.setState(prev => prev ? { ...prev, translations: { ...prev.translations, ...fixes } } : null);
+            Object.entries(fixes).forEach(([key, value]) => editor.updateTranslation(key, value));
           }}
         />
         <BuildVerificationDialog
