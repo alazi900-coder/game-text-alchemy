@@ -7,12 +7,14 @@ const corsHeaders = {
 
 // --- Tag Protection ---
 const TAG_PATTERNS: RegExp[] = [
+  /\[\s*\w+:\w[^\]]*\][^[]*?\[\/\s*\w+:\w[^\]]*\]/g, // Paired tags
   /\[\s*M[A-Z]*ID_[^\]]+\]/g,
   /[\uE000-\uE0FF]+/g,
   /\$\w+\([^)]*\)/g,
   /\$\w+/g,
   /\[\s*\w+\s*:[^\]]*?\s*\]/g,
   /\[\s*\w+\s*=\s*\w[^\]]*\]/g,
+  /\{\s*\w+\s*:\s*\w[^}]*\}/g,
   /\{[\w]+\}/g,
   /%[sd]/g,
   /[\uFFF9-\uFFFC]/g,
