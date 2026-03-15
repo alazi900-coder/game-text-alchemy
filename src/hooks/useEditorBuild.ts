@@ -1483,7 +1483,10 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         }
       } else {
         // Build MSBT binary files
-        const groups = new Map<string, { label: string; text: string; originalText: string }[]>();
+        // Step 1: Collect ALL entries per file, marking which have translations
+        const allEntriesByFile = new Map<string, { label: string; text: string; originalText: string; hasTranslation: boolean }[]>();
+        const filesWithTranslations = new Set<string>();
+
         for (const entry of currentState.entries) {
           if (!entry.msbtFile.startsWith("cobalt:")) continue;
           const parts = entry.msbtFile.split(":");
@@ -1491,31 +1494,34 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           const label = parts[2];
           const key = `${entry.msbtFile}:${entry.index}`;
           const translated = currentState.translations[key]?.trim();
-          if (!translated || translated === entry.original) continue; // skip unchanged
-          if (!groups.has(fileName)) groups.set(fileName, []);
-          groups.get(fileName)!.push({ label, text: translated, originalText: entry.original });
+          const hasTranslation = !!translated && translated !== entry.original;
+
+          if (hasTranslation) filesWithTranslations.add(fileName);
+
+          if (!allEntriesByFile.has(fileName)) allEntriesByFile.set(fileName, []);
+          allEntriesByFile.get(fileName)!.push({
+            label,
+            text: hasTranslation ? translated : entry.original,
+            originalText: entry.original,
+            hasTranslation,
+          });
         }
 
         // Auto-trim: if enabled, trim translated texts that exceed original UTF-16 byte length
         // Auto-trim reuses the outer trimmedCount
         if (autoTrimMsbt) {
-          for (const [, entries] of groups) {
+          for (const [, entries] of allEntriesByFile) {
             for (const entry of entries) {
-              const origBytes = entry.originalText.length * 2; // UTF-16LE: 2 bytes per char (approximate)
-              const transBytes = entry.text.length * 2;
-              if (transBytes > origBytes && origBytes > 0) {
-                // Trim to fit: try word boundary first, then hard cut
-                const maxChars = entry.originalText.length;
-                if (entry.text.length > maxChars) {
-                  let trimmed = entry.text.slice(0, maxChars);
-                  // Try to cut at last space to avoid breaking words
-                  const lastSpace = trimmed.lastIndexOf(' ');
-                  if (lastSpace > maxChars * 0.7) {
-                    trimmed = trimmed.slice(0, lastSpace);
-                  }
-                  entry.text = trimmed;
-                  trimmedCount++;
+              if (!entry.hasTranslation) continue;
+              const maxChars = entry.originalText.length;
+              if (entry.text.length > maxChars && maxChars > 0) {
+                let trimmed = entry.text.slice(0, maxChars);
+                const lastSpace = trimmed.lastIndexOf(' ');
+                if (lastSpace > maxChars * 0.7) {
+                  trimmed = trimmed.slice(0, lastSpace);
                 }
+                entry.text = trimmed;
+                trimmedCount++;
               }
             }
           }
@@ -1523,7 +1529,9 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
 
         const { buildMsbtFromEntries } = await import("@/lib/msbt-parser");
         const msgFolder = zip.folder("romfs/Data/StreamingAssets/aa/Switch/fe_assets_message");
-        for (const [fileName, entries] of groups) {
+        for (const [fileName, entries] of allEntriesByFile) {
+          // Only build files that have at least one translation
+          if (!filesWithTranslations.has(fileName)) continue;
           if (entries.length === 0) continue;
           const msbtBytes = buildMsbtFromEntries(entries.map(e => ({ label: e.label, text: e.text })));
           msgFolder!.file(`${fileName}/${fileName}.msbt`, msbtBytes);
