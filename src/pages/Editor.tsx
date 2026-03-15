@@ -54,6 +54,7 @@ const BuildConfirmDialog = React.lazy(() => import("@/components/editor/BuildCon
 const ConsistencyResultsPanel = React.lazy(() => import("@/components/editor/ConsistencyResultsPanel"));
 const IntegrityCheckDialog = React.lazy(() => import("@/components/editor/IntegrityCheckDialog"));
 const PreBuildDiagnostic = React.lazy(() => import("@/components/editor/PreBuildDiagnostic"));
+const ComprehensiveRepairPanel = React.lazy(() => import("@/components/editor/ComprehensiveRepairPanel"));
 const BuildVerificationDialog = React.lazy(() => import("@/components/editor/BuildVerificationDialog"));
 const CompareEnginesDialog = React.lazy(() => import("@/components/editor/CompareEnginesDialog"));
 const SentenceSplitPanel = React.lazy(() => import("@/components/editor/SentenceSplitPanel"));
@@ -129,6 +130,7 @@ const Editor = () => {
   const [showDiffView, setShowDiffView] = React.useState(false);
   const [isDragging, setIsDragging] = React.useState(false);
   const [showDiagnostic, setShowDiagnostic] = React.useState(false);
+  const [showComprehensiveRepair, setShowComprehensiveRepair] = React.useState(false);
   const [showExportEnglishDialog, setShowExportEnglishDialog] = React.useState(false);
   const [compareEntry, setCompareEntry] = React.useState<import("@/components/editor/types").ExtractedEntry | null>(null);
   const [showClearConfirm, setShowClearConfirm] = React.useState<'all' | 'filtered' | null>(null);
@@ -1912,6 +1914,10 @@ const Editor = () => {
               <BarChart3 className="w-4 h-4" />
               <span className="hidden sm:inline">تشخيص</span>
             </Button>
+            <Button size="sm" variant="outline" onClick={() => setShowComprehensiveRepair(true)} disabled={editor.building} className="font-body gap-1 shrink-0 border-primary/50 text-primary hover:bg-primary/10" title="إصلاح شامل">
+              <Wand2 className="w-4 h-4" />
+              <span className="hidden sm:inline">إصلاح شامل</span>
+            </Button>
             <Button size="sm" variant="outline" onClick={editor.handleCheckIntegrity} disabled={editor.building} className="font-body gap-1 shrink-0" title="التحقق من سلامة الترجمة">
               <ShieldCheck className="w-4 h-4" />
               <span className="hidden sm:inline">سلامة</span>
@@ -2090,6 +2096,15 @@ const Editor = () => {
           state={editor.state}
           onProceedToBuild={() => { setShowDiagnostic(false); editor.handlePreBuild(); }}
           onFixTranslations={(fixes) => {
+            Object.entries(fixes).forEach(([key, value]) => editor.updateTranslation(key, value));
+          }}
+        />
+        <ComprehensiveRepairPanel
+          open={showComprehensiveRepair}
+          onOpenChange={setShowComprehensiveRepair}
+          state={editor.state}
+          onApplyFix={(key, fix) => editor.updateTranslation(key, fix)}
+          onApplyBatch={(fixes) => {
             Object.entries(fixes).forEach(([key, value]) => editor.updateTranslation(key, value));
           }}
         />
