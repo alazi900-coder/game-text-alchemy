@@ -16,9 +16,17 @@ const PROTECTED_ABBREVIATIONS = [
 ];
 const ABBREV_PATTERN = new RegExp(`\\b(${PROTECTED_ABBREVIATIONS.join('|')})\\b`, 'g');
 
-function protectTags(text: string): { cleaned: string; tags: Map<string, string> } {
+function protectTags(text: string): { cleaned: string; tags: Map<string, string>; trailingNewlines: string } {
   const tags = new Map<string, string>();
   let counter = 0;
+
+  // Strip trailing newlines — they're not structural, just formatting artifacts
+  let trailingNewlines = '';
+  const trailingMatch = text.match(/(\n+)$/);
+  if (trailingMatch) {
+    trailingNewlines = trailingMatch[1];
+    text = text.slice(0, -trailingNewlines.length);
+  }
 
   // First: shield literal newlines as NEWLINE_N placeholders
   const nlParts = text.split('\n');
@@ -70,7 +78,7 @@ function protectTags(text: string): { cleaned: string; tags: Map<string, string>
   }
   matches.sort((a, b) => a.start - b.start);
 
-  if (matches.length === 0) return { cleaned: shielded, tags };
+  if (matches.length === 0) return { cleaned: shielded, tags, trailingNewlines };
 
   let cleaned = '';
   let lastEnd = 0;
@@ -84,7 +92,7 @@ function protectTags(text: string): { cleaned: string; tags: Map<string, string>
   }
   cleaned += shielded.slice(lastEnd);
 
-  return { cleaned, tags };
+  return { cleaned, tags, trailingNewlines };
 }
 
 /** Normalize malformed TAG_N variants that AI engines may produce */
@@ -154,17 +162,28 @@ function restoreAndEnforce(original: string, translated: string, tags: Map<strin
 
   // Check if original had real newlines (NEWLINE_N tags exist)
   const hasOriginalNewlines = [...tags.keys()].some(k => k.startsWith('NEWLINE_'));
+
+  let result: string;
   if (hasOriginalNewlines && !_rebalanceNewlines) {
     // Preserve structural newlines but still remove orphan lines
     const preserved = fixOrphansPreservingNewlines(enforced);
     // If NPC and too many lines, rebalance with maxLines
     if (maxLines && preserved.split('\n').length > maxLines) {
-      return balanceLines(enforced, maxLines);
+      result = balanceLines(enforced, maxLines);
+    } else {
+      result = preserved;
     }
-    return preserved;
+  } else {
+    result = balanceLines(enforced, maxLines);
   }
 
-  return balanceLines(enforced, maxLines);
+  // Re-append trailing newlines from original text (they're structural, not content)
+  const trailingMatch = original.match(/(\n+)$/);
+  if (trailingMatch) {
+    result = result.replace(/\n+$/, '') + trailingMatch[1];
+  }
+
+  return result;
 }
 
 /** Tag shielding: replace technical tags with short placeholders for balanced splitting */
@@ -1354,8 +1373,8 @@ Deno.serve(async (req) => {
     }
 
     const protectedEntries = entries.map(e => {
-      const { cleaned, tags } = protectTags(e.original);
-      return { ...e, cleaned, tags };
+      const { cleaned, tags, trailingNewlines } = protectTags(e.original);
+      return { ...e, cleaned, tags, trailingNewlines };
     });
 
     if (provider === 'mymemory') {
