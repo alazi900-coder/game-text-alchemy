@@ -118,13 +118,24 @@ export default function NlocProcess() {
           let parsed;
           if (isNloc(file.data)) {
             parsed = parseNloc(file.data);
+            addLog(`✅ ملف NLOC مباشر`);
           } else {
-            // Try as .data file (has 0x10 header)
+            // Try as .data archive, then scan for NLOC magic
             try {
               parsed = parseNlocFromDictData(file.data);
+              addLog(`✅ تم العثور على NLOC داخل أرشيف .data`);
             } catch {
-              addLog(`⚠️ ${file.name}: صيغة غير معروفة — تخطي`);
-              continue;
+              // Last resort: full scan
+              const scanned = findAndParseNloc(file.data);
+              if (scanned) {
+                parsed = scanned;
+                addLog(`✅ تم العثور على NLOC بالمسح الشامل`);
+              } else {
+                // Log first bytes for debugging
+                const hex = Array.from(file.data.subarray(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' ');
+                addLog(`⚠️ ${file.name}: صيغة غير معروفة — أول 16 بايت: ${hex}`);
+                continue;
+              }
             }
           }
 
