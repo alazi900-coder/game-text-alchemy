@@ -23,6 +23,8 @@ const TAG_PATTERNS: RegExp[] = [
   /\$\w+\([^)]*\)/g,                        // Cobalt tags with args: $Arg(0), $Icon("A")
   /\$\w+/g,                                 // Cobalt simple tags: $P, $n, $t
   /\[\s*\w+\s*:[^\]]*?\s*\]/g,             // [Tag:Value] / [MSBT:label]
+  /\d+\s*\[[A-Z]{2,10}\]/g,               // N[TAG] patterns (e.g. 1[ML], 1 [ML])
+  /\[[A-Z]{2,10}\]\s*\d+/g,               // [TAG]N patterns (e.g. [ML]1, [ML] 1)
   /\[\s*\w+\s*=\s*\w[^\]]*\]/g,            // [TAG=Value] patterns
   /\{\s*\w+\s*:\s*\w[^}]*\}/g,             // {TAG:Value} patterns
   /\{[\w]+\}/g,                              // {variable} placeholders
