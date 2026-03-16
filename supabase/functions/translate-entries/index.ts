@@ -92,7 +92,7 @@ function protectTags(text: string): { cleaned: string; tags: Map<string, string>
   }
   cleaned += shielded.slice(lastEnd);
 
-  return { cleaned, tags };
+  return { cleaned, tags, trailingNewlines };
 }
 
 /** Normalize malformed TAG_N variants that AI engines may produce */
