@@ -104,7 +104,7 @@ export default function NlocProcess() {
 
       for (const file of dataFiles) {
         try {
-          nlocFilesMap[file.name] = file.data.buffer.slice(file.data.byteOffset, file.data.byteOffset + file.data.byteLength);
+          nlocFilesMap[file.name] = file.data.buffer.slice(file.data.byteOffset, file.data.byteOffset + file.data.byteLength) as ArrayBuffer;
           addLog(`📂 ${file.name}: ${(file.data.length / 1024).toFixed(1)} KB`);
 
           // Check for companion .dict file
