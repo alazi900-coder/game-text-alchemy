@@ -19,7 +19,8 @@ const Auth = lazy(() => import("./pages/Auth"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Install = lazy(() => import("./pages/Install"));
 const BundleExtractor = lazy(() => import("./pages/BundleExtractor"));
-
+const LuigiMansion = lazy(() => import("./pages/LuigiMansion"));
+const NlocProcess = lazy(() => import("./pages/NlocProcess"));
 
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-background">
