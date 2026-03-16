@@ -433,6 +433,7 @@ export function parseMsbtFile(data: Uint8Array): MsbtFile {
         entries.push({
           label: labels[i],
           text: texts[txtIdx].text,
+          txt2Index: txtIdx,
           rawBytes: texts[txtIdx].rawBytes,
           attribute: attributes[txtIdx],
         });
@@ -444,6 +445,7 @@ export function parseMsbtFile(data: Uint8Array): MsbtFile {
       entries.push({
         label: `entry_${i}`,
         text: texts[i].text,
+        txt2Index: i,
         rawBytes: texts[i].rawBytes,
         attribute: attributes[i],
       });
@@ -457,6 +459,7 @@ export function parseMsbtFile(data: Uint8Array): MsbtFile {
     sectionCount,
     fileSize,
     entries,
+    txt2Entries: texts,
     rawBuffer: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer,
     hasAttributes,
   };
