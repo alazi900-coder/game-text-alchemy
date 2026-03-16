@@ -1373,8 +1373,8 @@ Deno.serve(async (req) => {
     }
 
     const protectedEntries = entries.map(e => {
-      const { cleaned, tags } = protectTags(e.original);
-      return { ...e, cleaned, tags };
+      const { cleaned, tags, trailingNewlines } = protectTags(e.original);
+      return { ...e, cleaned, tags, trailingNewlines };
     });
 
     if (provider === 'mymemory') {
