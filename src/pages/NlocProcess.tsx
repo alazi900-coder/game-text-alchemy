@@ -71,7 +71,7 @@ export default function NlocProcess() {
     addLog(`📄 عدد الملفات: ${nlocFiles.length}`);
 
     try {
-      const { parseNloc, parseNlocFromDictData, isNloc, isDictFile } = await import("@/lib/nloc-parser");
+      const { parseNloc, parseNlocFromDictData, isNloc, isDictFile, findAndParseNloc } = await import("@/lib/nloc-parser");
 
       setStage("extracting");
 
