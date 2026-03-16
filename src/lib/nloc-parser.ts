@@ -186,12 +186,45 @@ export function parseNlocFromDictData(dataFileBytes: Uint8Array): NlocFile {
   const magic = view.getUint32(0x00, true);
 
   // .data header: magic 0x12027020, then u32 size, then 8 bytes padding
-  if (magic !== 0x12027020) {
-    throw new Error(`ترويسة .data غير صالحة: ${magic.toString(16)}`);
+  if (magic === 0x12027020) {
+    const nlocData = dataFileBytes.subarray(0x10);
+    return parseNloc(nlocData);
   }
 
-  const nlocData = dataFileBytes.subarray(0x10);
-  return parseNloc(nlocData);
+  // Fallback: scan for NLOC magic anywhere in the file
+  const result = findAndParseNloc(dataFileBytes);
+  if (result) return result;
+
+  throw new Error(`ترويسة .data غير صالحة: 0x${magic.toString(16)} — لم يتم العثور على بيانات NLOC`);
+}
+
+/**
+ * Scan a buffer for the "NLOC" magic bytes and try to parse from there.
+ * Useful when the NLOC data is embedded at an unknown offset.
+ */
+export function findAndParseNloc(data: Uint8Array): NlocFile | null {
+  // Try common offsets first, then scan
+  const commonOffsets = [0x00, 0x10, 0x20, 0x30, 0x40, 0x80, 0x100];
+  
+  for (const off of commonOffsets) {
+    if (off + 0x14 <= data.length && 
+        data[off] === 0x4E && data[off+1] === 0x4C && data[off+2] === 0x4F && data[off+3] === 0x43) {
+      try {
+        return parseNloc(data.subarray(off));
+      } catch { /* continue scanning */ }
+    }
+  }
+
+  // Full scan
+  for (let i = 0; i < data.length - 0x14; i++) {
+    if (data[i] === 0x4E && data[i+1] === 0x4C && data[i+2] === 0x4F && data[i+3] === 0x43) {
+      try {
+        return parseNloc(data.subarray(i));
+      } catch { /* continue scanning */ }
+    }
+  }
+
+  return null;
 }
 
 /**
