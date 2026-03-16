@@ -7,6 +7,8 @@
 export interface MsbtEntry {
   label: string;
   text: string;
+  /** TXT2 index used by this label (critical for stable rebuilds) */
+  txt2Index: number;
   /** Raw UTF-16LE bytes of the text (includes control tags) */
   rawBytes: Uint8Array;
   /** Attribute bytes (game-specific, preserved for roundtrip) */
@@ -20,8 +22,10 @@ export interface MsbtFile {
   version: number;
   sectionCount: number;
   fileSize: number;
-  /** Parsed message entries */
+  /** Parsed message entries (label-addressable) */
   entries: MsbtEntry[];
+  /** Full TXT2 table (including unlabeled entries) for lossless rebuild */
+  txt2Entries: { text: string; rawBytes: Uint8Array }[];
   /** Raw file buffer for roundtrip rebuild */
   rawBuffer: ArrayBuffer;
   /** Whether ATR1 section exists */
@@ -429,6 +433,7 @@ export function parseMsbtFile(data: Uint8Array): MsbtFile {
         entries.push({
           label: labels[i],
           text: texts[txtIdx].text,
+          txt2Index: txtIdx,
           rawBytes: texts[txtIdx].rawBytes,
           attribute: attributes[txtIdx],
         });
@@ -440,6 +445,7 @@ export function parseMsbtFile(data: Uint8Array): MsbtFile {
       entries.push({
         label: `entry_${i}`,
         text: texts[i].text,
+        txt2Index: i,
         rawBytes: texts[i].rawBytes,
         attribute: attributes[i],
       });
@@ -453,6 +459,7 @@ export function parseMsbtFile(data: Uint8Array): MsbtFile {
     sectionCount,
     fileSize,
     entries,
+    txt2Entries: texts,
     rawBuffer: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer,
     hasAttributes,
   };
@@ -472,17 +479,21 @@ export function rebuildMsbt(
   const origData = new Uint8Array(original.rawBuffer);
   const origDv = new DataView(original.rawBuffer);
 
-  // Re-encode all texts with translations applied
-  const newTexts: Uint8Array[] = [];
+  // Start from full original TXT2 table (including unlabeled entries) for lossless rebuild
+  const newTexts: Uint8Array[] = (original.txt2Entries?.length
+    ? original.txt2Entries.map(entry => entry.rawBytes)
+    : original.entries.map(entry => entry.rawBytes));
+
+  // Apply only translated label entries at their original TXT2 indexes
   for (const entry of original.entries) {
     const translated = translations[entry.label];
-    if (translated && translated.trim()) {
-      // Use tag-aware encoding to restore binary MSBT tags from [MSBT:...] placeholders
-      newTexts.push(encodeUtf16WithTags(translated, entry.rawBytes, le));
-    } else {
-      // Keep original raw bytes
-      newTexts.push(entry.rawBytes);
-    }
+    if (!translated?.trim()) continue;
+
+    const targetIndex = entry.txt2Index;
+    if (targetIndex < 0 || targetIndex >= newTexts.length) continue;
+
+    // Use tag-aware encoding to restore binary MSBT tags from [MSBT:...] placeholders
+    newTexts[targetIndex] = encodeUtf16WithTags(translated, entry.rawBytes, le);
   }
 
   // Rebuild TXT2 section
