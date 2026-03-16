@@ -238,7 +238,7 @@ export default function NlocProcess() {
               <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[hsl(120,50%,40%)]/10 border border-[hsl(120,50%,40%)]/30 text-sm font-display font-semibold cursor-pointer hover:bg-[hsl(120,50%,40%)]/20 transition-colors">
                 <Upload className="w-4 h-4" />
                 اختيار ملفات
-                <input type="file" accept=".loc,.data,.nloc" multiple className="hidden" onChange={e => handleFileSelect(e.target.files)} disabled={isProcessing} />
+                <input type="file" accept=".loc,.data,.dict,.nloc" multiple className="hidden" onChange={e => handleFileSelect(e.target.files)} disabled={isProcessing} />
               </label>
               <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary/10 border border-secondary/30 text-sm font-display font-semibold cursor-pointer hover:bg-secondary/20 transition-colors">
                 <FolderOpen className="w-4 h-4" />
