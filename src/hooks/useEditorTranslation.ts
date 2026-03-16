@@ -43,10 +43,20 @@ export function useEditorTranslation({
   filterCategory, activeGlossary, parseGlossaryMap, paginatedEntries, filteredEntries, totalPages, setCurrentPage, userGeminiKey, translationProvider, myMemoryEmail, addMyMemoryChars, addAiRequest, rebalanceNewlines, npcMaxLines, npcMode, npcSplitCharLimit, aiModel, currentGameType,
 }: UseEditorTranslationProps) {
 
+  const getStructuralLineInfo = (text: string): { lineCount: number; trailingNewlines: string } => {
+    const trailingNewlines = text.match(/(\n+)$/)?.[1] ?? '';
+    const withoutTrailing = trailingNewlines ? text.slice(0, -trailingNewlines.length) : text;
+    return {
+      lineCount: Math.max(1, withoutTrailing.split('\n').length),
+      trailingNewlines,
+    };
+  };
+
   /** Auto-sync Arabic line count to match English \n count (universal — all files) */
   const autoSyncLines = (key: string, translated: string, originalEntry?: ExtractedEntry): string => {
     if (!originalEntry) return translated;
-    const englishLineCount = originalEntry.original.split('\n').length;
+
+    const { lineCount: englishLineCount, trailingNewlines } = getStructuralLineInfo(originalEntry.original);
 
     // Protect tags before any text manipulation
     const { cleanText, tags } = protectTags(translated);
@@ -61,8 +71,11 @@ export function useEditorTranslation({
       balanced = splitEvenlyByLines(flat, englishLineCount);
     }
 
-    // Restore tags
-    const result = restoreTags(balanced, tags);
+    // Restore tags + restore trailing newlines from source
+    let result = restoreTags(balanced, tags);
+    if (trailingNewlines) {
+      result = result.replace(/\n+$/, '') + trailingNewlines;
+    }
 
     // Validate: warn if any placeholder leaked
     if (/TAG_\d+/.test(result)) {
