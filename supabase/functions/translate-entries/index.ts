@@ -162,17 +162,28 @@ function restoreAndEnforce(original: string, translated: string, tags: Map<strin
 
   // Check if original had real newlines (NEWLINE_N tags exist)
   const hasOriginalNewlines = [...tags.keys()].some(k => k.startsWith('NEWLINE_'));
+
+  let result: string;
   if (hasOriginalNewlines && !_rebalanceNewlines) {
     // Preserve structural newlines but still remove orphan lines
     const preserved = fixOrphansPreservingNewlines(enforced);
     // If NPC and too many lines, rebalance with maxLines
     if (maxLines && preserved.split('\n').length > maxLines) {
-      return balanceLines(enforced, maxLines);
+      result = balanceLines(enforced, maxLines);
+    } else {
+      result = preserved;
     }
-    return preserved;
+  } else {
+    result = balanceLines(enforced, maxLines);
   }
 
-  return balanceLines(enforced, maxLines);
+  // Re-append trailing newlines from original text (they're structural, not content)
+  const trailingMatch = original.match(/(\n+)$/);
+  if (trailingMatch) {
+    result = result.replace(/\n+$/, '') + trailingMatch[1];
+  }
+
+  return result;
 }
 
 /** Tag shielding: replace technical tags with short placeholders for balanced splitting */
