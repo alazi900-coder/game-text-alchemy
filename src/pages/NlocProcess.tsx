@@ -79,23 +79,49 @@ export default function NlocProcess() {
       const autoTranslations: Record<string, string> = {};
       const nlocFilesMap: Record<string, ArrayBuffer> = {};
 
+      // Separate .dict and .data files, pair them by base name
+      const dictFiles: Record<string, { name: string; data: Uint8Array }> = {};
+      const dataFiles: { name: string; data: Uint8Array }[] = [];
+
       for (const file of nlocFiles) {
+        const data = new Uint8Array(file.data);
+        const lower = file.name.toLowerCase();
+        if (lower.endsWith('.dict')) {
+          const baseName = file.name.replace(/\.dict$/i, '');
+          dictFiles[baseName.toLowerCase()] = { name: file.name, data };
+        } else {
+          dataFiles.push({ name: file.name, data });
+        }
+      }
+
+      // If only .dict files uploaded, warn
+      if (dataFiles.length === 0 && Object.keys(dictFiles).length > 0) {
+        setStage("error");
+        addLog("⚠️ تم رفع ملفات .dict فقط — يجب رفع ملف .data المرافق أيضاً (مثل English.data)");
+        setExtracting(false);
+        return;
+      }
+
+      for (const file of dataFiles) {
         try {
-          const data = new Uint8Array(file.data);
-          nlocFilesMap[file.name] = file.data;
-          addLog(`📂 ${file.name}: ${(data.length / 1024).toFixed(1)} KB`);
+          nlocFilesMap[file.name] = file.data.buffer.slice(file.data.byteOffset, file.data.byteOffset + file.data.byteLength);
+          addLog(`📂 ${file.name}: ${(file.data.length / 1024).toFixed(1)} KB`);
+
+          // Check for companion .dict file
+          const baseName = file.name.replace(/\.data$/i, '');
+          const companionDict = dictFiles[baseName.toLowerCase()];
+          if (companionDict) {
+            addLog(`🔗 تم ربط ${file.name} مع ${companionDict.name}`);
+            nlocFilesMap[companionDict.name] = companionDict.data.buffer.slice(companionDict.data.byteOffset, companionDict.data.byteOffset + companionDict.data.byteLength);
+          }
 
           let parsed;
-          if (isNloc(data)) {
-            parsed = parseNloc(data);
-          } else if (isDictFile(data)) {
-            // For .dict files, we need the companion .data file
-            addLog(`⚠️ ${file.name}: ملف .dict — ابحث عن ملف .data المرافق`);
-            continue;
+          if (isNloc(file.data)) {
+            parsed = parseNloc(file.data);
           } else {
             // Try as .data file (has 0x10 header)
             try {
-              parsed = parseNlocFromDictData(data);
+              parsed = parseNlocFromDictData(file.data);
             } catch {
               addLog(`⚠️ ${file.name}: صيغة غير معروفة — تخطي`);
               continue;
