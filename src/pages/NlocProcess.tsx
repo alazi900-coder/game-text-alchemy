@@ -107,6 +107,10 @@ export default function NlocProcess() {
           nlocFilesMap[file.name] = file.data.buffer.slice(file.data.byteOffset, file.data.byteOffset + file.data.byteLength) as ArrayBuffer;
           addLog(`📂 ${file.name}: ${(file.data.length / 1024).toFixed(1)} KB`);
 
+          // Log first bytes for debugging
+          const hexPreview = Array.from(file.data.subarray(0, 20)).map(b => b.toString(16).padStart(2, '0')).join(' ');
+          addLog(`🔍 أول 20 بايت: ${hexPreview}`);
+
           // Check for companion .dict file
           const baseName = file.name.replace(/\.data$/i, '');
           const companionDict = dictFiles[baseName.toLowerCase()];
@@ -116,26 +120,38 @@ export default function NlocProcess() {
           }
 
           let parsed;
+
           if (isNloc(file.data)) {
+            // Direct NLOC file
             parsed = parseNloc(file.data);
             addLog(`✅ ملف NLOC مباشر`);
-          } else {
-            // Try as .data archive, then scan for NLOC magic
-            try {
-              parsed = parseNlocFromDictData(file.data);
-              addLog(`✅ تم العثور على NLOC داخل أرشيف .data`);
-            } catch {
-              // Last resort: full scan
+          } else if (companionDict || file.name.toLowerCase().endsWith('.data')) {
+            // .data file with companion .dict OR standalone .data — skip 0x10 header
+            // (Reference: NLOC-Tool always skips 0x10 bytes from .data files)
+            const nlocBytes = file.data.subarray(0x10);
+            if (isNloc(nlocBytes)) {
+              parsed = parseNloc(nlocBytes);
+              addLog(`✅ تم استخراج NLOC من .data (تخطي 0x10 بايت ترويسة)`);
+            } else {
+              // Try scanning
               const scanned = findAndParseNloc(file.data);
               if (scanned) {
                 parsed = scanned;
                 addLog(`✅ تم العثور على NLOC بالمسح الشامل`);
               } else {
-                // Log first bytes for debugging
-                const hex = Array.from(file.data.subarray(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' ');
-                addLog(`⚠️ ${file.name}: صيغة غير معروفة — أول 16 بايت: ${hex}`);
+                addLog(`⚠️ ${file.name}: لا يوجد بيانات NLOC — تخطي`);
                 continue;
               }
+            }
+          } else {
+            // Unknown format — try scanning
+            const scanned = findAndParseNloc(file.data);
+            if (scanned) {
+              parsed = scanned;
+              addLog(`✅ تم العثور على NLOC بالمسح الشامل`);
+            } else {
+              addLog(`⚠️ ${file.name}: صيغة غير معروفة — تخطي`);
+              continue;
             }
           }
 
