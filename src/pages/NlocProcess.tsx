@@ -35,7 +35,7 @@ export default function NlocProcess() {
 
     for (const f of Array.from(files)) {
       const lower = f.name.toLowerCase();
-      if (lower.endsWith('.loc') || lower.endsWith('.data') || lower.endsWith('.nloc')) {
+      if (lower.endsWith('.loc') || lower.endsWith('.data') || lower.endsWith('.dict') || lower.endsWith('.nloc')) {
         try {
           const buf = await f.arrayBuffer();
           newFiles.push({ name: f.name, size: buf.byteLength, data: buf });
@@ -43,7 +43,7 @@ export default function NlocProcess() {
           addLog(`⚠️ فشل قراءة ${f.name}: ${err instanceof Error ? err.message : 'خطأ'}`);
         }
       } else {
-        addLog(`⏭️ تخطي ${f.name} — صيغة غير مدعومة (يدعم .loc و .data)`);
+        addLog(`⏭️ تخطي ${f.name} — صيغة غير مدعومة (يدعم .data و .dict و .loc)`);
       }
     }
 
@@ -79,23 +79,49 @@ export default function NlocProcess() {
       const autoTranslations: Record<string, string> = {};
       const nlocFilesMap: Record<string, ArrayBuffer> = {};
 
+      // Separate .dict and .data files, pair them by base name
+      const dictFiles: Record<string, { name: string; data: Uint8Array }> = {};
+      const dataFiles: { name: string; data: Uint8Array }[] = [];
+
       for (const file of nlocFiles) {
+        const data = new Uint8Array(file.data);
+        const lower = file.name.toLowerCase();
+        if (lower.endsWith('.dict')) {
+          const baseName = file.name.replace(/\.dict$/i, '');
+          dictFiles[baseName.toLowerCase()] = { name: file.name, data };
+        } else {
+          dataFiles.push({ name: file.name, data });
+        }
+      }
+
+      // If only .dict files uploaded, warn
+      if (dataFiles.length === 0 && Object.keys(dictFiles).length > 0) {
+        setStage("error");
+        addLog("⚠️ تم رفع ملفات .dict فقط — يجب رفع ملف .data المرافق أيضاً (مثل English.data)");
+        setExtracting(false);
+        return;
+      }
+
+      for (const file of dataFiles) {
         try {
-          const data = new Uint8Array(file.data);
-          nlocFilesMap[file.name] = file.data;
-          addLog(`📂 ${file.name}: ${(data.length / 1024).toFixed(1)} KB`);
+          nlocFilesMap[file.name] = file.data.buffer.slice(file.data.byteOffset, file.data.byteOffset + file.data.byteLength) as ArrayBuffer;
+          addLog(`📂 ${file.name}: ${(file.data.length / 1024).toFixed(1)} KB`);
+
+          // Check for companion .dict file
+          const baseName = file.name.replace(/\.data$/i, '');
+          const companionDict = dictFiles[baseName.toLowerCase()];
+          if (companionDict) {
+            addLog(`🔗 تم ربط ${file.name} مع ${companionDict.name}`);
+            nlocFilesMap[companionDict.name] = companionDict.data.buffer.slice(companionDict.data.byteOffset, companionDict.data.byteOffset + companionDict.data.byteLength) as ArrayBuffer;
+          }
 
           let parsed;
-          if (isNloc(data)) {
-            parsed = parseNloc(data);
-          } else if (isDictFile(data)) {
-            // For .dict files, we need the companion .data file
-            addLog(`⚠️ ${file.name}: ملف .dict — ابحث عن ملف .data المرافق`);
-            continue;
+          if (isNloc(file.data)) {
+            parsed = parseNloc(file.data);
           } else {
             // Try as .data file (has 0x10 header)
             try {
-              parsed = parseNlocFromDictData(data);
+              parsed = parseNlocFromDictData(file.data);
             } catch {
               addLog(`⚠️ ${file.name}: صيغة غير معروفة — تخطي`);
               continue;
@@ -191,7 +217,7 @@ export default function NlocProcess() {
           رفع ملفات Luigi's Mansion 2 HD 👻
         </h1>
         <p className="text-muted-foreground font-body">
-          ارفع ملفات .loc أو .data — يمكنك رفع عدة ملفات دفعة واحدة
+          ارفع ملفات English.data و English.dict معاً — النصوص موجودة في ملف .data
         </p>
       </header>
 
@@ -206,13 +232,13 @@ export default function NlocProcess() {
               ${isProcessing ? "opacity-50 pointer-events-none" : ""}`}
           >
             <Ghost className="w-12 h-12 text-[hsl(120,70%,50%)] mb-3" />
-            <p className="font-display font-semibold mb-1">ملفات NLOC (.loc / .data)</p>
-            <p className="text-xs text-muted-foreground mb-4">اسحب الملفات هنا أو اختر من الجهاز</p>
+            <p className="font-display font-semibold mb-1">ملفات NLOC (.data + .dict)</p>
+            <p className="text-xs text-muted-foreground mb-4">ارفع English.data و English.dict معاً</p>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[hsl(120,50%,40%)]/10 border border-[hsl(120,50%,40%)]/30 text-sm font-display font-semibold cursor-pointer hover:bg-[hsl(120,50%,40%)]/20 transition-colors">
                 <Upload className="w-4 h-4" />
                 اختيار ملفات
-                <input type="file" accept=".loc,.data,.nloc" multiple className="hidden" onChange={e => handleFileSelect(e.target.files)} disabled={isProcessing} />
+                <input type="file" accept=".loc,.data,.dict,.nloc" multiple className="hidden" onChange={e => handleFileSelect(e.target.files)} disabled={isProcessing} />
               </label>
               <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-secondary/10 border border-secondary/30 text-sm font-display font-semibold cursor-pointer hover:bg-secondary/20 transition-colors">
                 <FolderOpen className="w-4 h-4" />
