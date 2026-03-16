@@ -85,6 +85,17 @@ const games = [
     border: "border-[hsl(0,60%,50%)]/30",
     bg: "bg-[hsl(0,60%,50%)]/10",
   },
+  {
+    id: "luigis-mansion",
+    title: "Luigi's Mansion 2 HD",
+    titleAr: "لويجي مانشن 2 إتش دي",
+    desc: "ملفات NLOC — حوارات، نصوص المهام، واجهة اللعبة",
+    image: heroBgLm,
+    href: "/luigis-mansion",
+    accent: "from-[hsl(120,70%,50%)] to-[hsl(270,70%,60%)]",
+    border: "border-[hsl(120,50%,40%)]/30",
+    bg: "bg-[hsl(120,50%,40%)]/10",
+  },
 ];
 
 export default function GameHub() {
