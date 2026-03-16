@@ -479,17 +479,21 @@ export function rebuildMsbt(
   const origData = new Uint8Array(original.rawBuffer);
   const origDv = new DataView(original.rawBuffer);
 
-  // Re-encode all texts with translations applied
-  const newTexts: Uint8Array[] = [];
+  // Start from full original TXT2 table (including unlabeled entries) for lossless rebuild
+  const newTexts: Uint8Array[] = (original.txt2Entries?.length
+    ? original.txt2Entries.map(entry => entry.rawBytes)
+    : original.entries.map(entry => entry.rawBytes));
+
+  // Apply only translated label entries at their original TXT2 indexes
   for (const entry of original.entries) {
     const translated = translations[entry.label];
-    if (translated && translated.trim()) {
-      // Use tag-aware encoding to restore binary MSBT tags from [MSBT:...] placeholders
-      newTexts.push(encodeUtf16WithTags(translated, entry.rawBytes, le));
-    } else {
-      // Keep original raw bytes
-      newTexts.push(entry.rawBytes);
-    }
+    if (!translated?.trim()) continue;
+
+    const targetIndex = entry.txt2Index;
+    if (targetIndex < 0 || targetIndex >= newTexts.length) continue;
+
+    // Use tag-aware encoding to restore binary MSBT tags from [MSBT:...] placeholders
+    newTexts[targetIndex] = encodeUtf16WithTags(translated, entry.rawBytes, le);
   }
 
   // Rebuild TXT2 section
