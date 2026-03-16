@@ -52,18 +52,21 @@ export function parseNloc(data: Uint8Array): NlocFile {
   const langId = readU32(0x08);
   const strCount = readU32(0x0C);
 
-  const endianName = le ? "le" : "be";
+  // Validate strCount: table must fit within the file
+  const tableEnd = 0x14 + strCount * 8;
+  if (tableEnd > data.length) {
+    throw new Error(`عدد النصوص غير صالح: ${strCount} (يتجاوز حجم الملف ${data.length} بايت)`);
+  }
 
-  // Read string table entries (sorted by message ID in file, but we preserve order)
+  // Read string table entries
   interface RawEntry {
     id: number;
-    textOffset: number; // in UTF-16 code units
+    textOffset: number; // in UTF-16 code units from start of decoded text blob
   }
 
   const entries: RawEntry[] = [];
   for (let i = 0; i < strCount; i++) {
     const off = 0x14 + i * 8;
-    if (off + 8 > data.length) break;
     entries.push({
       id: readU32(off),
       textOffset: readU32(off + 4),
@@ -74,14 +77,24 @@ export function parseNloc(data: Uint8Array): NlocFile {
   const textBlobStart = 0x14 + strCount * 8;
   const textBlobBytes = data.subarray(textBlobStart);
 
-  // Decode full blob to string
+  if (textBlobBytes.length < 2) {
+    throw new Error(`منطقة النصوص فارغة (${textBlobBytes.length} بايت)`);
+  }
+
+  // Decode full blob to string (offsets are in UTF-16 code units = character positions)
   const decoder = new TextDecoder(le ? "utf-16le" : "utf-16be");
   const fullStr = decoder.decode(textBlobBytes);
 
-  // Extract individual messages
+  // Extract individual messages, sorted by text offset to reconstruct original order
+  const sortedByOffset = [...entries].sort((a, b) => a.textOffset - b.textOffset);
+
   const messages: NlocMessage[] = [];
-  for (const entry of entries) {
+  for (const entry of sortedByOffset) {
     const start = entry.textOffset;
+    if (start >= fullStr.length) {
+      messages.push({ id: entry.id, text: "", idHex: entry.id.toString(16).toUpperCase().padStart(8, "0") });
+      continue;
+    }
     let end = fullStr.indexOf("\0", start);
     if (end === -1) end = fullStr.length;
     const text = fullStr.substring(start, end);
