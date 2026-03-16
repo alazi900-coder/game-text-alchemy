@@ -7,6 +7,8 @@
 export interface MsbtEntry {
   label: string;
   text: string;
+  /** TXT2 index used by this label (critical for stable rebuilds) */
+  txt2Index: number;
   /** Raw UTF-16LE bytes of the text (includes control tags) */
   rawBytes: Uint8Array;
   /** Attribute bytes (game-specific, preserved for roundtrip) */
@@ -20,8 +22,10 @@ export interface MsbtFile {
   version: number;
   sectionCount: number;
   fileSize: number;
-  /** Parsed message entries */
+  /** Parsed message entries (label-addressable) */
   entries: MsbtEntry[];
+  /** Full TXT2 table (including unlabeled entries) for lossless rebuild */
+  txt2Entries: { text: string; rawBytes: Uint8Array }[];
   /** Raw file buffer for roundtrip rebuild */
   rawBuffer: ArrayBuffer;
   /** Whether ATR1 section exists */
