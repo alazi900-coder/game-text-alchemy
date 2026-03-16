@@ -35,7 +35,7 @@ export default function NlocProcess() {
 
     for (const f of Array.from(files)) {
       const lower = f.name.toLowerCase();
-      if (lower.endsWith('.loc') || lower.endsWith('.data') || lower.endsWith('.nloc')) {
+      if (lower.endsWith('.loc') || lower.endsWith('.data') || lower.endsWith('.dict') || lower.endsWith('.nloc')) {
         try {
           const buf = await f.arrayBuffer();
           newFiles.push({ name: f.name, size: buf.byteLength, data: buf });
