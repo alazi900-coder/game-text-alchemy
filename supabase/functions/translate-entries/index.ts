@@ -16,9 +16,17 @@ const PROTECTED_ABBREVIATIONS = [
 ];
 const ABBREV_PATTERN = new RegExp(`\\b(${PROTECTED_ABBREVIATIONS.join('|')})\\b`, 'g');
 
-function protectTags(text: string): { cleaned: string; tags: Map<string, string> } {
+function protectTags(text: string): { cleaned: string; tags: Map<string, string>; trailingNewlines: string } {
   const tags = new Map<string, string>();
   let counter = 0;
+
+  // Strip trailing newlines — they're not structural, just formatting artifacts
+  let trailingNewlines = '';
+  const trailingMatch = text.match(/(\n+)$/);
+  if (trailingMatch) {
+    trailingNewlines = trailingMatch[1];
+    text = text.slice(0, -trailingNewlines.length);
+  }
 
   // First: shield literal newlines as NEWLINE_N placeholders
   const nlParts = text.split('\n');
