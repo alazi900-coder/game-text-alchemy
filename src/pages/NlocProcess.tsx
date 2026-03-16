@@ -217,7 +217,7 @@ export default function NlocProcess() {
           رفع ملفات Luigi's Mansion 2 HD 👻
         </h1>
         <p className="text-muted-foreground font-body">
-          ارفع ملفات .loc أو .data — يمكنك رفع عدة ملفات دفعة واحدة
+          ارفع ملفات English.data و English.dict معاً — النصوص موجودة في ملف .data
         </p>
       </header>
 
