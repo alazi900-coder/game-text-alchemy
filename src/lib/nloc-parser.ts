@@ -96,7 +96,7 @@ export function parseNloc(data: Uint8Array): NlocFile {
     langId,
     messages,
     endian: le ? "little" : "big",
-    rawBuffer: data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength),
+    rawBuffer: (data.buffer as ArrayBuffer).slice(data.byteOffset, data.byteOffset + data.byteLength),
   };
 }
 
