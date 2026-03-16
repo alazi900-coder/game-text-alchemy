@@ -43,7 +43,7 @@ export default function NlocProcess() {
           addLog(`⚠️ فشل قراءة ${f.name}: ${err instanceof Error ? err.message : 'خطأ'}`);
         }
       } else {
-        addLog(`⏭️ تخطي ${f.name} — صيغة غير مدعومة (يدعم .loc و .data)`);
+        addLog(`⏭️ تخطي ${f.name} — صيغة غير مدعومة (يدعم .data و .dict و .loc)`);
       }
     }
 
