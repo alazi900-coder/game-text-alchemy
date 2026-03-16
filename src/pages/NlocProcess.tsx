@@ -232,8 +232,8 @@ export default function NlocProcess() {
               ${isProcessing ? "opacity-50 pointer-events-none" : ""}`}
           >
             <Ghost className="w-12 h-12 text-[hsl(120,70%,50%)] mb-3" />
-            <p className="font-display font-semibold mb-1">ملفات NLOC (.loc / .data)</p>
-            <p className="text-xs text-muted-foreground mb-4">اسحب الملفات هنا أو اختر من الجهاز</p>
+            <p className="font-display font-semibold mb-1">ملفات NLOC (.data + .dict)</p>
+            <p className="text-xs text-muted-foreground mb-4">ارفع English.data و English.dict معاً</p>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[hsl(120,50%,40%)]/10 border border-[hsl(120,50%,40%)]/30 text-sm font-display font-semibold cursor-pointer hover:bg-[hsl(120,50%,40%)]/20 transition-colors">
                 <Upload className="w-4 h-4" />
