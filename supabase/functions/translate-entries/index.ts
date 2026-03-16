@@ -78,7 +78,7 @@ function protectTags(text: string): { cleaned: string; tags: Map<string, string>
   }
   matches.sort((a, b) => a.start - b.start);
 
-  if (matches.length === 0) return { cleaned: shielded, tags };
+  if (matches.length === 0) return { cleaned: shielded, tags, trailingNewlines };
 
   let cleaned = '';
   let lastEnd = 0;
