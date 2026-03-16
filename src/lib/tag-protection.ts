@@ -87,3 +87,49 @@ export function restoreTags(translatedText: string, tags: ProtectedTag[]): strin
 
   return result;
 }
+
+/**
+ * Post-validation: compare original text tags with translated text tags.
+ * If any tags were modified or deleted, restore them automatically.
+ * If any foreign tags were invented by AI, remove them.
+ */
+export function validateAndRestoreTags(original: string, translated: string): string {
+  const origTags = extractAllTechTags(original);
+  if (origTags.length === 0) return translated;
+
+  let result = translated;
+  const origTagSet = new Set(origTags);
+
+  // Extract tags from translation
+  const transTags = extractAllTechTags(result);
+
+  // Remove invented tags (exist in translation but not in original)
+  for (const t of transTags) {
+    if (!origTagSet.has(t)) {
+      result = result.replace(t, '');
+    }
+  }
+
+  // Re-append missing tags (exist in original but not in translation)
+  const currentTags = extractAllTechTags(result);
+  const currentCount = new Map<string, number>();
+  for (const t of currentTags) currentCount.set(t, (currentCount.get(t) || 0) + 1);
+
+  for (const t of origTags) {
+    const n = currentCount.get(t) || 0;
+    if (n <= 0) {
+      // Tag is missing — re-append at end
+      result = `${result.trimEnd()} ${t}`.trim();
+    } else {
+      currentCount.set(t, n - 1);
+    }
+  }
+
+  return result.replace(/\s{2,}/g, ' ').trim();
+}
+
+/** Extract all technical tags from text (unified pattern) */
+function extractAllTechTags(text: string): string[] {
+  const TECH_TAG_REGEX = /[\uFFF9-\uFFFC]|[\uE000-\uE0FF]+|\$\w+\([^)]*\)|\$\w+|%[sd]|\[\s*M[A-Z]*ID_[^\]]+\]|\[\s*\w+\s*:[^\]]*?\s*\]|\[\s*\w+\s*=\s*\w[^\]]*\]|\{\s*\w+\s*:\s*\w[^}]*\}|\{[\w]+\}|<[\w\/][^>]*>/g;
+  return [...text.matchAll(TECH_TAG_REGEX)].map(m => m[0]);
+}
