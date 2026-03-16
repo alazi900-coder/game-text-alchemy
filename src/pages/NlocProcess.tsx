@@ -112,7 +112,7 @@ export default function NlocProcess() {
           const companionDict = dictFiles[baseName.toLowerCase()];
           if (companionDict) {
             addLog(`🔗 تم ربط ${file.name} مع ${companionDict.name}`);
-            nlocFilesMap[companionDict.name] = companionDict.data.buffer.slice(companionDict.data.byteOffset, companionDict.data.byteOffset + companionDict.data.byteLength);
+            nlocFilesMap[companionDict.name] = companionDict.data.buffer.slice(companionDict.data.byteOffset, companionDict.data.byteOffset + companionDict.data.byteLength) as ArrayBuffer;
           }
 
           let parsed;
