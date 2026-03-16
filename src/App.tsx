@@ -19,7 +19,8 @@ const Auth = lazy(() => import("./pages/Auth"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Install = lazy(() => import("./pages/Install"));
 const BundleExtractor = lazy(() => import("./pages/BundleExtractor"));
-
+const LuigiMansion = lazy(() => import("./pages/LuigiMansion"));
+const NlocProcess = lazy(() => import("./pages/NlocProcess"));
 
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-background">
@@ -51,6 +52,8 @@ const App = () => (
                 <Route path="/auth" element={<Auth />} />
                 <Route path="/install" element={<Install />} />
                 <Route path="/bundle-extractor" element={<ErrorBoundary fallbackTitle="خطأ في فاك الحزم"><BundleExtractor /></ErrorBoundary>} />
+                <Route path="/luigis-mansion" element={<LuigiMansion />} />
+                <Route path="/luigis-mansion/process" element={<ErrorBoundary fallbackTitle="خطأ في المعالجة"><NlocProcess /></ErrorBoundary>} />
                 <Route path="/cobalt" element={<ErrorBoundary fallbackTitle="خطأ في المحرر"><Editor /></ErrorBoundary>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
