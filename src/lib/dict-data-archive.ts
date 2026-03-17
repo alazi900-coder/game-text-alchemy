@@ -210,29 +210,40 @@ export function extractDataBlocks(
     if (block.extIndex !== 0) continue;
 
     const start = block.offset;
-    const size = archive.compressed ? block.compressedSize : block.decompressedSize;
+    const preferredCompressedSize = archive.compressed || (block.compressedSize > 0 && block.compressedSize < block.decompressedSize);
+    let size = preferredCompressedSize ? block.compressedSize : block.decompressedSize;
 
-    if (start + size > dataBytes.length) {
-      log?.(`⚠️ Block ${i}: offset ${start} + size ${size} exceeds file (${dataBytes.length})`);
-      continue;
+    if (size <= 0 || start + size > dataBytes.length) {
+      const fallbackSize = preferredCompressedSize ? block.decompressedSize : block.compressedSize;
+      if (fallbackSize > 0 && start + fallbackSize <= dataBytes.length) {
+        log?.(`ℹ️ Block ${i}: استخدام حجم بديل ${fallbackSize} بدل ${size}`);
+        size = fallbackSize;
+      } else {
+        log?.(`⚠️ Block ${i}: offset ${start} + size ${size} exceeds file (${dataBytes.length})`);
+        continue;
+      }
     }
 
     const raw = dataBytes.subarray(start, start + size);
 
-    if (archive.compressed && block.compressedSize > 0 && block.compressedSize !== block.decompressedSize) {
+    const shouldTryInflate =
+      archive.compressed ||
+      (block.compressedSize > 0 && block.decompressedSize > block.compressedSize) ||
+      (raw.length > 2 && raw[0] === 0x78);
+
+    if (shouldTryInflate && raw.length > 2) {
       try {
         const decompressed = inflate(raw);
-        log?.(`📦 Block ${i}: ${block.compressedSize} → ${decompressed.length} bytes (zlib)`);
+        log?.(`📦 Block ${i}: ${raw.length} → ${decompressed.length} bytes (zlib)`);
         results.push(decompressed);
+        continue;
       } catch (e) {
-        log?.(`⚠️ Block ${i}: فشل فك الضغط — ${e instanceof Error ? e.message : 'خطأ'}`);
-        // Try raw
-        results.push(raw);
+        log?.(`⚠️ Block ${i}: فشل فك الضغط — ${e instanceof Error ? e.message : 'خطأ'} (سيتم استخدام raw)`);
       }
-    } else {
-      log?.(`📦 Block ${i}: ${raw.length} bytes (raw)`);
-      results.push(raw);
     }
+
+    log?.(`📦 Block ${i}: ${raw.length} bytes (raw)`);
+    results.push(raw);
   }
 
   return results;
