@@ -36,7 +36,8 @@ export interface DictArchive {
   blocks: DictBlock[];
 }
 
-const DICT_MAGIC = 0x5824F3A9;
+const DICT_MAGIC_BE = 0x5824F3A9;
+const DICT_MAGIC_LE = 0xA9F32458;
 
 /**
  * Parse a .dict file header to extract block table info.
