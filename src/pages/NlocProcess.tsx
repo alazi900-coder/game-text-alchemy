@@ -71,7 +71,8 @@ export default function NlocProcess() {
     addLog(`📄 عدد الملفات: ${nlocFiles.length}`);
 
     try {
-      const { parseNloc, parseNlocFromDictData, isNloc, isDictFile, findAndParseNloc } = await import("@/lib/nloc-parser");
+      const { parseNloc, isNloc, findAndParseNloc } = await import("@/lib/nloc-parser");
+      const { extractDictDataArchive, tryDecompressDataFile } = await import("@/lib/dict-data-archive");
 
       setStage("extracting");
 
@@ -107,52 +108,73 @@ export default function NlocProcess() {
           nlocFilesMap[file.name] = file.data.buffer.slice(file.data.byteOffset, file.data.byteOffset + file.data.byteLength) as ArrayBuffer;
           addLog(`📂 ${file.name}: ${(file.data.length / 1024).toFixed(1)} KB`);
 
-          // Log first bytes for debugging
-          const hexPreview = Array.from(file.data.subarray(0, 20)).map(b => b.toString(16).padStart(2, '0')).join(' ');
-          addLog(`🔍 أول 20 بايت: ${hexPreview}`);
-
           // Check for companion .dict file
           const baseName = file.name.replace(/\.data$/i, '');
           const companionDict = dictFiles[baseName.toLowerCase()];
           if (companionDict) {
             addLog(`🔗 تم ربط ${file.name} مع ${companionDict.name}`);
-            nlocFilesMap[companionDict.name] = companionDict.data.buffer.slice(companionDict.data.byteOffset, companionDict.data.byteOffset + companionDict.data.byteLength) as ArrayBuffer;
           }
 
           let parsed;
 
+          // Strategy 1: Direct NLOC file
           if (isNloc(file.data)) {
-            // Direct NLOC file
             parsed = parseNloc(file.data);
             addLog(`✅ ملف NLOC مباشر`);
-          } else if (companionDict || file.name.toLowerCase().endsWith('.data')) {
-            // .data file with companion .dict OR standalone .data — skip 0x10 header
-            // (Reference: NLOC-Tool always skips 0x10 bytes from .data files)
-            const nlocBytes = file.data.subarray(0x10);
-            if (isNloc(nlocBytes)) {
-              parsed = parseNloc(nlocBytes);
-              addLog(`✅ تم استخراج NLOC من .data (تخطي 0x10 بايت ترويسة)`);
-            } else {
-              // Try scanning
-              const scanned = findAndParseNloc(file.data);
-              if (scanned) {
-                parsed = scanned;
-                addLog(`✅ تم العثور على NLOC بالمسح الشامل`);
+          }
+          // Strategy 2: .dict/.data archive pair — decompress blocks via dict
+          else if (companionDict) {
+            addLog(`📦 فك ضغط الأرشيف باستخدام ${companionDict.name}...`);
+            try {
+              const decompressed = extractDictDataArchive(companionDict.data, file.data, addLog);
+              addLog(`📦 حجم البيانات بعد فك الضغط: ${(decompressed.length / 1024).toFixed(1)} KB`);
+
+              // Search for NLOC in decompressed data
+              if (isNloc(decompressed)) {
+                parsed = parseNloc(decompressed);
+                addLog(`✅ تم العثور على NLOC مباشرة بعد فك الضغط`);
               } else {
-                addLog(`⚠️ ${file.name}: لا يوجد بيانات NLOC — تخطي`);
-                continue;
+                const scanned = findAndParseNloc(decompressed);
+                if (scanned) {
+                  parsed = scanned;
+                  addLog(`✅ تم العثور على NLOC بالمسح بعد فك الضغط`);
+                }
+              }
+            } catch (archErr) {
+              addLog(`⚠️ فشل فك ضغط الأرشيف: ${archErr instanceof Error ? archErr.message : 'خطأ'}`);
+            }
+          }
+
+          // Strategy 3: Standalone .data — try brute-force decompression
+          if (!parsed && file.name.toLowerCase().endsWith('.data')) {
+            addLog(`🔄 محاولة فك ضغط ${file.name} بدون .dict...`);
+            const decompressed = tryDecompressDataFile(file.data, addLog);
+            if (decompressed) {
+              if (isNloc(decompressed)) {
+                parsed = parseNloc(decompressed);
+                addLog(`✅ تم العثور على NLOC بعد فك الضغط`);
+              } else {
+                const scanned = findAndParseNloc(decompressed);
+                if (scanned) {
+                  parsed = scanned;
+                  addLog(`✅ تم العثور على NLOC بالمسح بعد فك الضغط`);
+                }
               }
             }
-          } else {
-            // Unknown format — try scanning
+          }
+
+          // Strategy 4: Raw scan without decompression (fallback)
+          if (!parsed) {
             const scanned = findAndParseNloc(file.data);
             if (scanned) {
               parsed = scanned;
-              addLog(`✅ تم العثور على NLOC بالمسح الشامل`);
-            } else {
-              addLog(`⚠️ ${file.name}: صيغة غير معروفة — تخطي`);
-              continue;
+              addLog(`✅ تم العثور على NLOC بالمسح الشامل (بدون ضغط)`);
             }
+          }
+
+          if (!parsed) {
+            addLog(`⚠️ ${file.name}: لا يوجد بيانات NLOC — تخطي`);
+            continue;
           }
 
           addLog(`✅ ${file.name}: ${parsed.messages.length} نص (لغة: 0x${parsed.langId.toString(16).toUpperCase()})`);
