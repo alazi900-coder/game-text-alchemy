@@ -39,43 +39,157 @@ export interface DictArchive {
 const DICT_MAGIC_BE = 0x5824F3A9;
 const DICT_MAGIC_LE = 0xA9F32458;
 
-/**
- * Parse a .dict file header to extract block table info.
- */
-export function parseDictHeader(dictData: Uint8Array): DictArchive {
-  if (dictData.length < 0x14) throw new Error("ملف .dict صغير جداً");
+interface DictParseCandidate {
+  archive: DictArchive;
+  blockTableStart: number;
+  littleEndian: boolean;
+  blockCount: number;
+  score: number;
+  validBlocks: number;
+}
 
-  const view = new DataView(dictData.buffer, dictData.byteOffset, dictData.byteLength);
-  const magic = view.getUint32(0x00, true);
+const align4 = (v: number) => (v + 3) & ~3;
 
-  if (magic !== DICT_MAGIC_BE && magic !== DICT_MAGIC_LE) {
-    throw new Error(`ليس ملف .dict صالح (magic: 0x${magic.toString(16)})`);
-  }
-
-  const compressed = dictData[0x06] === 1;
-  const blockCount = view.getUint32(0x08, true);
-  const fileTableCount = dictData[0x10];
-
-  // File table references come after the header (0x11 bytes, aligned)
-  // Each file table ref is 12 bytes
-  const fileTableRefsStart = 0x14; // after header (with some alignment)
-  const blockTableStart = fileTableRefsStart + fileTableCount * 12;
-
+function parseBlocksWithStrategy(
+  view: DataView,
+  dictData: Uint8Array,
+  blockTableStart: number,
+  blockCount: number,
+  littleEndian: boolean
+): DictBlock[] {
   const blocks: DictBlock[] = [];
+
   for (let i = 0; i < blockCount; i++) {
     const off = blockTableStart + i * 16;
     if (off + 16 > dictData.length) break;
 
     blocks.push({
-      offset: view.getUint32(off, true),
-      decompressedSize: view.getUint32(off + 4, true),
-      compressedSize: view.getUint32(off + 8, true),
+      offset: view.getUint32(off, littleEndian),
+      decompressedSize: view.getUint32(off + 4, littleEndian),
+      compressedSize: view.getUint32(off + 8, littleEndian),
       usageType: dictData[off + 12],
       extIndex: dictData[off + 14],
     });
   }
 
-  return { compressed, blocks };
+  return blocks;
+}
+
+function scoreBlocks(blocks: DictBlock[], dataFileLength?: number): { score: number; validBlocks: number } {
+  let score = 0;
+  let validBlocks = 0;
+
+  for (const block of blocks) {
+    const validType = block.usageType === 0x08 || block.usageType === 0x80;
+    const validExt = block.extIndex === 0 || block.extIndex === 1;
+
+    if (validType) score += 2;
+    if (validExt) score += 2;
+
+    if (dataFileLength != null) {
+      const fitsComp = block.compressedSize > 0 && block.offset + block.compressedSize <= dataFileLength;
+      const fitsDecomp = block.decompressedSize > 0 && block.offset + block.decompressedSize <= dataFileLength;
+      if (fitsComp || fitsDecomp) {
+        validBlocks += 1;
+        score += 6;
+      } else {
+        score -= 3;
+      }
+      if (block.offset < dataFileLength) score += 1;
+    }
+  }
+
+  return { score, validBlocks };
+}
+
+/**
+ * Parse a .dict file header to extract block table info.
+ * Tries multiple table alignments + endian modes and picks the most plausible one.
+ */
+export function parseDictHeader(
+  dictData: Uint8Array,
+  dataFileLength?: number,
+  log?: (msg: string) => void
+): DictArchive {
+  if (dictData.length < 0x11) throw new Error("ملف .dict صغير جداً");
+
+  const view = new DataView(dictData.buffer, dictData.byteOffset, dictData.byteLength);
+  const magicLE = view.getUint32(0x00, true);
+  const magicBE = view.getUint32(0x00, false);
+
+  if (magicLE !== DICT_MAGIC_BE && magicLE !== DICT_MAGIC_LE && magicBE !== DICT_MAGIC_BE) {
+    throw new Error(`ليس ملف .dict صالح (magicLE: 0x${magicLE.toString(16)})`);
+  }
+
+  const compressedFromHeader = dictData[0x06] === 1;
+  const fileTableCount = dictData[0x10];
+
+  const blockCountCandidates = Array.from(
+    new Set([view.getUint32(0x08, true), view.getUint32(0x08, false)])
+  ).filter((v) => v > 0 && v < 100000);
+
+  const safeBlockCounts = blockCountCandidates.length > 0 ? blockCountCandidates : [view.getUint32(0x08, true)];
+
+  const base = 0x11 + fileTableCount * 12;
+  const tableStarts = Array.from(new Set([base, align4(base), 0x14 + fileTableCount * 12]));
+
+  const candidates: DictParseCandidate[] = [];
+
+  for (const blockCount of safeBlockCounts) {
+    for (const blockTableStart of tableStarts) {
+      for (const littleEndian of [true, false]) {
+        const blocks = parseBlocksWithStrategy(view, dictData, blockTableStart, blockCount, littleEndian);
+        if (blocks.length === 0) continue;
+
+        const scored = scoreBlocks(blocks, dataFileLength);
+        candidates.push({
+          archive: { compressed: compressedFromHeader, blocks },
+          blockTableStart,
+          littleEndian,
+          blockCount,
+          score: scored.score,
+          validBlocks: scored.validBlocks,
+        });
+      }
+    }
+  }
+
+  if (candidates.length === 0) {
+    throw new Error("تعذر قراءة جدول البلوكات من ملف .dict");
+  }
+
+  candidates.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    if (b.validBlocks !== a.validBlocks) return b.validBlocks - a.validBlocks;
+    return b.archive.blocks.length - a.archive.blocks.length;
+  });
+
+  const best = candidates[0];
+  const blocks = best.archive.blocks;
+
+  // Infer compression in case the header flag is wrong.
+  let inferredCompressed = compressedFromHeader;
+  if (dataFileLength != null) {
+    const compFits = blocks.filter((b) => b.compressedSize > 0 && b.offset + b.compressedSize <= dataFileLength).length;
+    const decompFits = blocks.filter((b) => b.decompressedSize > 0 && b.offset + b.decompressedSize <= dataFileLength).length;
+    const looksCompressed = blocks.some((b) => b.compressedSize > 0 && b.decompressedSize > b.compressedSize);
+
+    if (!compressedFromHeader && looksCompressed && compFits >= decompFits) {
+      inferredCompressed = true;
+    }
+    if (compressedFromHeader && compFits === 0 && decompFits > 0) {
+      inferredCompressed = false;
+    }
+  }
+
+  log?.(
+    `📋 .dict strategy: start=0x${best.blockTableStart.toString(16)}, endian=${best.littleEndian ? "LE" : "BE"}, blocks=${best.archive.blocks.length}, valid=${best.validBlocks}`
+  );
+
+  return {
+    compressed: inferredCompressed,
+    blocks,
+  };
 }
 
 /**
