@@ -258,7 +258,7 @@ export function extractDictDataArchive(
   dataBytes: Uint8Array,
   log?: (msg: string) => void
 ): Uint8Array {
-  const archive = parseDictHeader(dictBytes);
+  const archive = parseDictHeader(dictBytes, dataBytes.length, log);
   log?.(`📋 .dict: ${archive.blocks.length} blocks, compressed=${archive.compressed}`);
 
   const blocks = extractDataBlocks(dataBytes, archive, log);
