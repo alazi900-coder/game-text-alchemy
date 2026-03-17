@@ -36,7 +36,8 @@ export interface DictArchive {
   blocks: DictBlock[];
 }
 
-const DICT_MAGIC = 0x5824F3A9;
+const DICT_MAGIC_BE = 0x5824F3A9;
+const DICT_MAGIC_LE = 0xA9F32458;
 
 /**
  * Parse a .dict file header to extract block table info.
@@ -47,7 +48,7 @@ export function parseDictHeader(dictData: Uint8Array): DictArchive {
   const view = new DataView(dictData.buffer, dictData.byteOffset, dictData.byteLength);
   const magic = view.getUint32(0x00, true);
 
-  if (magic !== DICT_MAGIC) {
+  if (magic !== DICT_MAGIC_BE && magic !== DICT_MAGIC_LE) {
     throw new Error(`ليس ملف .dict صالح (magic: 0x${magic.toString(16)})`);
   }
 
