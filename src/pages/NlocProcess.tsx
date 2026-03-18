@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { Upload, FileText, ArrowRight, Loader2, Pencil, Sparkles, Download, FolderOpen, Ghost } from "lucide-react";
+import { Upload, FileText, ArrowRight, Loader2, Pencil, Sparkles, Download, FolderOpen, Ghost, Bug } from "lucide-react";
 import type { ExtractedEntry } from "@/components/editor/types";
 
 type Stage = "idle" | "uploading" | "extracting" | "done" | "error";
@@ -26,6 +26,8 @@ export default function NlocProcess() {
   const [stage, setStage] = useState<Stage>("idle");
   const [logs, setLogs] = useState<string[]>([]);
   const [extracting, setExtracting] = useState(false);
+  const diagnosticRef = useRef<object | null>(null);
+  const [hasDiagnostic, setHasDiagnostic] = useState(false);
 
   const addLog = (msg: string) => setLogs(prev => [...prev, `[${new Date().toLocaleTimeString("ar-SA")}] ${msg}`]);
 
@@ -72,8 +74,10 @@ export default function NlocProcess() {
 
     try {
       const { parseNloc, isNloc, findAndParseNloc } = await import("@/lib/nloc-parser");
-      const { extractDictDataArchive, tryDecompressDataFile } = await import("@/lib/dict-data-archive");
+      const { extractDictDataArchive, tryDecompressDataFile, collectDictParseCandidates } = await import("@/lib/dict-data-archive");
 
+      diagnosticRef.current = null;
+      setHasDiagnostic(false);
       setStage("extracting");
 
       const allEntries: ExtractedEntry[] = [];
@@ -126,6 +130,37 @@ export default function NlocProcess() {
           else if (companionDict) {
             addLog(`📦 فك ضغط الأرشيف باستخدام ${companionDict.name}...`);
             try {
+              // Capture diagnostic candidates
+              try {
+                const candidates = collectDictParseCandidates(companionDict.data, file.data.length).slice(0, 20);
+                diagnosticRef.current = {
+                  dictFile: companionDict.name,
+                  dataFile: file.name,
+                  dataSize: file.data.length,
+                  dictSize: companionDict.data.length,
+                  timestamp: new Date().toISOString(),
+                  topCandidates: candidates.map((c, i) => ({
+                    rank: i + 1,
+                    blockTableStart: `0x${c.blockTableStart.toString(16)}`,
+                    endian: c.littleEndian ? "LE" : "BE",
+                    blockCount: c.blockCount,
+                    validBlocks: c.validBlocks,
+                    score: c.score,
+                    compressed: c.archive.compressed,
+                    preferredDataBlocks: c.archive.preferredDataBlockIndices,
+                    blocks: c.archive.blocks.map((b, bi) => ({
+                      index: bi,
+                      offset: `0x${b.offset.toString(16)}`,
+                      decompressedSize: b.decompressedSize,
+                      compressedSize: b.compressedSize,
+                      usageType: `0x${b.usageType.toString(16)}`,
+                      extIndex: b.extIndex,
+                    })),
+                  })),
+                };
+                setHasDiagnostic(true);
+              } catch { /* diagnostic capture is optional */ }
+
               const decompressed = extractDictDataArchive(companionDict.data, file.data, addLog);
               addLog(`📦 حجم البيانات بعد فك الضغط: ${(decompressed.length / 1024).toFixed(1)} KB`);
 
@@ -364,6 +399,21 @@ export default function NlocProcess() {
                   }}>
                   <Download className="w-4 h-4" /> تصدير
                 </Button>
+                {hasDiagnostic && (
+                  <Button variant="outline" size="sm" className="gap-1.5"
+                    onClick={() => {
+                      const json = JSON.stringify(diagnosticRef.current, null, 2);
+                      const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `dict-diagnostic-${new Date().toISOString().slice(0, 10)}.json`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}>
+                    <Bug className="w-4 h-4" /> تقرير تشخيص متقدم
+                  </Button>
+                )}
               </CardHeader>
               <CardContent>
                 <div className="bg-background rounded-lg p-4 max-h-96 overflow-y-auto font-mono text-xs space-y-1 border border-border/40" dir="ltr">
