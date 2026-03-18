@@ -371,6 +371,65 @@ function blockIndicesForExtraction(archive: DictArchive): number[] {
     .map(({ i }) => i);
 }
 
+function toUint8Result(result: unknown): Uint8Array | null {
+  if (!result) return null;
+  if (result instanceof Uint8Array) return result;
+  if (result instanceof ArrayBuffer) return new Uint8Array(result);
+  if (Array.isArray(result)) return new Uint8Array(result);
+  return null;
+}
+
+/**
+ * Inflate zlib stream and tolerate trailing bytes after end-of-stream.
+ */
+function tryInflateAllowTrailing(input: Uint8Array, maxInputBytes = 4_000_000): Uint8Array | null {
+  if (input.length < 3) return null;
+
+  try {
+    return inflate(input);
+  } catch {
+    // Continue with tolerant incremental mode.
+  }
+
+  const inflater = new Inflate();
+  const maxBytes = Math.min(input.length, maxInputBytes);
+
+  for (let i = 0; i < maxBytes; i++) {
+    inflater.push(input.subarray(i, i + 1), false);
+
+    if (inflater.err) {
+      return null;
+    }
+
+    if (inflater.ended) {
+      return toUint8Result(inflater.result);
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Try inflate directly from block start, then from embedded zlib header inside prefix.
+ */
+function tryInflateBlock(raw: Uint8Array, maxPrefixScan = 256): { inflated: Uint8Array; streamOffset: number } | null {
+  const direct = tryInflateAllowTrailing(raw);
+  if (direct && direct.length > 0) {
+    return { inflated: direct, streamOffset: 0 };
+  }
+
+  const scanLimit = Math.min(Math.max(0, raw.length - 2), maxPrefixScan);
+  for (let i = 1; i <= scanLimit; i++) {
+    if (!looksLikeZlibHeaderAt(raw, i)) continue;
+    const nested = tryInflateAllowTrailing(raw.subarray(i));
+    if (nested && nested.length > 0) {
+      return { inflated: nested, streamOffset: i };
+    }
+  }
+
+  return null;
+}
+
 /**
  * Parse a .dict file header to extract block table info.
  */
@@ -417,17 +476,21 @@ export function extractDataBlocks(
     }
 
     const raw = dataBytes.subarray(start, start + size);
-    const shouldInflate = archive.compressed || looksLikeZlibHeaderAt(raw, 0);
+    const likelyCompressed = archive.compressed || looksLikeZlibHeaderAt(raw, 0);
+    const inflatedInfo = tryInflateBlock(raw, likelyCompressed ? 384 : 128);
 
-    if (shouldInflate && raw.length > 2) {
-      try {
-        const inflated = inflate(raw);
-        log?.(`📦 Block ${idx}: ${raw.length} → ${inflated.length} bytes (zlib)`);
-        out.push(inflated);
-        continue;
-      } catch (e) {
-        log?.(`⚠️ Block ${idx}: فشل فك الضغط — ${e instanceof Error ? e.message : "خطأ"} (سيتم استخدام raw)`);
+    if (inflatedInfo && inflatedInfo.inflated.length > 0) {
+      if (inflatedInfo.streamOffset === 0) {
+        log?.(`📦 Block ${idx}: ${raw.length} → ${inflatedInfo.inflated.length} bytes (zlib)`);
+      } else {
+        log?.(`📦 Block ${idx}: ${raw.length} → ${inflatedInfo.inflated.length} bytes (zlib @ +0x${inflatedInfo.streamOffset.toString(16)})`);
       }
+      out.push(inflatedInfo.inflated);
+      continue;
+    }
+
+    if (likelyCompressed) {
+      log?.(`⚠️ Block ${idx}: فشل فك zlib — سيتم استخدام raw`);
     }
 
     log?.(`📦 Block ${idx}: ${raw.length} bytes (raw)`);
@@ -445,7 +508,7 @@ export function extractDictDataArchive(
   dataBytes: Uint8Array,
   log?: (msg: string) => void
 ): Uint8Array {
-  const candidates = collectDictParseCandidates(dictBytes, dataBytes.length).slice(0, 12);
+  const candidates = collectDictParseCandidates(dictBytes, dataBytes.length);
 
   let chosen: { candidate: DictParseCandidate; buffers: Uint8Array[]; combined: Uint8Array; score: number; magicAt: number } | null = null;
 
@@ -485,6 +548,14 @@ export function extractDictDataArchive(
   const nlocAt = indexOfNlocMagic(combined);
   if (nlocAt >= 0) {
     log?.(`✅ تم اكتشاف ترويسة NLOC عند offset 0x${nlocAt.toString(16)}`);
+    return combined;
+  }
+
+  // Strong fallback: full embedded zlib scan over original .data.
+  const brute = tryDecompressDataFile(dataBytes, log);
+  if (brute) {
+    log?.(`✅ تم العثور على بيانات NLOC عبر مسح zlib الشامل`);
+    return brute;
   }
 
   return combined;
@@ -499,13 +570,11 @@ export function tryDecompressDataFile(dataBytes: Uint8Array, log?: (msg: string)
   for (const off of directOffsets) {
     if (!looksLikeZlibHeaderAt(dataBytes, off)) continue;
 
-    try {
-      const out = inflate(dataBytes.subarray(off));
-      log?.(`✅ Decompressed from offset 0x${off.toString(16)}: ${out.length} bytes`);
-      return out;
-    } catch {
-      // continue
-    }
+    const out = tryInflateAllowTrailing(dataBytes.subarray(off));
+    if (!out || out.length === 0) continue;
+
+    log?.(`✅ Decompressed from offset 0x${off.toString(16)}: ${out.length} bytes`);
+    return out;
   }
 
   const streams: Uint8Array[] = [];
@@ -515,26 +584,22 @@ export function tryDecompressDataFile(dataBytes: Uint8Array, log?: (msg: string)
   let attempts = 0;
   for (let i = 0; i < dataBytes.length - 2; i++) {
     if (!looksLikeZlibHeaderAt(dataBytes, i)) continue;
-    if (++attempts > 4000) break;
+    if (++attempts > 6000) break;
 
-    try {
-      const out = inflate(dataBytes.subarray(i));
-      const nlocAt = indexOfNlocMagic(out);
-      if (nlocAt >= 0) {
-        log?.(`✅ Found NLOC zlib stream at offset 0x${i.toString(16)} (${out.length} bytes)`);
-        return out;
-      }
+    const out = tryInflateAllowTrailing(dataBytes.subarray(i), 8_000_000);
+    if (!out || out.length < 16) continue;
 
-      if (out.length < 16) continue;
-
-      const key = `${out.length}:${out[0]}:${out[1]}:${out[2]}`;
-      if (seenKeys.has(key)) continue;
-      seenKeys.add(key);
-
-      streams.push(out);
-    } catch {
-      // continue
+    const nlocAt = indexOfNlocMagic(out);
+    if (nlocAt >= 0) {
+      log?.(`✅ Found NLOC zlib stream at offset 0x${i.toString(16)} (${out.length} bytes)`);
+      return out;
     }
+
+    const key = `${out.length}:${out[0]}:${out[1]}:${out[2]}`;
+    if (seenKeys.has(key)) continue;
+    seenKeys.add(key);
+
+    streams.push(out);
   }
 
   if (streams.length === 0) return null;
