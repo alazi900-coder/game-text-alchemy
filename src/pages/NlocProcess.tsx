@@ -399,7 +399,7 @@ export default function NlocProcess() {
                   }}>
                   <Download className="w-4 h-4" /> تصدير
                 </Button>
-                {diagnosticRef.current && (
+                {hasDiagnostic && (
                   <Button variant="outline" size="sm" className="gap-1.5"
                     onClick={() => {
                       const json = JSON.stringify(diagnosticRef.current, null, 2);
