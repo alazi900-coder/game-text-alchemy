@@ -128,6 +128,36 @@ export default function NlocProcess() {
           else if (companionDict) {
             addLog(`📦 فك ضغط الأرشيف باستخدام ${companionDict.name}...`);
             try {
+              // Capture diagnostic candidates
+              try {
+                const candidates = collectDictParseCandidates(companionDict.data, file.data.length).slice(0, 20);
+                diagnosticRef.current = {
+                  dictFile: companionDict.name,
+                  dataFile: file.name,
+                  dataSize: file.data.length,
+                  dictSize: companionDict.data.length,
+                  timestamp: new Date().toISOString(),
+                  topCandidates: candidates.map((c, i) => ({
+                    rank: i + 1,
+                    blockTableStart: `0x${c.blockTableStart.toString(16)}`,
+                    endian: c.littleEndian ? "LE" : "BE",
+                    blockCount: c.blockCount,
+                    validBlocks: c.validBlocks,
+                    score: c.score,
+                    compressed: c.archive.compressed,
+                    preferredDataBlocks: c.archive.preferredDataBlockIndices,
+                    blocks: c.archive.blocks.map((b, bi) => ({
+                      index: bi,
+                      offset: `0x${b.offset.toString(16)}`,
+                      decompressedSize: b.decompressedSize,
+                      compressedSize: b.compressedSize,
+                      usageType: `0x${b.usageType.toString(16)}`,
+                      extIndex: b.extIndex,
+                    })),
+                  })),
+                };
+              } catch { /* diagnostic capture is optional */ }
+
               const decompressed = extractDictDataArchive(companionDict.data, file.data, addLog);
               addLog(`📦 حجم البيانات بعد فك الضغط: ${(decompressed.length / 1024).toFixed(1)} KB`);
 
