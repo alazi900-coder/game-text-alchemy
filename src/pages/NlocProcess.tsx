@@ -26,6 +26,7 @@ export default function NlocProcess() {
   const [stage, setStage] = useState<Stage>("idle");
   const [logs, setLogs] = useState<string[]>([]);
   const [extracting, setExtracting] = useState(false);
+  const diagnosticRef = useRef<object | null>(null);
 
   const addLog = (msg: string) => setLogs(prev => [...prev, `[${new Date().toLocaleTimeString("ar-SA")}] ${msg}`]);
 
