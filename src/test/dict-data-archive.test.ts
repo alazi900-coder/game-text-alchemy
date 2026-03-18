@@ -90,7 +90,7 @@ describe("dict-data-archive", () => {
     const nloc = createMinimalNloc("Hidden stream");
     const compressedNloc = deflate(nloc);
 
-    const noisyData = new Uint8Array(0x1200 + compressedNloc.length + 32);
+    const noisyData = new Uint8Array(0x1200 + compressedNloc.length);
     noisyData.fill(0x55);
     noisyData.set(compressedNloc, 0x1200);
 
