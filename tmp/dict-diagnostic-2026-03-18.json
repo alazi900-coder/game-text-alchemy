@@ -1,0 +1,1217 @@
+{
+  "dictFile": "english.dict",
+  "dataFile": "english.data",
+  "dataSize": 676352,
+  "dictSize": 177,
+  "timestamp": "2026-03-18T20:08:04.081Z",
+  "topCandidates": [
+    {
+      "rank": 1,
+      "blockTableStart": "0x34",
+      "endian": "LE",
+      "blockCount": 7,
+      "validBlocks": 3,
+      "score": 9,
+      "compressed": false,
+      "preferredDataBlocks": [],
+      "blocks": [
+        {
+          "index": 0,
+          "offset": "0x0",
+          "decompressedSize": 12,
+          "compressedSize": 0,
+          "usageType": "0x8",
+          "extIndex": 0
+        },
+        {
+          "index": 1,
+          "offset": "0x0",
+          "decompressedSize": 12,
+          "compressedSize": 0,
+          "usageType": "0x8",
+          "extIndex": 1
+        },
+        {
+          "index": 2,
+          "offset": "0x200",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 3,
+          "offset": "0x200",
+          "decompressedSize": 675556,
+          "compressedSize": 0,
+          "usageType": "0x4",
+          "extIndex": 0
+        },
+        {
+          "index": 4,
+          "offset": "0xa5200",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 5,
+          "offset": "0x200",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 1
+        },
+        {
+          "index": 6,
+          "offset": "0x200",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 1
+        }
+      ]
+    },
+    {
+      "rank": 2,
+      "blockTableStart": "0x2c",
+      "endian": "LE",
+      "blockCount": 7,
+      "validBlocks": 6,
+      "score": 8,
+      "compressed": false,
+      "preferredDataBlocks": [],
+      "blocks": [
+        {
+          "index": 0,
+          "offset": "0x1",
+          "decompressedSize": 65537,
+          "compressedSize": 0,
+          "usageType": "0xc",
+          "extIndex": 0
+        },
+        {
+          "index": 1,
+          "offset": "0x0",
+          "decompressedSize": 16777224,
+          "compressedSize": 0,
+          "usageType": "0xc",
+          "extIndex": 0
+        },
+        {
+          "index": 2,
+          "offset": "0x0",
+          "decompressedSize": 16842760,
+          "compressedSize": 512,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 3,
+          "offset": "0x0",
+          "decompressedSize": 16777216,
+          "compressedSize": 512,
+          "usageType": "0xe4",
+          "extIndex": 10
+        },
+        {
+          "index": 4,
+          "offset": "0x0",
+          "decompressedSize": 4,
+          "compressedSize": 676352,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 5,
+          "offset": "0x0",
+          "decompressedSize": 0,
+          "compressedSize": 512,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 6,
+          "offset": "0x0",
+          "decompressedSize": 16842752,
+          "compressedSize": 512,
+          "usageType": "0x0",
+          "extIndex": 0
+        }
+      ]
+    },
+    {
+      "rank": 3,
+      "blockTableStart": "0x3c",
+      "endian": "LE",
+      "blockCount": 7,
+      "validBlocks": 6,
+      "score": 4,
+      "compressed": false,
+      "preferredDataBlocks": [],
+      "blocks": [
+        {
+          "index": 0,
+          "offset": "0x0",
+          "decompressedSize": 16777224,
+          "compressedSize": 0,
+          "usageType": "0xc",
+          "extIndex": 0
+        },
+        {
+          "index": 1,
+          "offset": "0x0",
+          "decompressedSize": 16842760,
+          "compressedSize": 512,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 2,
+          "offset": "0x0",
+          "decompressedSize": 16777216,
+          "compressedSize": 512,
+          "usageType": "0xe4",
+          "extIndex": 10
+        },
+        {
+          "index": 3,
+          "offset": "0x0",
+          "decompressedSize": 4,
+          "compressedSize": 676352,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 4,
+          "offset": "0x0",
+          "decompressedSize": 0,
+          "compressedSize": 512,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 5,
+          "offset": "0x0",
+          "decompressedSize": 16842752,
+          "compressedSize": 512,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 6,
+          "offset": "0x0",
+          "decompressedSize": 65536,
+          "compressedSize": 1952539694,
+          "usageType": "0x61",
+          "extIndex": 46
+        }
+      ]
+    },
+    {
+      "rank": 4,
+      "blockTableStart": "0x3c",
+      "endian": "BE",
+      "blockCount": 7,
+      "validBlocks": 5,
+      "score": 1,
+      "compressed": false,
+      "preferredDataBlocks": [],
+      "blocks": [
+        {
+          "index": 0,
+          "offset": "0x0",
+          "decompressedSize": 134217729,
+          "compressedSize": 0,
+          "usageType": "0xc",
+          "extIndex": 0
+        },
+        {
+          "index": 1,
+          "offset": "0x0",
+          "decompressedSize": 134217985,
+          "compressedSize": 131072,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 2,
+          "offset": "0x0",
+          "decompressedSize": 1,
+          "compressedSize": 131072,
+          "usageType": "0xe4",
+          "extIndex": 10
+        },
+        {
+          "index": 3,
+          "offset": "0x0",
+          "decompressedSize": 67108864,
+          "compressedSize": 5376512,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 4,
+          "offset": "0x0",
+          "decompressedSize": 0,
+          "compressedSize": 131072,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 5,
+          "offset": "0x0",
+          "decompressedSize": 257,
+          "compressedSize": 131072,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 6,
+          "offset": "0x0",
+          "decompressedSize": 256,
+          "compressedSize": 778330484,
+          "usageType": "0x61",
+          "extIndex": 46
+        }
+      ]
+    },
+    {
+      "rank": 5,
+      "blockTableStart": "0x2c",
+      "endian": "BE",
+      "blockCount": 7,
+      "validBlocks": 4,
+      "score": -8,
+      "compressed": false,
+      "preferredDataBlocks": [],
+      "blocks": [
+        {
+          "index": 0,
+          "offset": "0x1000000",
+          "decompressedSize": 16777472,
+          "compressedSize": 0,
+          "usageType": "0xc",
+          "extIndex": 0
+        },
+        {
+          "index": 1,
+          "offset": "0x0",
+          "decompressedSize": 134217729,
+          "compressedSize": 0,
+          "usageType": "0xc",
+          "extIndex": 0
+        },
+        {
+          "index": 2,
+          "offset": "0x0",
+          "decompressedSize": 134217985,
+          "compressedSize": 131072,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 3,
+          "offset": "0x0",
+          "decompressedSize": 1,
+          "compressedSize": 131072,
+          "usageType": "0xe4",
+          "extIndex": 10
+        },
+        {
+          "index": 4,
+          "offset": "0x0",
+          "decompressedSize": 67108864,
+          "compressedSize": 5376512,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 5,
+          "offset": "0x0",
+          "decompressedSize": 0,
+          "compressedSize": 131072,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 6,
+          "offset": "0x0",
+          "decompressedSize": 257,
+          "compressedSize": 131072,
+          "usageType": "0x0",
+          "extIndex": 0
+        }
+      ]
+    },
+    {
+      "rank": 6,
+      "blockTableStart": "0x24",
+      "endian": "LE",
+      "blockCount": 7,
+      "validBlocks": 3,
+      "score": -12,
+      "compressed": false,
+      "preferredDataBlocks": [],
+      "blocks": [
+        {
+          "index": 0,
+          "offset": "0x3000201",
+          "decompressedSize": 84148224,
+          "compressedSize": 1,
+          "usageType": "0x1",
+          "extIndex": 1
+        },
+        {
+          "index": 1,
+          "offset": "0x0",
+          "decompressedSize": 12,
+          "compressedSize": 0,
+          "usageType": "0x8",
+          "extIndex": 0
+        },
+        {
+          "index": 2,
+          "offset": "0x0",
+          "decompressedSize": 12,
+          "compressedSize": 0,
+          "usageType": "0x8",
+          "extIndex": 1
+        },
+        {
+          "index": 3,
+          "offset": "0x200",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 4,
+          "offset": "0x200",
+          "decompressedSize": 675556,
+          "compressedSize": 0,
+          "usageType": "0x4",
+          "extIndex": 0
+        },
+        {
+          "index": 5,
+          "offset": "0xa5200",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 6,
+          "offset": "0x200",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 1
+        }
+      ]
+    },
+    {
+      "rank": 7,
+      "blockTableStart": "0x30",
+      "endian": "BE",
+      "blockCount": 7,
+      "validBlocks": 3,
+      "score": -17,
+      "compressed": false,
+      "preferredDataBlocks": [],
+      "blocks": [
+        {
+          "index": 0,
+          "offset": "0x1000100",
+          "decompressedSize": 0,
+          "compressedSize": 201326592,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 1,
+          "offset": "0x8000001",
+          "decompressedSize": 0,
+          "compressedSize": 201326592,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 2,
+          "offset": "0x8000101",
+          "decompressedSize": 131072,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 3,
+          "offset": "0x1",
+          "decompressedSize": 131072,
+          "compressedSize": 3830319616,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 4,
+          "offset": "0x4000000",
+          "decompressedSize": 5376512,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 5,
+          "offset": "0x0",
+          "decompressedSize": 131072,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 6,
+          "offset": "0x101",
+          "decompressedSize": 131072,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        }
+      ]
+    },
+    {
+      "rank": 8,
+      "blockTableStart": "0x38",
+      "endian": "BE",
+      "blockCount": 7,
+      "validBlocks": 3,
+      "score": -18,
+      "compressed": false,
+      "preferredDataBlocks": [],
+      "blocks": [
+        {
+          "index": 0,
+          "offset": "0xc000000",
+          "decompressedSize": 0,
+          "compressedSize": 134217729,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 1,
+          "offset": "0xc000000",
+          "decompressedSize": 0,
+          "compressedSize": 134217985,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 2,
+          "offset": "0x0",
+          "decompressedSize": 0,
+          "compressedSize": 1,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 3,
+          "offset": "0xe44e0a00",
+          "decompressedSize": 0,
+          "compressedSize": 67108864,
+          "usageType": "0x0",
+          "extIndex": 10
+        },
+        {
+          "index": 4,
+          "offset": "0x0",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 5,
+          "offset": "0x0",
+          "decompressedSize": 0,
+          "compressedSize": 257,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 6,
+          "offset": "0x0",
+          "decompressedSize": 0,
+          "compressedSize": 256,
+          "usageType": "0x2e",
+          "extIndex": 97
+        }
+      ]
+    },
+    {
+      "rank": 9,
+      "blockTableStart": "0x44",
+      "endian": "LE",
+      "blockCount": 7,
+      "validBlocks": 2,
+      "score": -19,
+      "compressed": false,
+      "preferredDataBlocks": [],
+      "blocks": [
+        {
+          "index": 0,
+          "offset": "0x0",
+          "decompressedSize": 12,
+          "compressedSize": 0,
+          "usageType": "0x8",
+          "extIndex": 1
+        },
+        {
+          "index": 1,
+          "offset": "0x200",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 2,
+          "offset": "0x200",
+          "decompressedSize": 675556,
+          "compressedSize": 0,
+          "usageType": "0x4",
+          "extIndex": 0
+        },
+        {
+          "index": 3,
+          "offset": "0xa5200",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 4,
+          "offset": "0x200",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 1
+        },
+        {
+          "index": 5,
+          "offset": "0x200",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 1
+        }
+      ]
+    },
+    {
+      "rank": 10,
+      "blockTableStart": "0x40",
+      "endian": "BE",
+      "blockCount": 7,
+      "validBlocks": 3,
+      "score": -21,
+      "compressed": false,
+      "preferredDataBlocks": [],
+      "blocks": [
+        {
+          "index": 0,
+          "offset": "0x8000001",
+          "decompressedSize": 0,
+          "compressedSize": 201326592,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 1,
+          "offset": "0x8000101",
+          "decompressedSize": 131072,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 2,
+          "offset": "0x1",
+          "decompressedSize": 131072,
+          "compressedSize": 3830319616,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 3,
+          "offset": "0x4000000",
+          "decompressedSize": 5376512,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 4,
+          "offset": "0x0",
+          "decompressedSize": 131072,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 5,
+          "offset": "0x101",
+          "decompressedSize": 131072,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 6,
+          "offset": "0x100",
+          "decompressedSize": 778330484,
+          "compressedSize": 1627401828,
+          "usageType": "0x65",
+          "extIndex": 117
+        }
+      ]
+    },
+    {
+      "rank": 11,
+      "blockTableStart": "0x28",
+      "endian": "BE",
+      "blockCount": 7,
+      "validBlocks": 2,
+      "score": -23,
+      "compressed": false,
+      "preferredDataBlocks": [],
+      "blocks": [
+        {
+          "index": 0,
+          "offset": "0x405",
+          "decompressedSize": 16777216,
+          "compressedSize": 16777472,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 1,
+          "offset": "0xc000000",
+          "decompressedSize": 0,
+          "compressedSize": 134217729,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 2,
+          "offset": "0xc000000",
+          "decompressedSize": 0,
+          "compressedSize": 134217985,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 3,
+          "offset": "0x0",
+          "decompressedSize": 0,
+          "compressedSize": 1,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 4,
+          "offset": "0xe44e0a00",
+          "decompressedSize": 0,
+          "compressedSize": 67108864,
+          "usageType": "0x0",
+          "extIndex": 10
+        },
+        {
+          "index": 5,
+          "offset": "0x0",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 6,
+          "offset": "0x0",
+          "decompressedSize": 0,
+          "compressedSize": 257,
+          "usageType": "0x0",
+          "extIndex": 0
+        }
+      ]
+    },
+    {
+      "rank": 12,
+      "blockTableStart": "0x34",
+      "endian": "BE",
+      "blockCount": 7,
+      "validBlocks": 0,
+      "score": -24,
+      "compressed": false,
+      "preferredDataBlocks": [],
+      "blocks": [
+        {
+          "index": 0,
+          "offset": "0x0",
+          "decompressedSize": 201326592,
+          "compressedSize": 0,
+          "usageType": "0x8",
+          "extIndex": 0
+        },
+        {
+          "index": 1,
+          "offset": "0x0",
+          "decompressedSize": 201326592,
+          "compressedSize": 0,
+          "usageType": "0x8",
+          "extIndex": 1
+        },
+        {
+          "index": 2,
+          "offset": "0x20000",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 3,
+          "offset": "0x20000",
+          "decompressedSize": 3830319616,
+          "compressedSize": 0,
+          "usageType": "0x4",
+          "extIndex": 0
+        },
+        {
+          "index": 4,
+          "offset": "0x520a00",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 5,
+          "offset": "0x20000",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 1
+        },
+        {
+          "index": 6,
+          "offset": "0x20000",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 1
+        }
+      ]
+    },
+    {
+      "rank": 13,
+      "blockTableStart": "0x30",
+      "endian": "LE",
+      "blockCount": 7,
+      "validBlocks": 2,
+      "score": -36,
+      "compressed": false,
+      "preferredDataBlocks": [],
+      "blocks": [
+        {
+          "index": 0,
+          "offset": "0x10001",
+          "decompressedSize": 0,
+          "compressedSize": 12,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 1,
+          "offset": "0x1000008",
+          "decompressedSize": 0,
+          "compressedSize": 12,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 2,
+          "offset": "0x1010008",
+          "decompressedSize": 512,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 3,
+          "offset": "0x1000000",
+          "decompressedSize": 512,
+          "compressedSize": 675556,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 4,
+          "offset": "0x4",
+          "decompressedSize": 676352,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 5,
+          "offset": "0x0",
+          "decompressedSize": 512,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 6,
+          "offset": "0x1010000",
+          "decompressedSize": 512,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        }
+      ]
+    },
+    {
+      "rank": 14,
+      "blockTableStart": "0x44",
+      "endian": "BE",
+      "blockCount": 7,
+      "validBlocks": 0,
+      "score": -45,
+      "compressed": false,
+      "preferredDataBlocks": [],
+      "blocks": [
+        {
+          "index": 0,
+          "offset": "0x0",
+          "decompressedSize": 201326592,
+          "compressedSize": 0,
+          "usageType": "0x8",
+          "extIndex": 1
+        },
+        {
+          "index": 1,
+          "offset": "0x20000",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 2,
+          "offset": "0x20000",
+          "decompressedSize": 3830319616,
+          "compressedSize": 0,
+          "usageType": "0x4",
+          "extIndex": 0
+        },
+        {
+          "index": 3,
+          "offset": "0x520a00",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 4,
+          "offset": "0x20000",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 1
+        },
+        {
+          "index": 5,
+          "offset": "0x20000",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 1
+        }
+      ]
+    },
+    {
+      "rank": 15,
+      "blockTableStart": "0x38",
+      "endian": "LE",
+      "blockCount": 7,
+      "validBlocks": 2,
+      "score": -49,
+      "compressed": false,
+      "preferredDataBlocks": [],
+      "blocks": [
+        {
+          "index": 0,
+          "offset": "0xc",
+          "decompressedSize": 0,
+          "compressedSize": 16777224,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 1,
+          "offset": "0xc",
+          "decompressedSize": 0,
+          "compressedSize": 16842760,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 2,
+          "offset": "0x0",
+          "decompressedSize": 0,
+          "compressedSize": 16777216,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 3,
+          "offset": "0xa4ee4",
+          "decompressedSize": 0,
+          "compressedSize": 4,
+          "usageType": "0x0",
+          "extIndex": 10
+        },
+        {
+          "index": 4,
+          "offset": "0x0",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 5,
+          "offset": "0x0",
+          "decompressedSize": 0,
+          "compressedSize": 16842752,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 6,
+          "offset": "0x0",
+          "decompressedSize": 0,
+          "compressedSize": 65536,
+          "usageType": "0x2e",
+          "extIndex": 97
+        }
+      ]
+    },
+    {
+      "rank": 16,
+      "blockTableStart": "0x24",
+      "endian": "BE",
+      "blockCount": 7,
+      "validBlocks": 0,
+      "score": -49,
+      "compressed": false,
+      "preferredDataBlocks": [],
+      "blocks": [
+        {
+          "index": 0,
+          "offset": "0x1020003",
+          "decompressedSize": 1029,
+          "compressedSize": 16777216,
+          "usageType": "0x1",
+          "extIndex": 1
+        },
+        {
+          "index": 1,
+          "offset": "0x0",
+          "decompressedSize": 201326592,
+          "compressedSize": 0,
+          "usageType": "0x8",
+          "extIndex": 0
+        },
+        {
+          "index": 2,
+          "offset": "0x0",
+          "decompressedSize": 201326592,
+          "compressedSize": 0,
+          "usageType": "0x8",
+          "extIndex": 1
+        },
+        {
+          "index": 3,
+          "offset": "0x20000",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 4,
+          "offset": "0x20000",
+          "decompressedSize": 3830319616,
+          "compressedSize": 0,
+          "usageType": "0x4",
+          "extIndex": 0
+        },
+        {
+          "index": 5,
+          "offset": "0x520a00",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 6,
+          "offset": "0x20000",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 1
+        }
+      ]
+    },
+    {
+      "rank": 17,
+      "blockTableStart": "0x28",
+      "endian": "LE",
+      "blockCount": 7,
+      "validBlocks": 1,
+      "score": -54,
+      "compressed": false,
+      "preferredDataBlocks": [],
+      "blocks": [
+        {
+          "index": 0,
+          "offset": "0x5040000",
+          "decompressedSize": 1,
+          "compressedSize": 65537,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 1,
+          "offset": "0xc",
+          "decompressedSize": 0,
+          "compressedSize": 16777224,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 2,
+          "offset": "0xc",
+          "decompressedSize": 0,
+          "compressedSize": 16842760,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 3,
+          "offset": "0x0",
+          "decompressedSize": 0,
+          "compressedSize": 16777216,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 4,
+          "offset": "0xa4ee4",
+          "decompressedSize": 0,
+          "compressedSize": 4,
+          "usageType": "0x0",
+          "extIndex": 10
+        },
+        {
+          "index": 5,
+          "offset": "0x0",
+          "decompressedSize": 0,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 6,
+          "offset": "0x0",
+          "decompressedSize": 0,
+          "compressedSize": 16842752,
+          "usageType": "0x0",
+          "extIndex": 0
+        }
+      ]
+    },
+    {
+      "rank": 18,
+      "blockTableStart": "0x40",
+      "endian": "LE",
+      "blockCount": 7,
+      "validBlocks": 1,
+      "score": -57,
+      "compressed": false,
+      "preferredDataBlocks": [],
+      "blocks": [
+        {
+          "index": 0,
+          "offset": "0x1000008",
+          "decompressedSize": 0,
+          "compressedSize": 12,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 1,
+          "offset": "0x1010008",
+          "decompressedSize": 512,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 2,
+          "offset": "0x1000000",
+          "decompressedSize": 512,
+          "compressedSize": 675556,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 3,
+          "offset": "0x4",
+          "decompressedSize": 676352,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 4,
+          "offset": "0x0",
+          "decompressedSize": 512,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 5,
+          "offset": "0x1010000",
+          "decompressedSize": 512,
+          "compressedSize": 0,
+          "usageType": "0x0",
+          "extIndex": 0
+        },
+        {
+          "index": 6,
+          "offset": "0x10000",
+          "decompressedSize": 1952539694,
+          "compressedSize": 1680736353,
+          "usageType": "0x65",
+          "extIndex": 117
+        }
+      ]
+    }
+  ]
+}
