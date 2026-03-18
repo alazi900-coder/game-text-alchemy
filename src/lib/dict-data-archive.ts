@@ -50,6 +50,10 @@ interface DictParseCandidate {
 
 const align4 = (v: number) => (v + 3) & ~3;
 
+function looksLikeZlibHeader(data: Uint8Array): boolean {
+  return data.length >= 2 && data[0] === 0x78 && (data[1] === 0x01 || data[1] === 0x5e || data[1] === 0x9c || data[1] === 0xda);
+}
+
 function parseBlocksWithStrategy(
   view: DataView,
   dictData: Uint8Array,
@@ -75,42 +79,99 @@ function parseBlocksWithStrategy(
   return blocks;
 }
 
+function chooseBestBlockSize(block: DictBlock, preferCompressed: boolean): number {
+  const primary = preferCompressed ? block.compressedSize : block.decompressedSize;
+  const secondary = preferCompressed ? block.decompressedSize : block.compressedSize;
+
+  if (primary > 0) return primary;
+  return secondary > 0 ? secondary : 0;
+}
+
 function scoreBlocks(blocks: DictBlock[], dataFileLength?: number): { score: number; validBlocks: number } {
   let score = 0;
   let validBlocks = 0;
+  let largeBlocks = 0;
+  let sortedOffsets = 0;
 
-  for (const block of blocks) {
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
     const validType = block.usageType === 0x08 || block.usageType === 0x80;
     const validExt = block.extIndex === 0 || block.extIndex === 1;
 
     if (validType) score += 2;
+    else score -= 2;
+
+    if (block.usageType === 0x80) score += 3;
+
     if (validExt) score += 2;
+    else score -= 1;
+
+    const hasSizes = block.compressedSize > 0 || block.decompressedSize > 0;
+    if (hasSizes) score += 1;
+    else score -= 3;
+
+    const likelyDataSize = Math.max(block.compressedSize, block.decompressedSize);
+    if (likelyDataSize >= 256) score += 2;
+    if (likelyDataSize >= 4096) {
+      score += 3;
+      largeBlocks += 1;
+    }
+
+    if (i > 0 && block.offset >= blocks[i - 1].offset) sortedOffsets += 1;
 
     if (dataFileLength != null) {
       const fitsComp = block.compressedSize > 0 && block.offset + block.compressedSize <= dataFileLength;
       const fitsDecomp = block.decompressedSize > 0 && block.offset + block.decompressedSize <= dataFileLength;
+
       if (fitsComp || fitsDecomp) {
         validBlocks += 1;
-        score += 6;
+        score += 8;
       } else {
-        score -= 3;
+        score -= 5;
       }
+
       if (block.offset < dataFileLength) score += 1;
+      else score -= 2;
     }
   }
+
+  if (largeBlocks >= 2) score += 8;
+  if (sortedOffsets >= Math.max(1, blocks.length - 2)) score += 4;
 
   return { score, validBlocks };
 }
 
-/**
- * Parse a .dict file header to extract block table info.
- * Tries multiple table alignments + endian modes and picks the most plausible one.
- */
-export function parseDictHeader(
-  dictData: Uint8Array,
-  dataFileLength?: number,
-  log?: (msg: string) => void
-): DictArchive {
+function collectTableStarts(base: number, dictLength: number): number[] {
+  const starts = new Set<number>();
+
+  starts.add(base);
+  starts.add(align4(base));
+  starts.add(0x14);
+
+  const localStart = Math.max(0x11, base - 0x20);
+  const localEnd = Math.min(dictLength - 16, base + 0x120);
+  for (let off = localStart; off <= localEnd; off++) starts.add(off);
+
+  const globalEnd = Math.min(dictLength - 16, 0x200);
+  for (let off = 0x11; off <= globalEnd; off += 4) starts.add(off);
+
+  return Array.from(starts).filter((v) => v >= 0x11 && v + 16 <= dictLength);
+}
+
+function inferCompression(compressedFromHeader: boolean, blocks: DictBlock[], dataFileLength?: number): boolean {
+  if (dataFileLength == null) return compressedFromHeader;
+
+  const compFits = blocks.filter((b) => b.compressedSize > 0 && b.offset + b.compressedSize <= dataFileLength).length;
+  const decompFits = blocks.filter((b) => b.decompressedSize > 0 && b.offset + b.decompressedSize <= dataFileLength).length;
+  const looksCompressed = blocks.some((b) => b.compressedSize > 0 && b.decompressedSize > b.compressedSize);
+
+  if (!compressedFromHeader && looksCompressed && compFits >= decompFits) return true;
+  if (compressedFromHeader && compFits === 0 && decompFits > 0) return false;
+
+  return compressedFromHeader;
+}
+
+function collectDictParseCandidates(dictData: Uint8Array, dataFileLength?: number): DictParseCandidate[] {
   if (dictData.length < 0x11) throw new Error("ملف .dict صغير جداً");
 
   const view = new DataView(dictData.buffer, dictData.byteOffset, dictData.byteLength);
@@ -129,9 +190,8 @@ export function parseDictHeader(
   ).filter((v) => v > 0 && v < 100000);
 
   const safeBlockCounts = blockCountCandidates.length > 0 ? blockCountCandidates : [view.getUint32(0x08, true)];
-
   const base = 0x11 + fileTableCount * 12;
-  const tableStarts = Array.from(new Set([base, align4(base), 0x14 + fileTableCount * 12]));
+  const tableStarts = collectTableStarts(base, dictData.length);
 
   const candidates: DictParseCandidate[] = [];
 
@@ -142,8 +202,10 @@ export function parseDictHeader(
         if (blocks.length === 0) continue;
 
         const scored = scoreBlocks(blocks, dataFileLength);
+        const inferredCompressed = inferCompression(compressedFromHeader, blocks, dataFileLength);
+
         candidates.push({
-          archive: { compressed: compressedFromHeader, blocks },
+          archive: { compressed: inferredCompressed, blocks },
           blockTableStart,
           littleEndian,
           blockCount,
@@ -164,32 +226,57 @@ export function parseDictHeader(
     return b.archive.blocks.length - a.archive.blocks.length;
   });
 
-  const best = candidates[0];
-  const blocks = best.archive.blocks;
+  return candidates;
+}
 
-  // Infer compression in case the header flag is wrong.
-  let inferredCompressed = compressedFromHeader;
-  if (dataFileLength != null) {
-    const compFits = blocks.filter((b) => b.compressedSize > 0 && b.offset + b.compressedSize <= dataFileLength).length;
-    const decompFits = blocks.filter((b) => b.decompressedSize > 0 && b.offset + b.decompressedSize <= dataFileLength).length;
-    const looksCompressed = blocks.some((b) => b.compressedSize > 0 && b.decompressedSize > b.compressedSize);
+function indexOfNlocMagic(data: Uint8Array): number {
+  for (let i = 0; i <= data.length - 8; i++) {
+    if (data[i] !== 0x4e || data[i + 1] !== 0x4c || data[i + 2] !== 0x4f || data[i + 3] !== 0x43) continue;
 
-    if (!compressedFromHeader && looksCompressed && compFits >= decompFits) {
-      inferredCompressed = true;
-    }
-    if (compressedFromHeader && compFits === 0 && decompFits > 0) {
-      inferredCompressed = false;
-    }
+    const v0 = data[i + 4];
+    const v1 = data[i + 5];
+    const v2 = data[i + 6];
+    const v3 = data[i + 7];
+
+    const isVersionOne = (v0 === 1 && v1 === 0 && v2 === 0 && v3 === 0) || (v0 === 0 && v1 === 0 && v2 === 0 && v3 === 1);
+    if (isVersionOne) return i;
   }
+
+  return -1;
+}
+
+function concatenateBlocks(blocks: Uint8Array[]): Uint8Array {
+  if (blocks.length === 1) return blocks[0];
+
+  const totalSize = blocks.reduce((s, b) => s + b.length, 0);
+  const combined = new Uint8Array(totalSize);
+  let offset = 0;
+
+  for (const block of blocks) {
+    combined.set(block, offset);
+    offset += block.length;
+  }
+
+  return combined;
+}
+
+/**
+ * Parse a .dict file header to extract block table info.
+ * Tries multiple table alignments + endian modes and picks the most plausible one.
+ */
+export function parseDictHeader(
+  dictData: Uint8Array,
+  dataFileLength?: number,
+  log?: (msg: string) => void
+): DictArchive {
+  const candidates = collectDictParseCandidates(dictData, dataFileLength);
+  const best = candidates[0];
 
   log?.(
     `📋 .dict strategy: start=0x${best.blockTableStart.toString(16)}, endian=${best.littleEndian ? "LE" : "BE"}, blocks=${best.archive.blocks.length}, valid=${best.validBlocks}`
   );
 
-  return {
-    compressed: inferredCompressed,
-    blocks,
-  };
+  return best.archive;
 }
 
 /**
@@ -202,19 +289,21 @@ export function extractDataBlocks(
   log?: (msg: string) => void
 ): Uint8Array[] {
   const results: Uint8Array[] = [];
+  const blocks = [...archive.blocks].sort((a, b) => a.offset - b.offset);
 
-  for (let i = 0; i < archive.blocks.length; i++) {
-    const block = archive.blocks[i];
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
 
-    // Only extract .data blocks (extIndex 0), skip .debug (extIndex 1)
-    if (block.extIndex !== 0) continue;
+    // Keep likely data blocks; skip only obvious non-data metadata.
+    const likelyDataBlock = block.extIndex === 0 || block.usageType === 0x80 || (block.usageType !== 0x08 && block.extIndex !== 1);
+    if (!likelyDataBlock) continue;
 
     const start = block.offset;
-    const preferredCompressedSize = archive.compressed || (block.compressedSize > 0 && block.compressedSize < block.decompressedSize);
-    let size = preferredCompressedSize ? block.compressedSize : block.decompressedSize;
+    const preferCompressed = archive.compressed || (block.compressedSize > 0 && block.decompressedSize > block.compressedSize);
+    let size = chooseBestBlockSize(block, preferCompressed);
 
     if (size <= 0 || start + size > dataBytes.length) {
-      const fallbackSize = preferredCompressedSize ? block.decompressedSize : block.compressedSize;
+      const fallbackSize = chooseBestBlockSize(block, !preferCompressed);
       if (fallbackSize > 0 && start + fallbackSize <= dataBytes.length) {
         log?.(`ℹ️ Block ${i}: استخدام حجم بديل ${fallbackSize} بدل ${size}`);
         size = fallbackSize;
@@ -229,7 +318,7 @@ export function extractDataBlocks(
     const shouldTryInflate =
       archive.compressed ||
       (block.compressedSize > 0 && block.decompressedSize > block.compressedSize) ||
-      (raw.length > 2 && raw[0] === 0x78);
+      looksLikeZlibHeader(raw);
 
     if (shouldTryInflate && raw.length > 2) {
       try {
@@ -238,7 +327,7 @@ export function extractDataBlocks(
         results.push(decompressed);
         continue;
       } catch (e) {
-        log?.(`⚠️ Block ${i}: فشل فك الضغط — ${e instanceof Error ? e.message : 'خطأ'} (سيتم استخدام raw)`);
+        log?.(`⚠️ Block ${i}: فشل فك الضغط — ${e instanceof Error ? e.message : "خطأ"} (سيتم استخدام raw)`);
       }
     }
 
@@ -258,25 +347,58 @@ export function extractDictDataArchive(
   dataBytes: Uint8Array,
   log?: (msg: string) => void
 ): Uint8Array {
-  const archive = parseDictHeader(dictBytes, dataBytes.length, log);
-  log?.(`📋 .dict: ${archive.blocks.length} blocks, compressed=${archive.compressed}`);
+  const candidates = collectDictParseCandidates(dictBytes, dataBytes.length);
 
-  const blocks = extractDataBlocks(dataBytes, archive, log);
+  let chosenBlocks: Uint8Array[] | null = null;
+  let chosenCandidate: DictParseCandidate | null = null;
+  let chosenMagic = -1;
+  let chosenScore = Number.NEGATIVE_INFINITY;
 
-  if (blocks.length === 0) {
+  const maxCandidates = Math.min(candidates.length, 20);
+
+  for (let i = 0; i < maxCandidates; i++) {
+    const candidate = candidates[i];
+    const blocks = extractDataBlocks(dataBytes, candidate.archive);
+    if (blocks.length === 0) continue;
+
+    const combined = concatenateBlocks(blocks);
+    const magicIndex = indexOfNlocMagic(combined);
+
+    // Prefer candidates that reveal NLOC magic, then longer meaningful payloads.
+    const candidateScore =
+      (magicIndex >= 0 ? 1_000_000 - Math.min(magicIndex, 200_000) : 0) +
+      Math.min(combined.length, 2_000_000) / 8 +
+      candidate.validBlocks * 20 +
+      candidate.score;
+
+    if (candidateScore > chosenScore) {
+      chosenScore = candidateScore;
+      chosenBlocks = blocks;
+      chosenCandidate = candidate;
+      chosenMagic = magicIndex;
+
+      if (magicIndex >= 0 && magicIndex <= 0x200) break;
+    }
+  }
+
+  if (!chosenCandidate || !chosenBlocks || chosenBlocks.length === 0) {
     throw new Error("لم يتم استخراج أي بيانات من الأرشيف");
   }
 
-  // If single block, return it directly
-  if (blocks.length === 1) return blocks[0];
+  log?.(
+    `📋 .dict strategy: start=0x${chosenCandidate.blockTableStart.toString(16)}, endian=${chosenCandidate.littleEndian ? "LE" : "BE"}, blocks=${chosenCandidate.archive.blocks.length}, valid=${chosenCandidate.validBlocks}`
+  );
+  log?.(`📋 .dict: ${chosenCandidate.archive.blocks.length} blocks, compressed=${chosenCandidate.archive.compressed}`);
 
-  // Concatenate all blocks
-  const totalSize = blocks.reduce((s, b) => s + b.length, 0);
-  const combined = new Uint8Array(totalSize);
-  let offset = 0;
-  for (const block of blocks) {
-    combined.set(block, offset);
-    offset += block.length;
+  // Re-run selected strategy with verbose logs for diagnostics.
+  const verboseBlocks = extractDataBlocks(dataBytes, chosenCandidate.archive, log);
+  if (verboseBlocks.length === 0) {
+    throw new Error("تم اختيار استراتيجية .dict لكنها لم تُنتج بلوكات صالحة");
+  }
+
+  const combined = concatenateBlocks(verboseBlocks);
+  if (chosenMagic >= 0) {
+    log?.(`✅ تم اكتشاف ترويسة NLOC عند offset 0x${chosenMagic.toString(16)} داخل البيانات المفكوكة`);
   }
 
   return combined;
@@ -294,24 +416,33 @@ export function tryDecompressDataFile(dataBytes: Uint8Array, log?: (msg: string)
     if (off >= dataBytes.length) continue;
     const slice = dataBytes.subarray(off);
 
-    // Check for zlib header (0x78)
-    if (slice[0] === 0x78) {
+    if (looksLikeZlibHeader(slice)) {
       try {
         const result = inflate(slice);
         log?.(`✅ Decompressed from offset 0x${off.toString(16)}: ${result.length} bytes`);
         return result;
-      } catch { /* continue */ }
+      } catch {
+        /* continue */
+      }
     }
   }
 
-  // Full scan for zlib headers
-  for (let i = 0; i < Math.min(dataBytes.length, 0x200); i++) {
-    if (dataBytes[i] === 0x78 && (dataBytes[i + 1] === 0x01 || dataBytes[i + 1] === 0x9C || dataBytes[i + 1] === 0xDA)) {
-      try {
-        const result = inflate(dataBytes.subarray(i));
+  // Wider scan for zlib headers.
+  const scanLimit = Math.min(dataBytes.length - 2, 2 * 1024 * 1024);
+  for (let i = 0; i < scanLimit; i++) {
+    if (dataBytes[i] !== 0x78) continue;
+
+    const candidate = dataBytes.subarray(i);
+    if (!looksLikeZlibHeader(candidate)) continue;
+
+    try {
+      const result = inflate(candidate);
+      if (result.length > 0x100) {
         log?.(`✅ Found zlib at offset 0x${i.toString(16)}: ${result.length} bytes`);
         return result;
-      } catch { /* continue */ }
+      }
+    } catch {
+      /* continue */
     }
   }
 
