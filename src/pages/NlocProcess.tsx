@@ -396,6 +396,21 @@ export default function NlocProcess() {
                   }}>
                   <Download className="w-4 h-4" /> تصدير
                 </Button>
+                {diagnosticRef.current && (
+                  <Button variant="outline" size="sm" className="gap-1.5"
+                    onClick={() => {
+                      const json = JSON.stringify(diagnosticRef.current, null, 2);
+                      const blob = new Blob([json], { type: 'application/json;charset=utf-8' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `dict-diagnostic-${new Date().toISOString().slice(0, 10)}.json`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}>
+                    <Bug className="w-4 h-4" /> تقرير تشخيص متقدم
+                  </Button>
+                )}
               </CardHeader>
               <CardContent>
                 <div className="bg-background rounded-lg p-4 max-h-96 overflow-y-auto font-mono text-xs space-y-1 border border-border/40" dir="ltr">
