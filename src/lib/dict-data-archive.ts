@@ -286,7 +286,7 @@ function buildPreferredDataIndices(refs: DictFileTableReference[], blocks: DictB
   return chosen;
 }
 
-function collectDictParseCandidates(dictData: Uint8Array, dataFileLength?: number): DictParseCandidate[] {
+export function collectDictParseCandidates(dictData: Uint8Array, dataFileLength?: number): DictParseCandidate[] {
   const core = parseHeaderCore(dictData);
   const preferredEndian = detectPreferredEndianness(dictData);
   const view = new DataView(dictData.buffer, dictData.byteOffset, dictData.byteLength);
