@@ -519,18 +519,19 @@ export function tryDecompressDataFile(dataBytes: Uint8Array, log?: (msg: string)
 
     try {
       const out = inflate(dataBytes.subarray(i));
-      if (out.length < 64) continue;
+      const nlocAt = indexOfNlocMagic(out);
+      if (nlocAt >= 0) {
+        log?.(`✅ Found NLOC zlib stream at offset 0x${i.toString(16)} (${out.length} bytes)`);
+        return out;
+      }
+
+      if (out.length < 16) continue;
 
       const key = `${out.length}:${out[0]}:${out[1]}:${out[2]}`;
       if (seenKeys.has(key)) continue;
       seenKeys.add(key);
 
       streams.push(out);
-
-      if (indexOfNlocMagic(out) >= 0) {
-        log?.(`✅ Found NLOC zlib stream at offset 0x${i.toString(16)} (${out.length} bytes)`);
-        return out;
-      }
     } catch {
       // continue
     }
