@@ -157,6 +157,7 @@ export default function NlocProcess() {
                     })),
                   })),
                 };
+                setHasDiagnostic(true);
               } catch { /* diagnostic capture is optional */ }
 
               const decompressed = extractDictDataArchive(companionDict.data, file.data, addLog);
