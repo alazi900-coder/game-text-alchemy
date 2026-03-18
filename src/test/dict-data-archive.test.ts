@@ -101,4 +101,21 @@ describe("dict-data-archive", () => {
     expect(parsed).not.toBeNull();
     expect(parsed?.messages[0]?.text).toBe("Hidden stream");
   });
+
+  it("extracts embedded zlib stream even with trailing bytes after stream end", () => {
+    const nloc = createMinimalNloc("Trailing bytes test");
+    const compressedNloc = deflate(nloc);
+
+    const noisyData = new Uint8Array(0x400 + compressedNloc.length + 97);
+    noisyData.fill(0x2a);
+    noisyData.set(compressedNloc, 0x400);
+
+    // Intentionally keep trailing noise after compressed stream.
+    const decompressed = tryDecompressDataFile(noisyData);
+    expect(decompressed).not.toBeNull();
+
+    const parsed = findAndParseNloc(decompressed!);
+    expect(parsed).not.toBeNull();
+    expect(parsed?.messages[0]?.text).toBe("Trailing bytes test");
+  });
 });
