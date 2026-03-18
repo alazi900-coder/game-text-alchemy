@@ -5,7 +5,7 @@
  * https://github-wiki-see.page/m/KillzXGaming/NextLevelLibrary/wiki/LM2-Dictionary-File-(.dict-.data)
  */
 
-import { inflate } from "pako";
+import { inflate, Inflate } from "pako";
 
 export interface DictBlock {
   offset: number;
