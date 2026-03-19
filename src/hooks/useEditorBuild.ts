@@ -1756,7 +1756,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
         const files = outputZip.files;
         const firstFileName = Object.keys(files)[0];
         const fileData = await outputZip.file(firstFileName)!.async("uint8array");
-        const blob = new Blob([fileData], { type: "application/octet-stream" });
+        const blob = new Blob([fileData as BlobPart], { type: "application/octet-stream" });
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
