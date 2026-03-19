@@ -75,6 +75,7 @@ export default function NlocProcess() {
     try {
       const { parseNloc, isNloc, findAndParseNloc } = await import("@/lib/nloc-parser");
       const { extractDictDataArchive, tryDecompressDataFile, collectDictParseCandidates } = await import("@/lib/dict-data-archive");
+      const { extractUtf32LEStrings } = await import("@/lib/utf32-scanner");
 
       diagnosticRef.current = null;
       setHasDiagnostic(false);
