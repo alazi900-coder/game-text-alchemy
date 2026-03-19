@@ -216,6 +216,9 @@ export default function NlocProcess() {
             if (utf32Strings && utf32Strings.length > 0) {
               addLog(`✅ UTF-32-LE: ${utf32Strings.length} نص مستخرج`);
 
+              // Store UTF-32 offset metadata for rebuild
+              const utf32Meta: { offset: number; codeUnits: number }[] = [];
+
               // Convert UTF-32 strings directly to entries (no NlocFile needed)
               for (let si = 0; si < utf32Strings.length; si++) {
                 const s = utf32Strings[si];
@@ -226,8 +229,10 @@ export default function NlocProcess() {
                   index: si,
                   label,
                   original: s.text || "(فارغ)",
-                  maxBytes: 0,
+                  maxBytes: s.codeUnits * 4, // UTF-32: 4 bytes per code unit
                 });
+
+                utf32Meta.push({ offset: s.offset, codeUnits: s.codeUnits });
 
                 // Auto-detect existing Arabic
                 const arabicRegex = /[\u0621-\u064A\u0671-\u06D3\uFB50-\uFDFF\uFE70-\uFEFF]/g;
@@ -236,6 +241,12 @@ export default function NlocProcess() {
                   autoTranslations[`${msbtFile}:${si}`] = stripped;
                 }
               }
+
+              // Save UTF-32 metadata for rebuild
+              try {
+                const { idbSet: idbSetMeta } = await import("@/lib/idb-storage");
+                await idbSetMeta(`utf32Meta:${file.name}`, utf32Meta);
+              } catch { /* non-critical */ }
 
               // Skip the normal parsed→entries conversion below
               continue;

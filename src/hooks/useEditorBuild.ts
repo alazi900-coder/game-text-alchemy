@@ -1620,6 +1620,185 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     }
   };
 
+  const handleBuildNloc = async () => {
+    const currentState = stateRef.current;
+    if (!currentState) return;
+
+    const buildStartTime = Date.now();
+    setBuilding(true);
+    setBuildProgress("تجهيز ملفات NLOC للبناء...");
+    const buildLog: string[] = [];
+    const log = (msg: string) => { buildLog.push(msg); console.log(msg); };
+
+    try {
+      const safeTranslations = sanitizeTranslations(currentState.translations, 'nlocBuild');
+      const nonEmptyTranslations: Record<string, string> = {};
+      for (const [k, v] of Object.entries(safeTranslations)) { if (v?.trim()) nonEmptyTranslations[k] = v; }
+
+      // Auto-apply Arabic processing during build
+      const arabicRegex = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/;
+      const formsRegex = /[\uFB50-\uFDFF\uFE70-\uFEFF]/;
+      let autoProcessedArabic = 0;
+      for (const [key, value] of Object.entries(nonEmptyTranslations)) {
+        if (arabicRegex.test(value) && !formsRegex.test(value)) {
+          nonEmptyTranslations[key] = processArabicText(value, { arabicNumerals, mirrorPunct: mirrorPunctuation });
+          autoProcessedArabic++;
+        }
+      }
+      log(`[BUILD-NLOC] معالجة عربية تلقائية: ${autoProcessedArabic} نص`);
+
+      // Group entries by source file
+      const fileGroups = new Map<string, { entries: typeof currentState.entries; fileName: string }>();
+      for (const entry of currentState.entries) {
+        if (!entry.msbtFile.startsWith('nloc:')) continue;
+        const fileName = entry.msbtFile.slice(5); // Remove "nloc:" prefix
+        if (!fileGroups.has(fileName)) {
+          fileGroups.set(fileName, { entries: [], fileName });
+        }
+        fileGroups.get(fileName)!.entries.push(entry);
+      }
+
+      // Load original files from IDB
+      const nlocFilesMap = await idbGet<Record<string, ArrayBuffer>>("editorNlocFiles");
+      if (!nlocFilesMap || Object.keys(nlocFilesMap).length === 0) {
+        throw new Error("لم يتم العثور على الملفات الأصلية — يرجى إعادة رفع الملفات");
+      }
+
+      const JSZip = (await import("jszip")).default;
+      const outputZip = new JSZip();
+      let totalModified = 0;
+      let totalSkipped = 0;
+      let filesBuilt = 0;
+
+      for (const [fileName, group] of fileGroups) {
+        const originalBuf = nlocFilesMap[fileName];
+        if (!originalBuf) {
+          log(`[BUILD-NLOC] ⚠️ ملف ${fileName} غير موجود في الذاكرة — تخطي`);
+          continue;
+        }
+
+        // Load UTF-32 metadata
+        const utf32Meta = await idbGet<{ offset: number; codeUnits: number }[]>(`utf32Meta:${fileName}`);
+        if (!utf32Meta) {
+          log(`[BUILD-NLOC] ⚠️ بيانات UTF-32 غير موجودة لـ ${fileName} — تخطي`);
+          continue;
+        }
+
+        // Clone the original buffer
+        const output = new Uint8Array(originalBuf.slice(0));
+        const view = new DataView(output.buffer);
+        let modifiedInFile = 0;
+        let skippedInFile = 0;
+
+        setBuildProgress(`إعادة بناء ${fileName}...`);
+
+        for (const entry of group.entries) {
+          const key = `${entry.msbtFile}:${entry.index}`;
+          const translation = nonEmptyTranslations[key];
+          if (!translation?.trim()) continue;
+
+          const meta = utf32Meta[entry.index];
+          if (!meta) {
+            log(`[BUILD-NLOC] ⚠️ فهرس ${entry.index} خارج النطاق في ${fileName}`);
+            skippedInFile++;
+            continue;
+          }
+
+          // Encode translation as UTF-32-LE
+          const codePoints = [...translation].map(ch => ch.codePointAt(0)!);
+          
+          // Check if translation fits in original space
+          if (codePoints.length > meta.codeUnits) {
+            // Truncate to fit — warn
+            log(`[BUILD-NLOC] ⚠️ نص #${entry.index} أطول من الأصلي (${codePoints.length} > ${meta.codeUnits}) — تم القص`);
+            codePoints.length = meta.codeUnits;
+          }
+
+          // Write UTF-32-LE code points at the original offset
+          let byteOffset = meta.offset;
+          for (let ci = 0; ci < codePoints.length; ci++) {
+            if (byteOffset + 3 < output.length) {
+              view.setUint32(byteOffset, codePoints[ci], true);
+            }
+            byteOffset += 4;
+          }
+
+          // Null-terminate and zero-pad remaining space
+          for (let ci = codePoints.length; ci <= meta.codeUnits; ci++) {
+            if (byteOffset + 3 < output.length) {
+              view.setUint32(byteOffset, 0, true);
+            }
+            byteOffset += 4;
+          }
+
+          modifiedInFile++;
+        }
+
+        log(`[BUILD-NLOC] ${fileName}: ${modifiedInFile} ترجمة حُقنت، ${skippedInFile} تم تخطيها`);
+        totalModified += modifiedInFile;
+        totalSkipped += skippedInFile;
+
+        // Add to output — only if modified
+        if (modifiedInFile > 0) {
+          outputZip.file(fileName.replace(/\.[^.]+$/, '_arabized$&'), output);
+          filesBuilt++;
+        }
+      }
+
+      if (filesBuilt === 0) {
+        throw new Error("لم يتم تعديل أي ملف — تأكد من وجود ترجمات");
+      }
+
+      // Download
+      setBuildProgress("ضغط الملفات...");
+      if (filesBuilt === 1) {
+        // Single file — download directly
+        const files = outputZip.files;
+        const firstFileName = Object.keys(files)[0];
+        const fileData = await outputZip.file(firstFileName)!.async("uint8array");
+        const blob = new Blob([fileData as BlobPart], { type: "application/octet-stream" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = firstFileName;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        const blob = await outputZip.generateAsync({ type: "blob" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "arabized_nloc_files.zip";
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+
+      setLastBuildLog(buildLog);
+      setBuildProgress(`✅ تم بنجاح! ${totalModified} ترجمة حُقنت في ${filesBuilt} ملف بترميز UTF-32-LE 🎮`);
+
+      // Verification
+      const verification = buildVerificationChecks({
+        modifiedCount: totalModified,
+        totalTranslations: Object.keys(nonEmptyTranslations).length,
+        autoProcessedArabic,
+        tagFixCount: 0,
+        tagOkCount: 0,
+        filesBuilt,
+        outputSizeBytes: 0,
+        buildStartTime,
+        hasOriginalFiles: true,
+        isDemo: currentState.isDemo,
+      });
+      setBuildVerification(verification);
+      setShowBuildVerification(true);
+
+    } catch (err) {
+      setBuildProgress(`❌ ${err instanceof Error ? err.message : 'خطأ غير معروف'}`);
+    } finally {
+      setBuilding(false);
+    }
+  };
+
   const handleBuild = async () => {
     const currentState = stateRef.current;
     if (!currentState) return;
@@ -1630,6 +1809,12 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
     }
     const isXenoblade = gameType === "xenoblade";
     
+    // Check for NLOC entries (Luigi's Mansion 2 HD)
+    const hasNlocEntries = currentState.entries.some(entry => entry.msbtFile.startsWith("nloc:"));
+    if (hasNlocEntries) {
+      return handleBuildNloc();
+    }
+
     // Check if we have SARC archives (ACNH flow) — use Xenoblade-style individual MSBT build
     type SarcMetaCheck = {
       originalFileName: string;
