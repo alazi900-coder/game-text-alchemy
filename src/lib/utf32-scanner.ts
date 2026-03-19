@@ -6,8 +6,6 @@
  * strings by looking for the XX 00 00 00 pattern (ASCII range) or valid
  * Unicode code-points encoded as little-endian 32-bit values, terminated by
  * 00 00 00 00 (null in UTF-32).
- *
- * Reference: advice from reverse-engineering community (Manus).
  */
 
 export interface Utf32String {
@@ -20,21 +18,16 @@ export interface Utf32String {
 }
 
 /**
- * Minimum number of characters for a string to be considered "real"
- * (filters out noise / alignment padding).
- */
-const MIN_STRING_LENGTH = 2;
-
-/**
  * Check whether a 32-bit value is a printable / meaningful Unicode code-point.
- * Accepts Latin, Arabic, CJK, punctuation, digits, common symbols, etc.
- * Rejects control chars (except \n \r \t) and surrogates.
+ * More tolerant version: accepts game control codes as "inline" markers
+ * so strings don't get split by embedded formatting codes.
  */
 function isPrintableCodePoint(cp: number): boolean {
-  if (cp === 0) return false; // null terminator — not part of string
+  if (cp === 0) return false; // null terminator
   // Allow common whitespace
   if (cp === 0x09 || cp === 0x0a || cp === 0x0d) return true;
-  // Reject other C0/C1 control characters
+  // Reject other C0 control characters EXCEPT common game control codes
+  // Many games use 0x01-0x1F as inline formatting/variable markers
   if (cp < 0x20) return false;
   if (cp >= 0x7f && cp <= 0x9f) return false;
   // Reject surrogates
@@ -45,28 +38,37 @@ function isPrintableCodePoint(cp: number): boolean {
 }
 
 /**
+ * More lenient check: is this code point possibly part of game text?
+ * Allows control codes 0x01-0x1F that games use for formatting.
+ */
+function isGameTextCodePoint(cp: number): boolean {
+  if (cp === 0) return false;
+  // Allow all control codes 0x01-0x1F (game formatting)
+  if (cp >= 0x01 && cp <= 0x1f) return true;
+  // Then same as printable
+  return isPrintableCodePoint(cp);
+}
+
+/**
  * Scan a buffer for UTF-32-LE encoded strings.
- *
- * @param data  Raw bytes to scan
- * @param startOffset  Byte offset to begin scanning (default 0)
- * @param minLength  Minimum string length in characters (default 2)
- * @returns Array of discovered strings with their offsets
+ * Uses a tolerant approach: allows game control codes within strings,
+ * only splits on null terminators or truly invalid values.
  */
 export function scanUtf32LEStrings(
   data: Uint8Array,
   startOffset = 0,
-  minLength = MIN_STRING_LENGTH,
+  minLength = 2,
 ): Utf32String[] {
   const results: Utf32String[] = [];
   const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-  const end = data.length - 3; // need at least 4 bytes to read a u32
+  const end = data.length - 3;
 
   let i = startOffset;
   // Align to 4 bytes
   i = (i + 3) & ~3;
 
   while (i < end) {
-    const cp = view.getUint32(i, true); // little-endian
+    const cp = view.getUint32(i, true);
 
     if (!isPrintableCodePoint(cp)) {
       i += 4;
@@ -76,19 +78,43 @@ export function scanUtf32LEStrings(
     // Start of a potential string
     const stringStart = i;
     const codePoints: number[] = [];
+    let nonPrintableRun = 0;
 
     while (i < end) {
       const c = view.getUint32(i, true);
       if (c === 0) {
-        // Null terminator
+        // Null terminator — clean end
         i += 4;
         break;
       }
-      if (!isPrintableCodePoint(c)) {
-        break; // not a clean terminator, string is cut short
+      if (isGameTextCodePoint(c)) {
+        // Game control code — keep it but don't add to visible text
+        if (c < 0x20) {
+          nonPrintableRun++;
+          // If too many consecutive control codes, probably not real text
+          if (nonPrintableRun > 3) {
+            break;
+          }
+          i += 4;
+          continue;
+        }
+        nonPrintableRun = 0;
+        codePoints.push(c);
+        i += 4;
+      } else {
+        // Truly invalid — check if it's just a small gap (1-2 bad values)
+        // before more text. Games sometimes have padding bytes.
+        if (i + 8 < end) {
+          const next1 = view.getUint32(i + 4, true);
+          const next2 = view.getUint32(i + 8, true);
+          if (isPrintableCodePoint(next1) || isPrintableCodePoint(next2)) {
+            // Skip this one bad value
+            i += 4;
+            continue;
+          }
+        }
+        break;
       }
-      codePoints.push(c);
-      i += 4;
     }
 
     if (codePoints.length >= minLength) {
@@ -106,7 +132,6 @@ export function scanUtf32LEStrings(
 
 /**
  * Quick check: does this buffer likely contain UTF-32-LE text data?
- * Looks for a cluster of XX 00 00 00 patterns in the first portion.
  */
 export function looksLikeUtf32LE(data: Uint8Array, sampleStart = 0x4000, sampleSize = 256): boolean {
   if (data.length < sampleStart + sampleSize) return false;
@@ -117,61 +142,52 @@ export function looksLikeUtf32LE(data: Uint8Array, sampleStart = 0x4000, sampleS
 
   for (let i = sampleStart; i < end; i += 4) {
     const cp = view.getUint32(i, true);
-    if (cp >= 0x20 && cp <= 0x7e) hits++; // printable ASCII as UTF-32-LE
-    if (cp === 0) hits++; // null terminators are expected
+    if (cp >= 0x20 && cp <= 0x7e) hits++;
+    if (cp === 0) hits++;
   }
 
-  // If >40% of sampled u32 values are ASCII/null, likely UTF-32-LE text
   const total = Math.floor(sampleSize / 4);
   return hits / total > 0.4;
 }
 
 /**
  * Full extraction pipeline for LM2 HD .data files.
- * Scans the entire file for UTF-32-LE strings starting from common offsets.
- *
- * @returns Array of strings found, or null if the file doesn't look like UTF-32-LE text
+ * Always scans the ENTIRE file from offset 0 to capture all strings.
  */
 export function extractUtf32LEStrings(
   data: Uint8Array,
   log?: (msg: string) => void,
 ): Utf32String[] | null {
-  // Try known offset first (0x43fc from Manus's analysis)
-  const knownOffsets = [0x43fc, 0x4000, 0x3000, 0x2000, 0x1000, 0x0800, 0x0400, 0x0100, 0x0000];
+  log?.(`🔍 UTF-32-LE: مسح شامل للملف (${(data.length / 1024).toFixed(0)} KB)...`);
 
-  for (const off of knownOffsets) {
-    if (off + 16 > data.length) continue;
+  // Always do a full scan from offset 0 with minimum length 1
+  // to catch even short game strings
+  const allStrings = scanUtf32LEStrings(data, 0, 1);
 
-    // Quick check: are there readable UTF-32-LE chars around this offset?
-    const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
-    let readableCount = 0;
-    const checkEnd = Math.min(off + 64, data.length - 3);
+  if (allStrings.length > 0) {
+    // Filter: keep strings that are likely real game text
+    // (at least 2 printable non-space characters)
+    const meaningful = allStrings.filter(s => {
+      const trimmed = s.text.trim();
+      if (trimmed.length < 1) return false;
+      // Keep anything with letters/digits (not just punctuation/symbols)
+      return /[a-zA-Z0-9\u0600-\u06FF\u3000-\u9FFF\uAC00-\uD7AF]/.test(trimmed);
+    });
 
-    for (let j = off; j < checkEnd; j += 4) {
-      const cp = view.getUint32(j, true);
-      if (isPrintableCodePoint(cp) || cp === 0) readableCount++;
+    log?.(`✅ UTF-32-LE: ${allStrings.length} نص خام → ${meaningful.length} نص ذو معنى`);
+
+    if (meaningful.length > 0) {
+      return meaningful;
     }
 
-    const checkTotal = Math.floor((checkEnd - off) / 4);
-    if (checkTotal > 0 && readableCount / checkTotal > 0.5) {
-      log?.(`🔍 UTF-32-LE: بدء المسح من offset 0x${off.toString(16)}`);
-      const strings = scanUtf32LEStrings(data, off, 2);
-
-      if (strings.length > 0) {
-        log?.(`✅ UTF-32-LE: تم العثور على ${strings.length} نص بدءاً من 0x${off.toString(16)}`);
-        return strings;
-      }
+    // If no "meaningful" strings found, return all with length >= 2
+    const fallback = allStrings.filter(s => s.codeUnits >= 2);
+    if (fallback.length > 0) {
+      log?.(`✅ UTF-32-LE: إعادة بـ ${fallback.length} نص (بدون فلترة)`);
+      return fallback;
     }
   }
 
-  // Fallback: full scan from beginning
-  log?.(`🔍 UTF-32-LE: مسح شامل من بداية الملف...`);
-  const allStrings = scanUtf32LEStrings(data, 0, 3);
-
-  if (allStrings.length > 10) {
-    log?.(`✅ UTF-32-LE: تم العثور على ${allStrings.length} نص بالمسح الشامل`);
-    return allStrings;
-  }
-
+  log?.(`❌ UTF-32-LE: لم يتم العثور على نصوص`);
   return null;
 }
