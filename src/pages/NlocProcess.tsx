@@ -208,8 +208,66 @@ export default function NlocProcess() {
             }
           }
 
+          // Strategy 5: UTF-32-LE brute-force scan (LM2 HD remaster)
+          // In the HD version, texts are stored as raw UTF-32-LE without NLOC headers
           if (!parsed) {
-            addLog(`⚠️ ${file.name}: لا يوجد بيانات NLOC — تخطي`);
+            addLog(`🔍 محاولة مسح UTF-32-LE (ترميز Luigi's Mansion 2 HD)...`);
+            const utf32Strings = extractUtf32LEStrings(file.data, addLog);
+            if (utf32Strings && utf32Strings.length > 0) {
+              addLog(`✅ UTF-32-LE: ${utf32Strings.length} نص مستخرج`);
+
+              // Convert UTF-32 strings directly to entries (no NlocFile needed)
+              for (let si = 0; si < utf32Strings.length; si++) {
+                const s = utf32Strings[si];
+                const msbtFile = `nloc:${file.name}`;
+                const label = `${file.name} → 0x${s.offset.toString(16).toUpperCase().padStart(6, "0")}`;
+                allEntries.push({
+                  msbtFile,
+                  index: si,
+                  label,
+                  original: s.text || "(فارغ)",
+                  maxBytes: 0,
+                });
+
+                // Auto-detect existing Arabic
+                const arabicRegex = /[\u0621-\u064A\u0671-\u06D3\uFB50-\uFDFF\uFE70-\uFEFF]/g;
+                const stripped = s.text.replace(/[\u0000-\u001F]/g, '').trim();
+                if (stripped.length >= 5 && (stripped.match(arabicRegex) || []).length >= 3) {
+                  autoTranslations[`${msbtFile}:${si}`] = stripped;
+                }
+              }
+
+              // Skip the normal parsed→entries conversion below
+              continue;
+            }
+          }
+
+          // Also try UTF-32-LE on decompressed blocks from dict strategy
+          if (!parsed && companionDict) {
+            try {
+              const decompressed = extractDictDataArchive(companionDict.data, file.data);
+              const utf32FromBlocks = extractUtf32LEStrings(decompressed, addLog);
+              if (utf32FromBlocks && utf32FromBlocks.length > 0) {
+                addLog(`✅ UTF-32-LE من كتل مفكوكة: ${utf32FromBlocks.length} نص`);
+                for (let si = 0; si < utf32FromBlocks.length; si++) {
+                  const s = utf32FromBlocks[si];
+                  const msbtFile = `nloc:${file.name}`;
+                  const label = `${file.name} → 0x${s.offset.toString(16).toUpperCase().padStart(6, "0")}`;
+                  allEntries.push({
+                    msbtFile,
+                    index: si,
+                    label,
+                    original: s.text || "(فارغ)",
+                    maxBytes: 0,
+                  });
+                }
+                continue;
+              }
+            } catch { /* already tried dict path above */ }
+          }
+
+          if (!parsed) {
+            addLog(`⚠️ ${file.name}: لا يوجد بيانات NLOC أو UTF-32 — تخطي`);
             continue;
           }
 
