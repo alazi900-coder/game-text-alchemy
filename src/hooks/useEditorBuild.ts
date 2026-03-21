@@ -1768,7 +1768,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
 
         // Add to output — only if modified
         if (modifiedInFile > 0) {
-          outputZip.file(fileName.replace(/\.[^.]+$/, '_arabized$&'), output);
+          const finalOutput = extraBytes > 0 ? output.subarray(0, writePos) : output;
+          outputZip.file(fileName.replace(/\.[^.]+$/, '_arabized$&'), finalOutput);
           filesBuilt++;
         }
       }
