@@ -1684,13 +1684,12 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           continue;
         }
 
-        // Clone the original buffer
-        const output = new Uint8Array(originalBuf.slice(0));
-        const view = new DataView(output.buffer);
+        // Build a list of patches (sorted by offset) to allow expansion
+        type Patch = { index: number; offset: number; codeUnits: number; codePoints: number[] };
+        const patches: Patch[] = [];
         let modifiedInFile = 0;
         let skippedInFile = 0;
-
-        setBuildProgress(`إعادة بناء ${fileName}...`);
+        let expandedInFile = 0;
 
         for (const entry of group.entries) {
           const key = `${entry.msbtFile}:${entry.index}`;
@@ -1704,34 +1703,63 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
             continue;
           }
 
-          // Encode translation as UTF-32-LE
           const codePoints = [...translation].map(ch => ch.codePointAt(0)!);
-          
-          // Check if translation fits in original space
-          if (codePoints.length > meta.codeUnits) {
-            // Truncate to fit — warn
-            log(`[BUILD-NLOC] ⚠️ نص #${entry.index} أطول من الأصلي (${codePoints.length} > ${meta.codeUnits}) — تم القص`);
-            codePoints.length = meta.codeUnits;
-          }
-
-          // Write UTF-32-LE code points at the original offset
-          let byteOffset = meta.offset;
-          for (let ci = 0; ci < codePoints.length; ci++) {
-            if (byteOffset + 3 < output.length) {
-              view.setUint32(byteOffset, codePoints[ci], true);
-            }
-            byteOffset += 4;
-          }
-
-          // Null-terminate and zero-pad remaining space
-          for (let ci = codePoints.length; ci <= meta.codeUnits; ci++) {
-            if (byteOffset + 3 < output.length) {
-              view.setUint32(byteOffset, 0, true);
-            }
-            byteOffset += 4;
-          }
-
+          patches.push({ index: entry.index, offset: meta.offset, codeUnits: meta.codeUnits, codePoints });
           modifiedInFile++;
+        }
+
+        // Sort patches by offset ascending
+        patches.sort((a, b) => a.offset - b.offset);
+
+        // Calculate total extra bytes needed for expansion
+        let extraBytes = 0;
+        for (const p of patches) {
+          const diff = p.codePoints.length - p.codeUnits;
+          if (diff > 0) {
+            extraBytes += diff * 4; // each code unit = 4 bytes in UTF-32
+            expandedInFile++;
+            log(`[BUILD-NLOC] 📐 نص #${p.index} توسّع بمقدار ${diff} حرف (${p.codePoints.length} > ${p.codeUnits})`);
+          }
+        }
+
+        // Build the new buffer
+        const origData = new Uint8Array(originalBuf);
+        const newSize = origData.length + extraBytes;
+        const output = new Uint8Array(newSize);
+        let readPos = 0;  // position in original
+        let writePos = 0; // position in output
+
+        for (const p of patches) {
+          // Copy everything from readPos to the start of this string slot
+          if (p.offset > readPos) {
+            output.set(origData.subarray(readPos, p.offset), writePos);
+            writePos += (p.offset - readPos);
+          }
+          readPos = p.offset;
+
+          // Write the translated UTF-32-LE code points
+          const outView = new DataView(output.buffer, output.byteOffset);
+          for (let ci = 0; ci < p.codePoints.length; ci++) {
+            outView.setUint32(writePos, p.codePoints[ci], true);
+            writePos += 4;
+          }
+          // Add null terminator
+          outView.setUint32(writePos, 0, true);
+          writePos += 4;
+
+          // Skip the original string slot in source (codeUnits chars + null terminator)
+          const originalSlotBytes = (p.codeUnits + 1) * 4;
+          readPos = p.offset + originalSlotBytes;
+        }
+
+        // Copy remaining data after last patch
+        if (readPos < origData.length) {
+          output.set(origData.subarray(readPos), writePos);
+          writePos += (origData.length - readPos);
+        }
+
+        if (expandedInFile > 0) {
+          log(`[BUILD-NLOC] 📐 ${fileName}: ${expandedInFile} نص تم توسيعه — حجم الملف زاد بمقدار ${extraBytes} بايت`);
         }
 
         log(`[BUILD-NLOC] ${fileName}: ${modifiedInFile} ترجمة حُقنت، ${skippedInFile} تم تخطيها`);
@@ -1740,7 +1768,8 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
 
         // Add to output — only if modified
         if (modifiedInFile > 0) {
-          outputZip.file(fileName.replace(/\.[^.]+$/, '_arabized$&'), output);
+          const finalOutput = extraBytes > 0 ? output.subarray(0, writePos) : output;
+          outputZip.file(fileName.replace(/\.[^.]+$/, '_arabized$&'), finalOutput);
           filesBuilt++;
         }
       }
