@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { FileText, Download, Ghost, Sparkles } from "lucide-react";
+import { FileText, Download, Ghost, Sparkles, Type } from "lucide-react";
 import GameInfoSection from "@/components/GameInfoSection";
 import ExtractionGuideSection from "@/components/ExtractionGuideSection";
 import heroBg from "@/assets/lm2-hero-bg.jpg";
