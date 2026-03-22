@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { FileText, Download, Ghost, Sparkles } from "lucide-react";
+import { FileText, Download, Ghost, Sparkles, Type } from "lucide-react";
 import GameInfoSection from "@/components/GameInfoSection";
 import ExtractionGuideSection from "@/components/ExtractionGuideSection";
 import heroBg from "@/assets/lm2-hero-bg.jpg";
@@ -109,6 +109,12 @@ export default function LuigiMansion() {
             <Link to="/luigis-mansion/process">
               <Button size="lg" className="font-display font-bold text-lg px-10 py-6 bg-[hsl(120,50%,40%)] hover:bg-[hsl(120,50%,35%)] text-white shadow-xl shadow-[hsl(120,50%,40%)]/30">
                 ابدأ التعريب 👻
+              </Button>
+            </Link>
+            <Link to="/luigis-mansion/fonts">
+              <Button size="lg" variant="outline" className="font-display font-bold text-lg px-8 py-6 border-[hsl(270,60%,50%)]/50 text-[hsl(270,60%,60%)] hover:bg-[hsl(270,60%,50%)]/10">
+                <Type className="w-5 h-5 ml-2" />
+                محرر الخطوط
               </Button>
             </Link>
           </div>
