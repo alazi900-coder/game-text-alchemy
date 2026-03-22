@@ -195,7 +195,7 @@ function getNextArabicCodeStr(text: string, index: number): number | null {
 function reverseBidi(text: string): string {
   // Protect technical tags as atomic placeholders before BiDi processing
   // Includes: [MID_...], $Arg(0), $Icon("A"), $P, $n, %s, %d, [Tag:Value], {var}
-  const tagPattern = /\[\s*M[A-Z]*ID_[^\]]+\]|\$\w+\([^)]*\)|\$\w+|%[sd]|\[\s*\w+\s*:[^\]]*?\s*\](?:\s*\([^)]{1,100}\))?|\[\s*\w+\s*=\s*[^\]]*\]|\{\s*\w+\s*:[^}]*\}|\{[\w]+\}|\d+\s*\[[A-Z]{2,10}\]|\[[A-Z]{2,10}\]\s*\d+/g;
+  const tagPattern = /\[\s*M[A-Z]*ID_[^\]]+\]|\$\w+\([^)]*\)|\$\w+|%[sd]|\[\s*\w+\s*:[^\]]*?\s*\](?:\s*\([^)]{1,100}\))?|\[\s*\w+\s*=\s*[^\]]*\]|\{\s*\w+\s*:[^}]*\}|\{\/\w+\}|\{[\w]+\}|\d+\s*\[[A-Z]{2,10}\]|\[[A-Z]{2,10}\]\s*\d+|[ɣɐɓɑɔɛɜɞɤɥɨɪɯɵɶʀʁʂʃʄʇʈ]/g;
   const tagSlots: string[] = [];
   const shielded = text.replace(tagPattern, (match) => {
     const idx = tagSlots.length;
