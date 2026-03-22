@@ -217,18 +217,20 @@ export function categorizeACNHFile(filePath: string): string {
   return "other";
 }
 
-// Check if text contains technical tag markers (MSBT + Cobalt + format specifiers)
+// Check if text contains technical tag markers (MSBT + Cobalt + format specifiers + LM2 buttons)
 export function hasTechnicalTags(text: string): boolean {
   return /[\uFFF9\uFFFA\uFFFB\uFFFC\uE000-\uE0FF]/.test(text)
     || /\[\s*\w+\s*:[^\]]*\]/.test(text)
     || /\[\/\w+:[^\]]*\]/.test(text)
     || /\[\s*\w+\s*=\s*\w[^\]]*\]/.test(text)
     || /\{\s*\w+\s*:\s*\w[^}]*\}/.test(text)
-    || /\$\w+\([^)]*\)/.test(text)       // Cobalt: $Arg(0), $Window(...), $Wait(0)
-    || /\$[A-Za-z]/.test(text)            // Cobalt simple: $P, $n, $t
-    || /%[sd]/.test(text)                  // Format specifiers: %s, %d
-    || /\{[\w]+\}/.test(text)              // {variable} placeholders
-    || /<[\w\/][^>]*>/.test(text);         // HTML-like tags
+    || /\{\/\w+\}/.test(text)                 // Closing tags: {/tp}, {/clr}
+    || /\$\w+\([^)]*\)/.test(text)            // Cobalt: $Arg(0), $Window(...), $Wait(0)
+    || /\$[A-Za-z]/.test(text)                // Cobalt simple: $P, $n, $t
+    || /%[sd]/.test(text)                      // Format specifiers: %s, %d
+    || /\{[\w]+\}/.test(text)                  // {variable} placeholders
+    || /<[\w\/][^>]*>/.test(text)              // HTML-like tags
+    || /[ɣɐɓɑɔɛɜɞɤɥɨɪɯɵɶʀʁʂʃʄʇʈ]/.test(text); // LM2 button icons
 }
 
 // Re-export from dedicated module

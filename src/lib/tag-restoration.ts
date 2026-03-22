@@ -5,7 +5,7 @@
  */
 
 /** Unified regex matching ALL technical tag formats (must match server-side TECH_TAG_REGEX) */
-const TAG_REGEX = /[\uFFF9-\uFFFC]|[\uE000-\uE0FF]+|\$\w+\([^)]*\)|\$\w+|%[sd]|\[\s*M[A-Z]*ID_[^\]]+\]|\d+\s*\[[A-Z]{2,10}\]|\[[A-Z]{2,10}\]\s*\d+|\[\s*\w+\s*:[^\]]*?\s*\]|\[\s*\w+\s*=\s*\w[^\]]*\]|\{\s*\w+\s*:\s*\w[^}]*\}|\{[\w]+\}|<[\w\/][^>]*>/g;
+const TAG_REGEX = /[\uFFF9-\uFFFC]|[\uE000-\uE0FF]+|\$\w+\([^)]*\)|\$\w+|%[sd]|\[\s*M[A-Z]*ID_[^\]]+\]|\d+\s*\[[A-Z]{2,10}\]|\[[A-Z]{2,10}\]\s*\d+|\[\s*\w+\s*:[^\]]*?\s*\]|\[\s*\w+\s*=\s*\w[^\]]*\]|\{\s*\w+\s*:\s*\w[^}]*\}|\{\/\w+\}|\{[\w]+\}|<[\w\/][^>]*>|[ɣɐɓɑɔɛɜɞɤɥɨɪɯɵɶʀʁʂʃʄʇʈ]/g;
 
 /**
  * Extract all technical tag tokens from text.

@@ -7,7 +7,7 @@
  */
 
 // === Tag protection ===
-const TAG_PATTERN = /[\uE000-\uE0FF]+|\[\s*\w+\s*:[^\]]*?\s*\]|\[\s*\w+\s*=\s*\w[^\]]*\]|\{\s*\w+\s*:\s*\w[^}]*\}|\{[\w]+\}|[\uFFF9-\uFFFC]+/g;
+const TAG_PATTERN = /[\uE000-\uE0FF]+|\[\s*\w+\s*:[^\]]*?\s*\]|\[\s*\w+\s*=\s*\w[^\]]*\]|\{\s*\w+\s*:\s*\w[^}]*\}|\{\/\w+\}|\{[\w]+\}|[\uFFF9-\uFFFC]+|[ɣɐɓɑɔɛɜɞɤɥɨɪɯɵɶʀʁʂʃʄʇʈ]/g;
 
 function shieldTags(text: string): { shielded: string; tags: string[] } {
   const tags: string[] = [];

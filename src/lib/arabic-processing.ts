@@ -183,7 +183,7 @@ export function reshapeArabic(text: string): string {
 export function reverseBidi(text: string): string {
   // Protect technical tags as atomic placeholders before BiDi processing
   // Includes: [Tag:Value], {var}, $Arg(0), $Icon("A"), $P, $n, %s, %d, [MID_...]
-  const tagPattern = /\[\s*MID_[^\]]+\]|\$\w+\([^)]*\)|\$\w+|%[sd]|\[\s*\w+\s*:[^\]]*?\s*\](?:\s*\([^)]{1,100}\))?|\[\s*\w+\s*=\s*[^\]]*\]|\{\s*\w+\s*:[^}]*\}|\{[\w]+\}|\d+\s*\[[A-Z]{2,10}\]|\[[A-Z]{2,10}\]\s*\d+/g;
+  const tagPattern = /\[\s*MID_[^\]]+\]|\$\w+\([^)]*\)|\$\w+|%[sd]|\[\s*\w+\s*:[^\]]*?\s*\](?:\s*\([^)]{1,100}\))?|\[\s*\w+\s*=\s*[^\]]*\]|\{\s*\w+\s*:[^}]*\}|\{\/\w+\}|\{[\w]+\}|\d+\s*\[[A-Z]{2,10}\]|\[[A-Z]{2,10}\]\s*\d+|[ɣɐɓɑɔɛɜɞɤɥɨɪɯɵɶʀʁʂʃʄʇʈ]/g;
   const tagSlots: string[] = [];
   const shielded = text.replace(tagPattern, (match) => {
     const idx = tagSlots.length;
