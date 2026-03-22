@@ -55,6 +55,7 @@ const App = () => (
                 <Route path="/bundle-extractor" element={<ErrorBoundary fallbackTitle="خطأ في فاك الحزم"><BundleExtractor /></ErrorBoundary>} />
                 <Route path="/luigis-mansion" element={<LuigiMansion />} />
                 <Route path="/luigis-mansion/process" element={<ErrorBoundary fallbackTitle="خطأ في المعالجة"><NlocProcess /></ErrorBoundary>} />
+                <Route path="/luigis-mansion/fonts" element={<ErrorBoundary fallbackTitle="خطأ في محرر الخطوط"><FontEditor /></ErrorBoundary>} />
                 <Route path="/cobalt" element={<ErrorBoundary fallbackTitle="خطأ في المحرر"><Editor /></ErrorBoundary>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>

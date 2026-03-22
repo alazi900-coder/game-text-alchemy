@@ -111,6 +111,12 @@ export default function LuigiMansion() {
                 ابدأ التعريب 👻
               </Button>
             </Link>
+            <Link to="/luigis-mansion/fonts">
+              <Button size="lg" variant="outline" className="font-display font-bold text-lg px-8 py-6 border-[hsl(270,60%,50%)]/50 text-[hsl(270,60%,60%)] hover:bg-[hsl(270,60%,50%)]/10">
+                <Type className="w-5 h-5 ml-2" />
+                محرر الخطوط
+              </Button>
+            </Link>
           </div>
         </div>
       </header>
