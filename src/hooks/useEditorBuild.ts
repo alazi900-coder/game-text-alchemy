@@ -10,6 +10,7 @@ import { normalizeMsbtTranslations, extractShortMsbtName } from "@/lib/msbt-key-
 import { sanitizeTranslations } from "@/lib/sanitize-translations";
 import { validateBundle, validateSarcMsbts } from "@/lib/bundle-validator";
 import { utf16leByteLength } from "@/lib/byte-utils";
+import { findNLOCInfo, rebuildNlocFull, type NlocTextEntry } from "@/lib/nloc-full-rebuild";
 
 export interface BuildStats {
   modifiedCount: number;
@@ -1677,99 +1678,172 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
           continue;
         }
 
-        // Load UTF-32 metadata
-        const utf32Meta = await idbGet<{ offset: number; codeUnits: number }[]>(`utf32Meta:${fileName}`);
-        if (!utf32Meta) {
-          log(`[BUILD-NLOC] ⚠️ بيانات UTF-32 غير موجودة لـ ${fileName} — تخطي`);
-          continue;
-        }
-
-        // Build a list of patches (sorted by offset) to allow expansion
-        type Patch = { index: number; offset: number; codeUnits: number; codePoints: number[] };
-        const patches: Patch[] = [];
-        let modifiedInFile = 0;
-        let skippedInFile = 0;
-        let expandedInFile = 0;
-
-        for (const entry of group.entries) {
-          const key = `${entry.msbtFile}:${entry.index}`;
-          const translation = nonEmptyTranslations[key];
-          if (!translation?.trim()) continue;
-
-          const meta = utf32Meta[entry.index];
-          if (!meta) {
-            log(`[BUILD-NLOC] ⚠️ فهرس ${entry.index} خارج النطاق في ${fileName}`);
-            skippedInFile++;
+        const origData = new Uint8Array(originalBuf);
+        
+        // Try NLOC Full Rebuild first
+        const nlocInfo = findNLOCInfo(origData);
+        
+        if (nlocInfo) {
+          // === NLOC Full Rebuild path ===
+          log(`[BUILD-NLOC] 🔧 ${fileName}: وُجد NLOC header — إعادة بناء كاملة (v${nlocInfo.version}, ${nlocInfo.count} نص)`);
+          
+          // Read original strings from NLOC structure to build NlocTextEntry[]
+          const view = new DataView(origData.buffer, origData.byteOffset, origData.byteLength);
+          const texts: NlocTextEntry[] = [];
+          let modifiedInFile = 0;
+          
+          for (let i = 0; i < nlocInfo.count; i++) {
+            const tocOffset = nlocInfo.tableStart + i * 8;
+            const hash = view.getUint32(tocOffset, nlocInfo.littleEndian);
+            const offsetUnits = view.getUint32(tocOffset + 4, nlocInfo.littleEndian);
+            
+            // Decode original string
+            const byteOffset = nlocInfo.textDataStart + offsetUnits * nlocInfo.unitBytes;
+            let original = '';
+            if (byteOffset < origData.length) {
+              const chars: string[] = [];
+              let pos = byteOffset;
+              while (pos + nlocInfo.unitBytes <= origData.length) {
+                const cp = nlocInfo.unitBytes === 4
+                  ? view.getUint32(pos, nlocInfo.littleEndian)
+                  : view.getUint16(pos, nlocInfo.littleEndian);
+                if (cp === 0) break;
+                chars.push(String.fromCodePoint(cp));
+                pos += nlocInfo.unitBytes;
+              }
+              original = chars.join('');
+            }
+            
+            // Find translation for this entry
+            const key = `nloc:${fileName}:${i}`;
+            const translation = nonEmptyTranslations[key] || '';
+            if (translation.trim()) modifiedInFile++;
+            
+            texts.push({ index: i, hash, offsetUnits, byteOffset, original, translated: translation });
+          }
+          
+          // Detect suffix bytes (data after the string region)
+          // Find end of last string
+          let lastStringEnd = nlocInfo.textDataStart;
+          for (const t of texts) {
+            const startByte = nlocInfo.textDataStart + t.offsetUnits * nlocInfo.unitBytes;
+            let pos = startByte;
+            while (pos + nlocInfo.unitBytes <= origData.length) {
+              const cp = nlocInfo.unitBytes === 4
+                ? view.getUint32(pos, nlocInfo.littleEndian)
+                : view.getUint16(pos, nlocInfo.littleEndian);
+              pos += nlocInfo.unitBytes;
+              if (cp === 0) break;
+            }
+            if (pos > lastStringEnd) lastStringEnd = pos;
+          }
+          nlocInfo.originalStringEnd = lastStringEnd;
+          nlocInfo.suffixBytes = origData.slice(lastStringEnd);
+          
+          const result = rebuildNlocFull(origData, nlocInfo, texts);
+          
+          log(`[BUILD-NLOC] ✅ ${fileName}: بناء كامل — ${modifiedInFile} ترجمة، ${result.stats.totalBytes} بايت`);
+          totalModified += modifiedInFile;
+          
+          if (modifiedInFile > 0) {
+            outputZip.file(fileName.replace(/\.[^.]+$/, '_arabized$&'), result.data);
+            filesBuilt++;
+          }
+        } else {
+          // === Raw UTF-32-LE Full Rebuild path ===
+          log(`[BUILD-NLOC] 🔧 ${fileName}: لا يوجد NLOC header — إعادة بناء UTF-32-LE كاملة`);
+          
+          const utf32Meta = await idbGet<{ offset: number; codeUnits: number }[]>(`utf32Meta:${fileName}`);
+          if (!utf32Meta || utf32Meta.length === 0) {
+            log(`[BUILD-NLOC] ⚠️ بيانات UTF-32 غير موجودة لـ ${fileName} — تخطي`);
             continue;
           }
 
-          const codePoints = [...translation].map(ch => ch.codePointAt(0)!);
-          patches.push({ index: entry.index, offset: meta.offset, codeUnits: meta.codeUnits, codePoints });
-          modifiedInFile++;
-        }
+          // Collect all string entries with their translations
+          type StringEntry = { index: number; offset: number; codeUnits: number; originalCPs: number[]; translatedCPs: number[] | null };
+          const stringEntries: StringEntry[] = [];
+          let modifiedInFile = 0;
+          const view = new DataView(origData.buffer, origData.byteOffset, origData.byteLength);
 
-        // Sort patches by offset ascending
-        patches.sort((a, b) => a.offset - b.offset);
+          for (let si = 0; si < utf32Meta.length; si++) {
+            const meta = utf32Meta[si];
+            // Read original code points
+            const originalCPs: number[] = [];
+            for (let ci = 0; ci < meta.codeUnits; ci++) {
+              const pos = meta.offset + ci * 4;
+              if (pos + 4 <= origData.length) {
+                originalCPs.push(view.getUint32(pos, true));
+              }
+            }
 
-        // Calculate total extra bytes needed for expansion
-        let extraBytes = 0;
-        for (const p of patches) {
-          const diff = p.codePoints.length - p.codeUnits;
-          if (diff > 0) {
-            extraBytes += diff * 4; // each code unit = 4 bytes in UTF-32
-            expandedInFile++;
-            log(`[BUILD-NLOC] 📐 نص #${p.index} توسّع بمقدار ${diff} حرف (${p.codePoints.length} > ${p.codeUnits})`);
+            const key = `nloc:${fileName}:${si}`;
+            const translation = nonEmptyTranslations[key];
+            let translatedCPs: number[] | null = null;
+            if (translation?.trim()) {
+              translatedCPs = [...translation].map(ch => ch.codePointAt(0)!);
+              modifiedInFile++;
+            }
+
+            stringEntries.push({ index: si, offset: meta.offset, codeUnits: meta.codeUnits, originalCPs, translatedCPs });
           }
-        }
 
-        // Build the new buffer
-        const origData = new Uint8Array(originalBuf);
-        const newSize = origData.length + extraBytes;
-        const output = new Uint8Array(newSize);
-        let readPos = 0;  // position in original
-        let writePos = 0; // position in output
-
-        for (const p of patches) {
-          // Copy everything from readPos to the start of this string slot
-          if (p.offset > readPos) {
-            output.set(origData.subarray(readPos, p.offset), writePos);
-            writePos += (p.offset - readPos);
+          if (modifiedInFile === 0) {
+            log(`[BUILD-NLOC] ⏭️ ${fileName}: لا توجد ترجمات — تخطي`);
+            continue;
           }
-          readPos = p.offset;
 
-          // Write the translated UTF-32-LE code points
-          const outView = new DataView(output.buffer, output.byteOffset);
-          for (let ci = 0; ci < p.codePoints.length; ci++) {
-            outView.setUint32(writePos, p.codePoints[ci], true);
-            writePos += 4;
+          // Sort by offset
+          const sorted = [...stringEntries].sort((a, b) => a.offset - b.offset);
+
+          // Find the string region boundaries
+          const firstOffset = sorted[0].offset;
+          const lastEntry = sorted[sorted.length - 1];
+          const originalRegionEnd = lastEntry.offset + (lastEntry.codeUnits + 1) * 4; // +1 for null terminator
+
+          // Build new string data region
+          const newStringParts: Uint8Array[] = [];
+          const newOffsets: { index: number; newOffset: number }[] = [];
+          let currentOffset = firstOffset;
+
+          for (const entry of sorted) {
+            const cps = entry.translatedCPs ?? entry.originalCPs;
+            const byteLen = (cps.length + 1) * 4; // +1 for null terminator
+            const part = new Uint8Array(byteLen);
+            const partView = new DataView(part.buffer);
+            for (let ci = 0; ci < cps.length; ci++) {
+              partView.setUint32(ci * 4, cps[ci], true);
+            }
+            partView.setUint32(cps.length * 4, 0, true); // null terminator
+            
+            newOffsets.push({ index: entry.index, newOffset: currentOffset });
+            newStringParts.push(part);
+            currentOffset += byteLen;
           }
-          // Add null terminator
-          outView.setUint32(writePos, 0, true);
-          writePos += 4;
 
-          // Skip the original string slot in source (codeUnits chars + null terminator)
-          const originalSlotBytes = (p.codeUnits + 1) * 4;
-          readPos = p.offset + originalSlotBytes;
-        }
+          // Assemble: prefix + new strings + suffix
+          const prefix = origData.slice(0, firstOffset);
+          const suffix = origData.slice(originalRegionEnd);
+          const totalStringBytes = newStringParts.reduce((sum, p) => sum + p.length, 0);
+          const newFile = new Uint8Array(prefix.length + totalStringBytes + suffix.length);
+          
+          newFile.set(prefix, 0);
+          let writePos = prefix.length;
+          for (const part of newStringParts) {
+            newFile.set(part, writePos);
+            writePos += part.length;
+          }
+          newFile.set(suffix, writePos);
 
-        // Copy remaining data after last patch
-        if (readPos < origData.length) {
-          output.set(origData.subarray(readPos), writePos);
-          writePos += (origData.length - readPos);
-        }
+          // Update file size header if present (offset 4 = file size - 8)
+          if (newFile.length >= 8) {
+            const mainView = new DataView(newFile.buffer);
+            mainView.setUint32(4, newFile.length - 8, true);
+          }
 
-        if (expandedInFile > 0) {
-          log(`[BUILD-NLOC] 📐 ${fileName}: ${expandedInFile} نص تم توسيعه — حجم الملف زاد بمقدار ${extraBytes} بايت`);
-        }
+          log(`[BUILD-NLOC] ✅ ${fileName}: بناء كامل UTF-32-LE — ${modifiedInFile} ترجمة، ${newFile.length} بايت (الأصلي: ${origData.length})`);
+          totalModified += modifiedInFile;
 
-        log(`[BUILD-NLOC] ${fileName}: ${modifiedInFile} ترجمة حُقنت، ${skippedInFile} تم تخطيها`);
-        totalModified += modifiedInFile;
-        totalSkipped += skippedInFile;
-
-        // Add to output — only if modified
-        if (modifiedInFile > 0) {
-          const finalOutput = extraBytes > 0 ? output.subarray(0, writePos) : output;
-          outputZip.file(fileName.replace(/\.[^.]+$/, '_arabized$&'), finalOutput);
+          outputZip.file(fileName.replace(/\.[^.]+$/, '_arabized$&'), newFile);
           filesBuilt++;
         }
       }
@@ -1803,7 +1877,7 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       }
 
       setLastBuildLog(buildLog);
-      setBuildProgress(`✅ تم بنجاح! ${totalModified} ترجمة حُقنت في ${filesBuilt} ملف بترميز UTF-32-LE 🎮`);
+      setBuildProgress(`✅ تم بنجاح! ${totalModified} ترجمة حُقنت في ${filesBuilt} ملف — بناء كامل (Full Rebuild) 🎮`);
 
       // Verification
       const verification = buildVerificationChecks({
