@@ -234,10 +234,17 @@ export default function NlocProcess() {
 
                 utf32Meta.push({ offset: s.offset, codeUnits: s.codeUnits });
 
-                // Auto-detect existing Arabic
+                // Auto-detect existing Arabic (strict: avoid binary garbage)
                 const arabicRegex = /[\u0621-\u064A\u0671-\u06D3\uFB50-\uFDFF\uFE70-\uFEFF]/g;
                 const stripped = s.text.replace(/[\u0000-\u001F]/g, '').trim();
-                if (stripped.length >= 5 && (stripped.match(arabicRegex) || []).length >= 3) {
+                const arabicMatches = (stripped.match(arabicRegex) || []).length;
+                // Require: ≥6 chars, ≥5 Arabic chars, Arabic ≥50% of all letters
+                const totalLetters = (stripped.match(/[\p{L}]/gu) || []).length;
+                const isRealArabic = stripped.length >= 6
+                  && arabicMatches >= 5
+                  && totalLetters > 0
+                  && (arabicMatches / totalLetters) >= 0.5;
+                if (isRealArabic) {
                   autoTranslations[`${msbtFile}:${si}`] = stripped;
                 }
               }
