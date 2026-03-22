@@ -12,7 +12,7 @@ import { computeConfidence, detectLiteralTranslation } from "./TranslationProgre
 
 /** Renders text with technical tags highlighted visually */
 function HighlightedOriginal({ text }: { text: string }) {
-  const tagPattern = /(\[\s*M[A-Z]*ID_[^\]]+\]|\$\w+\([^)]*\)|\$\w+|%[sd]|\[\s*\w+\s*:[^\]]*?\](?:\s*\([^)]{1,100}\))?|\[\s*\w+\s*=\s*[^\]]*\]|\{\s*\w+\s*:\s*[^}]*\}|\{[\w]+\}|\d+\s*\[[A-Z]{2,10}\]|\[[A-Z]{2,10}\]\s*\d+|[\uE000-\uE0FF]+|[\uFFF9-\uFFFC])/g;
+  const tagPattern = /(\[\s*M[A-Z]*ID_[^\]]+\]|\$\w+\([^)]*\)|\$\w+|%[sd]|\[\s*\w+\s*:[^\]]*?\](?:\s*\([^)]{1,100}\))?|\[\s*\w+\s*=\s*[^\]]*\]|\{\s*\w+\s*:\s*[^}]*\}|\{\/\w+\}|\{[\w]+\}|\d+\s*\[[A-Z]{2,10}\]|\[[A-Z]{2,10}\]\s*\d+|[\uE000-\uE0FF]+|[\uFFF9-\uFFFC]|[ɣɐɓɑɔɛɜɞɤɥɨɪɯɵɶʀʁʂʃʄʇʈ])/g;
 
   // Split by newlines first, then highlight tags within each line
   const lines = text.split('\n');
