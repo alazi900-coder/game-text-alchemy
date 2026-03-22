@@ -166,24 +166,58 @@ export function extractUtf32LEStrings(
 
   if (allStrings.length > 0) {
     // Filter: keep strings that are likely real game text
-    // (at least 2 printable non-space characters)
+    // Must have a significant ratio of ASCII printable characters
+    // Binary garbage decoded as UTF-32 produces mostly CJK/symbol noise
     const meaningful = allStrings.filter(s => {
       const trimmed = s.text.trim();
-      if (trimmed.length < 1) return false;
-      // Keep anything with letters/digits (not just punctuation/symbols)
-      return /[a-zA-Z0-9\u0600-\u06FF\u3000-\u9FFF\uAC00-\uD7AF]/.test(trimmed);
+      if (trimmed.length < 2) return false;
+
+      // Count ASCII printable chars (letters, digits, common punctuation, spaces)
+      let asciiPrintable = 0;
+      let arabicChars = 0;
+      let cjkOrExotic = 0;
+      for (const ch of trimmed) {
+        const cp = ch.codePointAt(0)!;
+        if (cp >= 0x20 && cp <= 0x7E) asciiPrintable++;
+        else if ((cp >= 0x0600 && cp <= 0x06FF) || (cp >= 0xFB50 && cp <= 0xFDFF) || (cp >= 0xFE70 && cp <= 0xFEFF)) arabicChars++;
+        else if (cp >= 0x2E80 && cp <= 0x9FFF) cjkOrExotic++;
+        else if (cp >= 0xAC00 && cp <= 0xD7AF) cjkOrExotic++;
+      }
+
+      const totalChars = trimmed.length;
+      const readableRatio = (asciiPrintable + arabicChars) / totalChars;
+
+      // Real game text (English/Arabic): at least 60% ASCII+Arabic
+      // If mostly CJK/exotic symbols, it's binary garbage
+      if (readableRatio < 0.5) return false;
+
+      // Must contain at least some actual letters (not just punctuation/symbols)
+      if (!/[a-zA-Z\u0600-\u06FF]/.test(trimmed)) return false;
+
+      // If CJK chars dominate, reject (binary data decoded as CJK)
+      if (cjkOrExotic > asciiPrintable + arabicChars) return false;
+
+      return true;
     });
 
-    log?.(`✅ UTF-32-LE: ${allStrings.length} نص خام → ${meaningful.length} نص ذو معنى`);
+    log?.(`✅ UTF-32-LE: ${allStrings.length} نص خام → ${meaningful.length} نص حقيقي (تمت فلترة ${allStrings.length - meaningful.length} قيمة ثنائية)`);
 
     if (meaningful.length > 0) {
       return meaningful;
     }
 
-    // If no "meaningful" strings found, return all with length >= 2
-    const fallback = allStrings.filter(s => s.codeUnits >= 2);
+    // Fallback: only strings with high ASCII ratio and length >= 3
+    const fallback = allStrings.filter(s => {
+      if (s.codeUnits < 3) return false;
+      let ascii = 0;
+      for (const ch of s.text) {
+        const cp = ch.codePointAt(0)!;
+        if (cp >= 0x20 && cp <= 0x7E) ascii++;
+      }
+      return ascii / s.text.length > 0.6;
+    });
     if (fallback.length > 0) {
-      log?.(`✅ UTF-32-LE: إعادة بـ ${fallback.length} نص (بدون فلترة)`);
+      log?.(`✅ UTF-32-LE: إعادة بـ ${fallback.length} نص (فلترة ASCII فقط)`);
       return fallback;
     }
   }
