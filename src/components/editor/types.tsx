@@ -236,9 +236,19 @@ export function hasTechnicalTags(text: string): boolean {
 // Re-export from dedicated module
 export { restoreTagsLocally, previewTagRestore } from "@/lib/tag-restoration";
 
+// LM2 button icon map
+const LM2_BUTTON_MAP: Record<string, string> = {
+  'ɣ': 'Y', 'ɐ': 'A', 'ɓ': 'B', 'ɑ': 'X',
+  'ɔ': 'L', 'ɛ': 'R', 'ɜ': 'ZL', 'ɞ': 'ZR',
+  'ɤ': '+', 'ɥ': '-', 'ɨ': '⬆', 'ɪ': '⬇',
+  'ɯ': '⬅', 'ɵ': '➡', 'ɶ': 'LS', 'ʀ': 'RS',
+  'ʁ': 'SL', 'ʂ': 'SR', 'ʃ': 'D⬆', 'ʄ': 'D⬇',
+  'ʇ': 'D⬅', 'ʈ': 'D➡',
+};
+
 // Sanitize original text: replace binary tag markers with color-coded, tooltipped badges
 export function displayOriginal(text: string): React.ReactNode {
-  const regex = /([\uFFF9\uFFFA\uFFFB\uFFFC\uE000-\uE0FF\u0000-\u0008\u000E-\u001F]+|\[\/?\w+:[^\]]*\])/g;
+  const regex = /([\uFFF9\uFFFA\uFFFB\uFFFC\uE000-\uE0FF\u0000-\u0008\u000E-\u001F]+|\{\/\w+\}|\[\/?\w+:[^\]]*\]|[ɣɐɓɑɔɛɜɞɤɥɨɪɯɵɶʀʁʂʃʄʇʈ])/g;
   const parts = text.split(regex);
   if (parts.length === 1 && !regex.test(text)) return text;
   const elements: React.ReactNode[] = [];
