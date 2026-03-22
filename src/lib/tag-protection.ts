@@ -15,6 +15,9 @@ export interface ProtectedText {
   tags: ProtectedTag[];
 }
 
+// LM2 HD controller button icons (Latin Extended-B used as button placeholders)
+const LM2_BUTTON_ICONS = /[ɣɐɓɑɔɛɜɞɤɥɨɪɯɵɶʀʁʂʃʄʇʈ]/g;
+
 // Patterns to match technical tags in order of priority
 const TAG_PATTERNS: RegExp[] = [
   /\[\s*\w+:\w[^\]]*\][^[]*?\[\/\s*\w+:\w[^\]]*\]/g, // Paired tags: [System:Ruby rt=x ]content[/System:Ruby]
@@ -27,10 +30,12 @@ const TAG_PATTERNS: RegExp[] = [
   /\[[A-Z]{2,10}\]\s*\d+/g,               // [TAG]N patterns (e.g. [ML]1, [ML] 1)
   /\[\s*\w+\s*=\s*\w[^\]]*\]/g,            // [TAG=Value] patterns
   /\{\s*\w+\s*:\s*\w[^}]*\}/g,             // {TAG:Value} patterns
+  /\{\/\w+\}/g,                              // Closing tags: {/tp}, {/clr}
   /\{[\w]+\}/g,                              // {variable} placeholders
   /%[sd]/g,                                  // Format specifiers: %s, %d
   /[\uFFF9-\uFFFC]/g,                       // Unicode special markers
   /<[\w\/][^>]*>/g,                          // HTML-like tags
+  LM2_BUTTON_ICONS,                          // LM2 HD controller button icons
 ];
 
 /**
@@ -132,6 +137,6 @@ export function validateAndRestoreTags(original: string, translated: string): st
 
 /** Extract all technical tags from text (unified pattern) */
 function extractAllTechTags(text: string): string[] {
-  const TECH_TAG_REGEX = /[\uFFF9-\uFFFC]|[\uE000-\uE0FF]+|\$\w+\([^)]*\)|\$\w+|%[sd]|\[\s*M[A-Z]*ID_[^\]]+\]|\[\s*\w+\s*:[^\]]*?\s*\]|\[\s*\w+\s*=\s*\w[^\]]*\]|\{\s*\w+\s*:\s*\w[^}]*\}|\{[\w]+\}|<[\w\/][^>]*>/g;
+  const TECH_TAG_REGEX = /[\uFFF9-\uFFFC]|[\uE000-\uE0FF]+|\$\w+\([^)]*\)|\$\w+|%[sd]|\[\s*M[A-Z]*ID_[^\]]+\]|\[\s*\w+\s*:[^\]]*?\s*\]|\[\s*\w+\s*=\s*\w[^\]]*\]|\{\s*\w+\s*:\s*\w[^}]*\}|\{\/\w+\}|\{[\w]+\}|<[\w\/][^>]*>|[ɣɐɓɑɔɛɜɞɤɥɨɪɯɵɶʀʁʂʃʄʇʈ]/g;
   return [...text.matchAll(TECH_TAG_REGEX)].map(m => m[0]);
 }

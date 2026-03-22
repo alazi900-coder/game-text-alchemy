@@ -31,10 +31,12 @@ const TAG_PATTERNS: RegExp[] = [
   /\[\s*\w+\s*:[^\]]*?\s*\]/g,
   /\[\s*\w+\s*=\s*\w[^\]]*\]/g,
   /\{\s*\w+\s*:\s*\w[^}]*\}/g,
+  /\{\/\w+\}/g,
   /\{[\w]+\}/g,
   /%[sd]/g,
   /[\uFFF9-\uFFFC]/g,
   /<[\w\/][^>]*>/g,
+  /[ɣɐɓɑɔɛɜɞɤɥɨɪɯɵɶʀʁʂʃʄʇʈ]/g,
 ];
 
 function shieldTags(text: string): { shielded: string; slots: string[] } {

@@ -217,26 +217,38 @@ export function categorizeACNHFile(filePath: string): string {
   return "other";
 }
 
-// Check if text contains technical tag markers (MSBT + Cobalt + format specifiers)
+// Check if text contains technical tag markers (MSBT + Cobalt + format specifiers + LM2 buttons)
 export function hasTechnicalTags(text: string): boolean {
   return /[\uFFF9\uFFFA\uFFFB\uFFFC\uE000-\uE0FF]/.test(text)
     || /\[\s*\w+\s*:[^\]]*\]/.test(text)
     || /\[\/\w+:[^\]]*\]/.test(text)
     || /\[\s*\w+\s*=\s*\w[^\]]*\]/.test(text)
     || /\{\s*\w+\s*:\s*\w[^}]*\}/.test(text)
-    || /\$\w+\([^)]*\)/.test(text)       // Cobalt: $Arg(0), $Window(...), $Wait(0)
-    || /\$[A-Za-z]/.test(text)            // Cobalt simple: $P, $n, $t
-    || /%[sd]/.test(text)                  // Format specifiers: %s, %d
-    || /\{[\w]+\}/.test(text)              // {variable} placeholders
-    || /<[\w\/][^>]*>/.test(text);         // HTML-like tags
+    || /\{\/\w+\}/.test(text)                 // Closing tags: {/tp}, {/clr}
+    || /\$\w+\([^)]*\)/.test(text)            // Cobalt: $Arg(0), $Window(...), $Wait(0)
+    || /\$[A-Za-z]/.test(text)                // Cobalt simple: $P, $n, $t
+    || /%[sd]/.test(text)                      // Format specifiers: %s, %d
+    || /\{[\w]+\}/.test(text)                  // {variable} placeholders
+    || /<[\w\/][^>]*>/.test(text)              // HTML-like tags
+    || /[ɣɐɓɑɔɛɜɞɤɥɨɪɯɵɶʀʁʂʃʄʇʈ]/.test(text); // LM2 button icons
 }
 
 // Re-export from dedicated module
 export { restoreTagsLocally, previewTagRestore } from "@/lib/tag-restoration";
 
+// LM2 button icon map
+const LM2_BUTTON_MAP: Record<string, string> = {
+  'ɣ': 'Y', 'ɐ': 'A', 'ɓ': 'B', 'ɑ': 'X',
+  'ɔ': 'L', 'ɛ': 'R', 'ɜ': 'ZL', 'ɞ': 'ZR',
+  'ɤ': '+', 'ɥ': '-', 'ɨ': '⬆', 'ɪ': '⬇',
+  'ɯ': '⬅', 'ɵ': '➡', 'ɶ': 'LS', 'ʀ': 'RS',
+  'ʁ': 'SL', 'ʂ': 'SR', 'ʃ': 'D⬆', 'ʄ': 'D⬇',
+  'ʇ': 'D⬅', 'ʈ': 'D➡',
+};
+
 // Sanitize original text: replace binary tag markers with color-coded, tooltipped badges
 export function displayOriginal(text: string): React.ReactNode {
-  const regex = /([\uFFF9\uFFFA\uFFFB\uFFFC\uE000-\uE0FF\u0000-\u0008\u000E-\u001F]+|\[\/?\w+:[^\]]*\])/g;
+  const regex = /([\uFFF9\uFFFA\uFFFB\uFFFC\uE000-\uE0FF\u0000-\u0008\u000E-\u001F]+|\{\/\w+\}|\[\/?\w+:[^\]]*\]|[ɣɐɓɑɔɛɜɞɤɥɨɪɯɵɶʀʁʂʃʄʇʈ])/g;
   const parts = text.split(regex);
   if (parts.length === 1 && !regex.test(text)) return text;
   const elements: React.ReactNode[] = [];
@@ -345,6 +357,43 @@ export function displayOriginal(text: string): React.ReactNode {
       }
       continue;
     }
+    // LM2 closing tags like {/tp}, {/clr}
+    if (/^\{\/\w+\}$/.test(part)) {
+      const tagName = part.slice(2, -1);
+      elements.push(
+        <Tooltip key={keyIdx++}>
+          <TooltipTrigger asChild>
+            <span className="inline-block px-1 rounded border text-xs cursor-help mx-0.5 bg-orange-500/20 text-orange-400 border-orange-500/30">
+              /{tagName}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs text-xs">
+            <div className="font-mono text-[10px] opacity-70">{part}</div>
+            <div>وسم إغلاق — لا تحذفه</div>
+          </TooltipContent>
+        </Tooltip>
+      );
+      continue;
+    }
+
+    // LM2 button icons
+    if (LM2_BUTTON_MAP[part]) {
+      elements.push(
+        <Tooltip key={keyIdx++}>
+          <TooltipTrigger asChild>
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded border text-xs cursor-help mx-0.5 bg-green-500/20 text-green-400 border-green-500/30 font-bold">
+              🎮{LM2_BUTTON_MAP[part]}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-xs text-xs">
+            <div className="font-mono text-[10px] opacity-70">رمز: {part} (U+{part.charCodeAt(0).toString(16).toUpperCase()})</div>
+            <div>زر تحكم {LM2_BUTTON_MAP[part]} — لا تحذفه أو تعدّله</div>
+          </TooltipContent>
+        </Tooltip>
+      );
+      continue;
+    }
+
     // Legacy FFF9-FFFC markers or other control chars
     const tagTypeInfo = TAG_TYPES[part[0]] || (part.match(/[\uFFF9\uFFFA\uFFFB\uFFFC\u0000-\u0008\u000E-\u001F]/) ? TAG_FALLBACK : null);
     if (tagTypeInfo) {
