@@ -10,6 +10,7 @@ import { normalizeMsbtTranslations, extractShortMsbtName } from "@/lib/msbt-key-
 import { sanitizeTranslations } from "@/lib/sanitize-translations";
 import { validateBundle, validateSarcMsbts } from "@/lib/bundle-validator";
 import { utf16leByteLength } from "@/lib/byte-utils";
+import { findNLOCInfo, rebuildNlocFull, type NlocTextEntry } from "@/lib/nloc-full-rebuild";
 
 export interface BuildStats {
   modifiedCount: number;
