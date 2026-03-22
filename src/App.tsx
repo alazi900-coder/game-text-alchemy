@@ -21,6 +21,7 @@ const Install = lazy(() => import("./pages/Install"));
 const BundleExtractor = lazy(() => import("./pages/BundleExtractor"));
 const LuigiMansion = lazy(() => import("./pages/LuigiMansion"));
 const NlocProcess = lazy(() => import("./pages/NlocProcess"));
+const FontEditor = lazy(() => import("./pages/FontEditor"));
 
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-background">
