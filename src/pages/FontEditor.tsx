@@ -16,7 +16,7 @@ import { toast } from "@/hooks/use-toast";
 import {
   ArrowRight, Download, Search, Trash2, ZoomIn, ZoomOut, ScanSearch,
   Paintbrush, Upload, Eye, FileJson, Replace, Type, Pencil, RotateCcw,
-  Settings2, Grid3x3, Layers, ChevronDown, ChevronUp, Palette, Move,
+  Settings2, Grid3x3, Layers, ChevronDown, ChevronUp, Palette, Move, Loader2,
   Archive, FolderOpen, FileText, HardDrive, Package
 } from "lucide-react";
 import { decodeDXT5, encodeDXT5, findDDSPositions, DDS_HEADER_SIZE, TEX_SIZE, DXT5_MIP0_SIZE, buildDDSHeader } from "@/lib/dxt5-codec";
@@ -53,6 +53,38 @@ interface TextureInfo {
   archiveFileIndex?: number; // NLG archive file index
 }
 
+interface ArabicPresetFont {
+  id: string;
+  label: string;
+  family: string;
+  url: string;
+  format: "truetype" | "opentype" | "woff" | "woff2";
+}
+
+const ARABIC_PRESET_FONTS: ArabicPresetFont[] = [
+  {
+    id: "noto-kufi-bold",
+    label: "Noto Kufi Arabic (موصى به للعبة)",
+    family: "Noto Kufi Arabic",
+    url: "https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@main/hinted/ttf/NotoKufiArabic/NotoKufiArabic-Bold.ttf",
+    format: "truetype",
+  },
+  {
+    id: "noto-naskh-bold",
+    label: "Noto Naskh Arabic",
+    family: "Noto Naskh Arabic",
+    url: "https://cdn.jsdelivr.net/gh/googlefonts/noto-fonts@main/hinted/ttf/NotoNaskhArabic/NotoNaskhArabic-Bold.ttf",
+    format: "truetype",
+  },
+  {
+    id: "cairo-bold",
+    label: "Cairo",
+    family: "Cairo",
+    url: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/cairo/Cairo-Bold.ttf",
+    format: "truetype",
+  },
+];
+
 /* ─── component ─── */
 export default function FontEditor() {
   // Core state
@@ -81,6 +113,8 @@ export default function FontEditor() {
   const [strokeColor, setStrokeColor] = useState("#000000");
   const [padding, setPadding] = useState(3);
   const [antiAlias, setAntiAlias] = useState(true);
+  const [presetFontId, setPresetFontId] = useState(ARABIC_PRESET_FONTS[0].id);
+  const [isDownloadingPresetFont, setIsDownloadingPresetFont] = useState(false);
 
   // Arabic char selection
   const [includeIsolated, setIncludeIsolated] = useState(true);
@@ -113,6 +147,16 @@ export default function FontEditor() {
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const fontInputRef = useRef<HTMLInputElement>(null);
   const customFontInputRef = useRef<HTMLInputElement>(null);
+  const presetFontObjectUrlsRef = useRef<string[]>([]);
+
+  useEffect(() => {
+    return () => {
+      for (const url of presetFontObjectUrlsRef.current) {
+        URL.revokeObjectURL(url);
+      }
+      presetFontObjectUrlsRef.current = [];
+    };
+  }, []);
 
   /* ─── Arabic chars memo ─── */
   const arabicChars = useMemo(() => getArabicChars({
@@ -196,6 +240,34 @@ export default function FontEditor() {
 
   useEffect(() => { updatePreview(); }, [updatePreview]);
 
+  const decodeArchiveTextures = useCallback((files: NLGExtractedFile[]) => {
+    const decodedTextures: TextureInfo[] = [];
+
+    for (const file of files) {
+      const type = detectFileType(file.data);
+      if (type !== "DDS" || file.data.length <= DDS_HEADER_SIZE + 1024) continue;
+
+      try {
+        const dxtData = file.data.slice(DDS_HEADER_SIZE, DDS_HEADER_SIZE + DXT5_MIP0_SIZE);
+        const rgba = decodeDXT5(dxtData, TEX_SIZE, TEX_SIZE);
+
+        const canvas = document.createElement("canvas");
+        canvas.width = TEX_SIZE;
+        canvas.height = TEX_SIZE;
+        const ctx = canvas.getContext("2d")!;
+        const imgData = ctx.createImageData(TEX_SIZE, TEX_SIZE);
+        imgData.data.set(rgba);
+        ctx.putImageData(imgData, 0, 0);
+
+        decodedTextures.push({ canvas, ctx, imgData, ddsOffset: -1, archiveFileIndex: file.index });
+      } catch (err) {
+        console.warn(`Failed to decode DDS from archive file ${file.index}`, err);
+      }
+    }
+
+    return decodedTextures;
+  }, []);
+
   /* ─── File loading (supports .dict + .data pairs) ─── */
   const handleFontFiles = async (files: FileList | null) => {
     if (!files) return;
@@ -232,29 +304,7 @@ export default function FontEditor() {
         const extracted = extractNLGFiles(info, data);
         setArchiveFiles(extracted);
 
-        // Find DDS files within extracted archive
-        const newTextures: TextureInfo[] = [];
-        for (const file of extracted) {
-          const type = detectFileType(file.data);
-          if (type === "DDS" && file.data.length > DDS_HEADER_SIZE + 1024) {
-            try {
-              const dxtData = file.data.slice(DDS_HEADER_SIZE, DDS_HEADER_SIZE + DXT5_MIP0_SIZE);
-              const rgba = decodeDXT5(dxtData, TEX_SIZE, TEX_SIZE);
-
-              const canvas = document.createElement("canvas");
-              canvas.width = TEX_SIZE;
-              canvas.height = TEX_SIZE;
-              const ctx = canvas.getContext("2d")!;
-              const imgData = ctx.createImageData(TEX_SIZE, TEX_SIZE);
-              imgData.data.set(rgba);
-              ctx.putImageData(imgData, 0, 0);
-
-              newTextures.push({ canvas, ctx, imgData, ddsOffset: -1, archiveFileIndex: file.index });
-            } catch (err) {
-              console.warn(`Failed to decode DDS from archive file ${file.index}`, err);
-            }
-          }
-        }
+        const newTextures = decodeArchiveTextures(extracted);
 
         setTextures(newTextures);
         setCurrentPage(0);
@@ -491,6 +541,44 @@ export default function FontEditor() {
     }
   };
 
+  const handleDownloadPresetFont = async () => {
+    const preset = ARABIC_PRESET_FONTS.find(p => p.id === presetFontId);
+    if (!preset) return;
+
+    setIsDownloadingPresetFont(true);
+    try {
+      const response = await fetch(preset.url);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      presetFontObjectUrlsRef.current.push(objectUrl);
+
+      const fontFace = new FontFace(preset.family, `url(${objectUrl}) format('${preset.format}')`);
+      const loaded = await fontFace.load();
+      document.fonts.add(loaded);
+      await document.fonts.ready;
+
+      setArabicFontName(preset.family);
+      setCustomFontLoaded(true);
+
+      toast({
+        title: "✅ تم تحميل الخط تلقائياً",
+        description: `${preset.label} جاهز الآن للتوليد`,
+      });
+    } catch (err: any) {
+      toast({
+        title: "خطأ في التحميل التلقائي",
+        description: err.message || "تعذر تنزيل الخط، جرّب الرفع اليدوي",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDownloadingPresetFont(false);
+    }
+  };
+
   /* ─── Build & Download ─── */
   const handleBuildFont = async () => {
     if (!fontData) {
@@ -567,7 +655,10 @@ export default function FontEditor() {
     }
 
     // Append new generated pages as new DDS files
-    const generatedTextures = textures.filter(t => t.isGenerated);
+    const generatedTextures = replaceMode === "append"
+      ? textures.filter(t => t.isGenerated)
+      : [];
+
     for (const tex of generatedTextures) {
       const rgba = tex.ctx.getImageData(0, 0, TEX_SIZE, TEX_SIZE).data;
       const dxt5 = encodeDXT5(new Uint8Array(rgba), TEX_SIZE, TEX_SIZE);
@@ -580,7 +671,7 @@ export default function FontEditor() {
       updatedFiles.push({
         index: newIndex,
         data: newDDS,
-        wasCompressed: false,
+        wasCompressed: archiveInfo.isCompressed,
         originalEntry: {
           index: newIndex,
           offset: 0,
@@ -593,6 +684,16 @@ export default function FontEditor() {
 
     // Repack
     const { dict: newDict, data: newData } = repackNLGArchive(archiveInfo, updatedFiles);
+    const newArchiveInfo = parseNLGDict(newDict);
+    const newArchiveFiles = extractNLGFiles(newArchiveInfo, newData);
+    const newTextures = decodeArchiveTextures(newArchiveFiles);
+
+    setDictData(newDict);
+    setFontData(newData);
+    setArchiveInfo(newArchiveInfo);
+    setArchiveFiles(newArchiveFiles);
+    setTextures(newTextures);
+    setCurrentPage(0);
 
     // Download as ZIP
     const zip = new JSZip();
@@ -610,7 +711,7 @@ export default function FontEditor() {
 
     toast({
       title: "✅ تم بناء الأرشيف",
-      description: `${updatedFiles.length} ملف (${generatedTextures.length} صفحة جديدة) — dict + data في ZIP`,
+      description: `${updatedFiles.length} ملف (${generatedTextures.length} صفحة جديدة) — dict + data في ZIP (ارفع الملفين معاً عند المراجعة)`,
     });
   };
 
@@ -1003,6 +1104,29 @@ export default function FontEditor() {
                       <div className="flex gap-2 items-center">
                         <Input ref={customFontInputRef} type="file" accept=".ttf,.otf,.woff,.woff2" onChange={handleCustomFont} className="h-8 text-xs flex-1" />
                         {customFontLoaded && <Badge variant="secondary" className="text-[10px] shrink-0">✅ {arabicFontName}</Badge>}
+                      </div>
+                      <div className="grid grid-cols-[1fr_auto] gap-2 mt-2">
+                        <Select value={presetFontId} onValueChange={setPresetFontId}>
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="اختر خطاً عربياً جاهزاً" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ARABIC_PRESET_FONTS.map(font => (
+                              <SelectItem key={font.id} value={font.id}>{font.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          className="h-8 gap-1.5 text-xs"
+                          onClick={handleDownloadPresetFont}
+                          disabled={isDownloadingPresetFont}
+                        >
+                          {isDownloadingPresetFont ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                          تحميل تلقائي
+                        </Button>
                       </div>
                       <p className="text-[10px] text-muted-foreground">يُنصح بخط عربي يدعم جميع الأشكال: Tajawal, Noto Kufi Arabic, Cairo</p>
                     </div>
