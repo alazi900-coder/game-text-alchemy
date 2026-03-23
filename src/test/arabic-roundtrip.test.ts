@@ -31,14 +31,9 @@ describe("Arabic processing round-trip", () => {
     expect(roundTrip(original)).toBe(original);
   });
 
-  it("mixed Arabic and English preserves all content (space may shift)", () => {
+  it("mixed Arabic and English round-trips correctly", () => {
     const original = "اضغط A للتأكيد";
-    const result = roundTrip(original);
-    // All meaningful content is preserved; whitespace around LTR may shift
-    expect(result).toContain("A");
-    expect(result).toContain("اضغط");
-    expect(result).toContain("للتأكيد");
-    expect(hasArabicPresentationForms(result)).toBe(false);
+    expect(roundTrip(original)).toBe(original);
   });
 
   it("processed text has presentation forms", () => {
