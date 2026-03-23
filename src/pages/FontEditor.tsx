@@ -643,7 +643,7 @@ export default function FontEditor() {
   const handleExportArchiveFile = (file: NLGExtractedFile) => {
     const type = detectFileType(file.data);
     const ext = type === "DDS" ? ".dds" : type === "text" ? ".txt" : ".bin";
-    const blob = new Blob([file.data.buffer], { type: "application/octet-stream" });
+    const blob = new Blob([new Uint8Array(file.data)], { type: "application/octet-stream" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
