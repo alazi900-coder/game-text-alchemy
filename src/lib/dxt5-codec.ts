@@ -159,6 +159,55 @@ export function encodeDXT5(rgba: Uint8Array, width: number, height: number): Uin
 /** DDS header size in bytes */
 export const DDS_HEADER_SIZE = 128;
 
+/**
+ * Build a valid DDS header for a DXT5 (BC3) texture.
+ * Returns a 128-byte Uint8Array ready to be prepended to DXT5 block data.
+ */
+export function buildDDSHeader(width: number, height: number): Uint8Array {
+  const header = new Uint8Array(128);
+  const view = new DataView(header.buffer);
+
+  // Magic: "DDS "
+  header[0] = 0x44; header[1] = 0x44; header[2] = 0x53; header[3] = 0x20;
+
+  // Header size (always 124)
+  view.setUint32(4, 124, true);
+
+  // Flags: CAPS | HEIGHT | WIDTH | PIXELFORMAT | MIPMAPCOUNT | LINEARSIZE
+  view.setUint32(8, 0x000A1007, true);
+
+  // Height
+  view.setUint32(12, height, true);
+  // Width
+  view.setUint32(16, width, true);
+
+  // Pitch or linear size (DXT5: width * height for mip0)
+  const linearSize = Math.max(1, Math.floor((width + 3) / 4)) * Math.max(1, Math.floor((height + 3) / 4)) * 16;
+  view.setUint32(20, linearSize, true);
+
+  // Depth
+  view.setUint32(24, 0, true);
+
+  // Mipmap count (1 = no mipmaps)
+  view.setUint32(28, 1, true);
+
+  // Reserved (11 DWORDs at offset 32-75)
+  // Already zero
+
+  // Pixel format struct (32 bytes starting at offset 76)
+  // PF size
+  view.setUint32(76, 32, true);
+  // PF flags: DDPF_FOURCC
+  view.setUint32(80, 0x4, true);
+  // FourCC: "DXT5"
+  header[84] = 0x44; header[85] = 0x58; header[86] = 0x54; header[87] = 0x35;
+
+  // Caps
+  view.setUint32(108, 0x1000, true); // DDSCAPS_TEXTURE
+
+  return header;
+}
+
 /** Default texture size for LM2HD font atlases */
 export const TEX_SIZE = 1024;
 
