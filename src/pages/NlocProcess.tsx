@@ -245,7 +245,15 @@ export default function NlocProcess() {
                   && totalLetters > 0
                   && (arabicMatches / totalLetters) >= 0.5;
                 if (isRealArabic) {
-                  autoTranslations[`${msbtFile}:${si}`] = stripped;
+                  // If text has presentation forms, it was already processed for the game engine
+                  // Un-process it: remove presentation forms + un-reverse BiDi to get editor-friendly text
+                  const { hasArabicPresentationForms, removeArabicPresentationForms, reverseBidi } = await import("@/lib/arabic-processing");
+                  let normalized = stripped;
+                  if (hasArabicPresentationForms(stripped)) {
+                    normalized = removeArabicPresentationForms(stripped);
+                    normalized = reverseBidi(normalized); // reverse back to logical RTL order
+                  }
+                  autoTranslations[`${msbtFile}:${si}`] = normalized;
                 }
               }
 
