@@ -245,7 +245,15 @@ export default function NlocProcess() {
                   && totalLetters > 0
                   && (arabicMatches / totalLetters) >= 0.5;
                 if (isRealArabic) {
-                  autoTranslations[`${msbtFile}:${si}`] = stripped;
+                  // If text has presentation forms, it was already processed for the game engine
+                  // Un-process it: remove presentation forms + un-reverse BiDi to get editor-friendly text
+                  const { hasArabicPresentationForms, removeArabicPresentationForms, reverseBidi } = await import("@/lib/arabic-processing");
+                  let normalized = stripped;
+                  if (hasArabicPresentationForms(stripped)) {
+                    normalized = removeArabicPresentationForms(stripped);
+                    normalized = reverseBidi(normalized); // reverse back to logical RTL order
+                  }
+                  autoTranslations[`${msbtFile}:${si}`] = normalized;
                 }
               }
 
@@ -307,7 +315,14 @@ export default function NlocProcess() {
             const arabicRegex = /[\u0621-\u064A\u0671-\u06D3\uFB50-\uFDFF\uFE70-\uFEFF]/g;
             const stripped = msg.text.replace(/[\u0000-\u001F]/g, '').trim();
             if (stripped.length >= 5 && (stripped.match(arabicRegex) || []).length >= 3) {
-              autoTranslations[`${msbtFile}:${i}`] = stripped;
+              // Un-process if already in game format (presentation forms + reversed)
+              const { hasArabicPresentationForms, removeArabicPresentationForms, reverseBidi } = await import("@/lib/arabic-processing");
+              let normalized = stripped;
+              if (hasArabicPresentationForms(stripped)) {
+                normalized = removeArabicPresentationForms(stripped);
+                normalized = reverseBidi(normalized);
+              }
+              autoTranslations[`${msbtFile}:${i}`] = normalized;
             }
           }
         } catch (e) {

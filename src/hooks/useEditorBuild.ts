@@ -1637,12 +1637,20 @@ export function useEditorBuild({ state, setState, setLastSaved, arabicNumerals, 
       for (const [k, v] of Object.entries(safeTranslations)) { if (v?.trim()) nonEmptyTranslations[k] = v; }
 
       // Auto-apply Arabic processing during build
-      const arabicRegex = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/;
-      const formsRegex = /[\uFB50-\uFDFF\uFE70-\uFEFF]/;
+      // Always strip presentation forms first, then re-process — this ensures
+      // edits to previously-processed text are handled correctly
+      const arabicRegex = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
       let autoProcessedArabic = 0;
       for (const [key, value] of Object.entries(nonEmptyTranslations)) {
-        if (arabicRegex.test(value) && !formsRegex.test(value)) {
-          nonEmptyTranslations[key] = processArabicText(value, { arabicNumerals, mirrorPunct: mirrorPunctuation });
+        if (arabicRegex.test(value)) {
+          // Strip any existing presentation forms first to normalize
+          let clean = value;
+          if (hasArabicPresentationForms(value)) {
+            clean = removeArabicPresentationForms(value);
+            // If text was already reversed for game engine, un-reverse it first
+            clean = reverseBidi(clean);
+          }
+          nonEmptyTranslations[key] = processArabicText(clean, { arabicNumerals, mirrorPunct: mirrorPunctuation });
           autoProcessedArabic++;
         }
       }
