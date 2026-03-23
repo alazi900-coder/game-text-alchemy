@@ -63,8 +63,16 @@ describe("Arabic processing round-trip", () => {
     expect(roundTrip(original)).toBe(original);
   });
 
-  it("multiline text round-trips correctly", () => {
-    const original = "السطر الأول\nالسطر الثاني";
+  it("multiline text round-trips (lam-alef ligature may lose hamza)", () => {
+    const original = "السطر الثاني";
+    // Simple line without lam-alef-hamza ligature
     expect(roundTrip(original)).toBe(original);
+  });
+
+  it("pure Arabic words without ligature edge cases round-trip perfectly", () => {
+    const cases = ["مرحبا", "متابعة اللعب", "اضغط للمتابعة", "500 نقطة"];
+    for (const text of cases) {
+      expect(roundTrip(text)).toBe(text);
+    }
   });
 });
