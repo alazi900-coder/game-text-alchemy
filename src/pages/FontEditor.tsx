@@ -16,15 +16,21 @@ import { toast } from "@/hooks/use-toast";
 import {
   ArrowRight, Download, Search, Trash2, ZoomIn, ZoomOut, ScanSearch,
   Paintbrush, Upload, Eye, FileJson, Replace, Type, Pencil, RotateCcw,
-  Settings2, Grid3x3, Layers, ChevronDown, ChevronUp, Palette, Move
+  Settings2, Grid3x3, Layers, ChevronDown, ChevronUp, Palette, Move,
+  Archive, FolderOpen, FileText, HardDrive, Package
 } from "lucide-react";
-import { decodeDXT5, encodeDXT5, findDDSPositions, DDS_HEADER_SIZE, TEX_SIZE, DXT5_MIP0_SIZE } from "@/lib/dxt5-codec";
+import { decodeDXT5, encodeDXT5, findDDSPositions, DDS_HEADER_SIZE, TEX_SIZE, DXT5_MIP0_SIZE, buildDDSHeader } from "@/lib/dxt5-codec";
 import { getArabicChars, ARABIC_LETTERS, TASHKEEL } from "@/lib/arabic-forms-data";
 import {
   generateFontAtlas, renderTextPreview, exportMetricsJSON, mergeAtlasToFontData,
   type GlyphMetrics, type AtlasResult, type AtlasPage
 } from "@/lib/font-atlas-engine";
+import {
+  parseNLGDict, extractNLGFiles, repackNLGArchive, detectFileType, formatFileSize,
+  type NLGArchiveInfo, type NLGExtractedFile
+} from "@/lib/nlg-archive";
 import GlyphDrawingEditor from "@/components/editor/GlyphDrawingEditor";
+import JSZip from "jszip";
 
 /* ─── types ─── */
 export interface GlyphEntry {
@@ -44,6 +50,7 @@ interface TextureInfo {
   imgData: ImageData;
   ddsOffset: number;
   isGenerated?: boolean;
+  archiveFileIndex?: number; // NLG archive file index
 }
 
 /* ─── component ─── */
@@ -56,6 +63,13 @@ export default function FontEditor() {
   const [glyphSearch, setGlyphSearch] = useState("");
   const [fontData, setFontData] = useState<Uint8Array | null>(null);
   const [fileName, setFileName] = useState("");
+
+  // NLG Archive state
+  const [archiveInfo, setArchiveInfo] = useState<NLGArchiveInfo | null>(null);
+  const [archiveFiles, setArchiveFiles] = useState<NLGExtractedFile[]>([]);
+  const [dictData, setDictData] = useState<Uint8Array | null>(null);
+  const [dictFileName, setDictFileName] = useState("");
+  const [hasArchive, setHasArchive] = useState(false);
 
   // Arabic generation settings
   const [arabicFontName, setArabicFontName] = useState("Tajawal");
@@ -128,36 +142,24 @@ export default function FontEditor() {
     ctx.fillRect(0, 0, sz, sz);
     ctx.drawImage(t.canvas, 0, 0, sz, sz);
 
-    // Grid overlay for generated pages
     if (t.isGenerated) {
       ctx.strokeStyle = "rgba(100, 100, 100, 0.15)";
       ctx.lineWidth = 0.5;
       for (let x = 0; x < TEX_SIZE; x += 64) {
-        ctx.beginPath();
-        ctx.moveTo(x * zoom, 0);
-        ctx.lineTo(x * zoom, sz);
-        ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x * zoom, 0); ctx.lineTo(x * zoom, sz); ctx.stroke();
       }
       for (let y = 0; y < TEX_SIZE; y += 64) {
-        ctx.beginPath();
-        ctx.moveTo(0, y * zoom);
-        ctx.lineTo(sz, y * zoom);
-        ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, y * zoom); ctx.lineTo(sz, y * zoom); ctx.stroke();
       }
     }
 
-    // Draw glyph bounding boxes
     const pageGlyphs = glyphList.filter(g => g.page === idx);
     if (pageGlyphs.length > 0) {
-      pageGlyphs.forEach((g, i) => {
-        const isHighlighted = highlightedGlyph !== null &&
-          glyphList.indexOf(g) === highlightedGlyph;
-        ctx.strokeStyle = isHighlighted
-          ? "rgba(255, 200, 0, 0.9)"
-          : "rgba(0, 212, 170, 0.25)";
+      pageGlyphs.forEach(g => {
+        const isHighlighted = highlightedGlyph !== null && glyphList.indexOf(g) === highlightedGlyph;
+        ctx.strokeStyle = isHighlighted ? "rgba(255, 200, 0, 0.9)" : "rgba(0, 212, 170, 0.25)";
         ctx.lineWidth = isHighlighted ? 2 : 0.5;
         ctx.strokeRect(g.x * zoom, g.y * zoom, g.w * zoom, g.h * zoom);
-
         if (isHighlighted) {
           ctx.fillStyle = "rgba(255, 200, 0, 0.15)";
           ctx.fillRect(g.x * zoom, g.y * zoom, g.w * zoom, g.h * zoom);
@@ -183,30 +185,28 @@ export default function FontEditor() {
     ctx.fillStyle = previewBg;
     ctx.fillRect(0, 0, width, height);
 
-    // Draw baseline guides
     ctx.strokeStyle = "rgba(255,255,255,0.08)";
     ctx.lineWidth = 1;
     for (let y = 40; y < height; y += atlasResult.lineHeight * previewScale) {
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(width, y);
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke();
     }
 
     renderTextPreview(ctx, previewText, atlasResult, width - 30, 60, previewScale, true);
   }, [atlasResult, previewText, previewScale, previewBg]);
 
-  useEffect(() => {
-    updatePreview();
-  }, [updatePreview]);
+  useEffect(() => { updatePreview(); }, [updatePreview]);
 
-  /* ─── File loading ─── */
+  /* ─── File loading (supports .dict + .data pairs) ─── */
   const handleFontFiles = async (files: FileList | null) => {
     if (!files) return;
     let dataFile: File | null = null;
+    let dictFile: File | null = null;
+
     for (const f of Array.from(files)) {
       if (f.name.endsWith(".data")) dataFile = f;
+      if (f.name.endsWith(".dict")) dictFile = f;
     }
+
     if (!dataFile) {
       toast({ title: "خطأ", description: "لم يتم العثور على ملف .data", variant: "destructive" });
       return;
@@ -217,6 +217,69 @@ export default function FontEditor() {
     setFontData(data);
     setFileName(dataFile.name);
 
+    // If .dict is provided, use NLG archive parser
+    if (dictFile) {
+      try {
+        const dictBuffer = await dictFile.arrayBuffer();
+        const dictBytes = new Uint8Array(dictBuffer);
+        setDictData(dictBytes);
+        setDictFileName(dictFile.name);
+
+        const info = parseNLGDict(dictBytes);
+        setArchiveInfo(info);
+        setHasArchive(true);
+
+        const extracted = extractNLGFiles(info, data);
+        setArchiveFiles(extracted);
+
+        // Find DDS files within extracted archive
+        const newTextures: TextureInfo[] = [];
+        for (const file of extracted) {
+          const type = detectFileType(file.data);
+          if (type === "DDS" && file.data.length > DDS_HEADER_SIZE + 1024) {
+            try {
+              const dxtData = file.data.slice(DDS_HEADER_SIZE, DDS_HEADER_SIZE + DXT5_MIP0_SIZE);
+              const rgba = decodeDXT5(dxtData, TEX_SIZE, TEX_SIZE);
+
+              const canvas = document.createElement("canvas");
+              canvas.width = TEX_SIZE;
+              canvas.height = TEX_SIZE;
+              const ctx = canvas.getContext("2d")!;
+              const imgData = ctx.createImageData(TEX_SIZE, TEX_SIZE);
+              imgData.data.set(rgba);
+              ctx.putImageData(imgData, 0, 0);
+
+              newTextures.push({ canvas, ctx, imgData, ddsOffset: -1, archiveFileIndex: file.index });
+            } catch (err) {
+              console.warn(`Failed to decode DDS from archive file ${file.index}`, err);
+            }
+          }
+        }
+
+        setTextures(newTextures);
+        setCurrentPage(0);
+        setAtlasResult(null);
+        toast({
+          title: "✅ تم تحميل الأرشيف",
+          description: `${info.fileCount} ملف في الأرشيف — ${newTextures.length} صفحة DDS — ${formatFileSize(data.length)}`,
+        });
+      } catch (err: any) {
+        console.error("NLG parse error:", err);
+        toast({ title: "خطأ في قراءة الأرشيف", description: err.message, variant: "destructive" });
+        // Fallback to direct DDS scan
+        loadDirectDDS(data);
+      }
+    } else {
+      // No .dict — use direct DDS scan (legacy mode)
+      setHasArchive(false);
+      setArchiveInfo(null);
+      setArchiveFiles([]);
+      setDictData(null);
+      loadDirectDDS(data);
+    }
+  };
+
+  const loadDirectDDS = (data: Uint8Array) => {
     const ddsPositions = findDDSPositions(data);
     const newTextures: TextureInfo[] = [];
 
@@ -239,7 +302,7 @@ export default function FontEditor() {
     setTextures(newTextures);
     setCurrentPage(0);
     setAtlasResult(null);
-    toast({ title: "✅ تم التحميل", description: `${ddsPositions.length} صفحة أطلس — ${(data.length / 1024 / 1024).toFixed(1)} MB` });
+    toast({ title: "✅ تم التحميل", description: `${ddsPositions.length} صفحة أطلس — ${formatFileSize(data.length)}` });
   };
 
   /* ─── Auto-detect glyphs from existing textures ─── */
@@ -338,7 +401,6 @@ export default function FontEditor() {
 
     setAtlasResult(result);
 
-    // Convert atlas pages to textures
     const newTextures = [...textures.filter(t => !t.isGenerated)];
     const newGlyphs = [...glyphs.filter(g => {
       const tex = textures[g.page];
@@ -359,7 +421,6 @@ export default function FontEditor() {
       });
     }
 
-    // Convert GlyphMetrics to GlyphEntry
     for (const gm of result.glyphs) {
       if (gm.width === 0) continue;
       newGlyphs.push({
@@ -389,7 +450,6 @@ export default function FontEditor() {
     const tex = textures[targetReplacePage];
     if (!tex || tex.isGenerated) return;
 
-    // Clear the target texture and render atlas result on it
     const page0 = atlasResult.pages[0];
     if (!page0) return;
 
@@ -397,19 +457,14 @@ export default function FontEditor() {
     tex.ctx.drawImage(page0.canvas, 0, 0);
     tex.imgData = tex.ctx.getImageData(0, 0, TEX_SIZE, TEX_SIZE);
 
-    // Update glyphs for this page
     const newGlyphs = glyphs.filter(g => g.page !== targetReplacePage);
     for (const gm of atlasResult.glyphs) {
       if (gm.width === 0) continue;
       newGlyphs.push({
-        char: gm.char,
-        code: gm.code,
-        x: gm.atlasX,
-        y: gm.atlasY,
-        w: gm.width,
-        h: gm.height,
-        page: targetReplacePage,
-        advance: gm.advance,
+        char: gm.char, code: gm.code,
+        x: gm.atlasX, y: gm.atlasY,
+        w: gm.width, h: gm.height,
+        page: targetReplacePage, advance: gm.advance,
       });
     }
 
@@ -437,12 +492,23 @@ export default function FontEditor() {
   };
 
   /* ─── Build & Download ─── */
-  const handleBuildFont = () => {
+  const handleBuildFont = async () => {
     if (!fontData) {
       toast({ title: "خطأ", description: "حمّل ملف الخط أولاً", variant: "destructive" });
       return;
     }
 
+    if (hasArchive && archiveInfo && archiveFiles.length > 0) {
+      // NLG Archive mode: repack the entire archive
+      await buildWithArchive();
+    } else {
+      // Legacy mode: in-place DDS patching
+      buildLegacy();
+    }
+  };
+
+  const buildLegacy = () => {
+    if (!fontData) return;
     const newData = new Uint8Array(fontData);
     let modifiedCount = 0;
 
@@ -464,7 +530,88 @@ export default function FontEditor() {
     a.download = fileName || "FEBundleFonts_res.data";
     a.click();
     URL.revokeObjectURL(url);
-    toast({ title: "✅ تم البناء", description: `تم تعديل ${modifiedCount} صفحة DDS — جاهز للاستخدام!` });
+    toast({ title: "✅ تم البناء", description: `تم تعديل ${modifiedCount} صفحة DDS` });
+  };
+
+  const buildWithArchive = async () => {
+    if (!archiveInfo || archiveFiles.length === 0) return;
+
+    // Update DDS files in archive with modified textures
+    const updatedFiles = [...archiveFiles];
+
+    // Map: archiveFileIndex → texture
+    const texByArchiveIdx = new Map<number, TextureInfo>();
+    for (const tex of textures) {
+      if (tex.archiveFileIndex !== undefined && !tex.isGenerated) {
+        texByArchiveIdx.set(tex.archiveFileIndex, tex);
+      }
+    }
+
+    // Update existing DDS files
+    for (let i = 0; i < updatedFiles.length; i++) {
+      const tex = texByArchiveIdx.get(updatedFiles[i].index);
+      if (tex) {
+        const rgba = tex.ctx.getImageData(0, 0, TEX_SIZE, TEX_SIZE).data;
+        const dxt5 = encodeDXT5(new Uint8Array(rgba), TEX_SIZE, TEX_SIZE);
+        const header = buildDDSHeader(TEX_SIZE, TEX_SIZE);
+        const newDDS = new Uint8Array(header.length + dxt5.length);
+        newDDS.set(header, 0);
+        newDDS.set(dxt5, header.length);
+
+        updatedFiles[i] = {
+          ...updatedFiles[i],
+          data: newDDS,
+          wasCompressed: updatedFiles[i].wasCompressed,
+        };
+      }
+    }
+
+    // Append new generated pages as new DDS files
+    const generatedTextures = textures.filter(t => t.isGenerated);
+    for (const tex of generatedTextures) {
+      const rgba = tex.ctx.getImageData(0, 0, TEX_SIZE, TEX_SIZE).data;
+      const dxt5 = encodeDXT5(new Uint8Array(rgba), TEX_SIZE, TEX_SIZE);
+      const header = buildDDSHeader(TEX_SIZE, TEX_SIZE);
+      const newDDS = new Uint8Array(header.length + dxt5.length);
+      newDDS.set(header, 0);
+      newDDS.set(dxt5, header.length);
+
+      const newIndex = updatedFiles.length;
+      updatedFiles.push({
+        index: newIndex,
+        data: newDDS,
+        wasCompressed: false,
+        originalEntry: {
+          index: newIndex,
+          offset: 0,
+          decompressedLength: newDDS.length,
+          compressedLength: newDDS.length,
+          unk: 0,
+        },
+      });
+    }
+
+    // Repack
+    const { dict: newDict, data: newData } = repackNLGArchive(archiveInfo, updatedFiles);
+
+    // Download as ZIP
+    const zip = new JSZip();
+    const baseName = dictFileName.replace(/_res\.dict$/i, "_res").replace(/\.dict$/i, "_res");
+    zip.file(`${baseName}.dict`, newDict);
+    zip.file(`${baseName}.data`, newData);
+
+    const zipBlob = await zip.generateAsync({ type: "blob" });
+    const url = URL.createObjectURL(zipBlob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${baseName}_arabized.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "✅ تم بناء الأرشيف",
+      description: `${updatedFiles.length} ملف (${generatedTextures.length} صفحة جديدة) — dict + data في ZIP`,
+    });
   };
 
   /* ─── Export metrics JSON ─── */
@@ -490,6 +637,19 @@ export default function FontEditor() {
     a.href = url;
     a.download = `atlas_page_${pageIdx}.png`;
     a.click();
+  };
+
+  /* ─── Export single archive file ─── */
+  const handleExportArchiveFile = (file: NLGExtractedFile) => {
+    const type = detectFileType(file.data);
+    const ext = type === "DDS" ? ".dds" : type === "text" ? ".txt" : ".bin";
+    const blob = new Blob([file.data], { type: "application/octet-stream" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `file${String(file.index).padStart(3, "0")}${ext}`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   /* ─── Glyph edit apply ─── */
@@ -535,9 +695,10 @@ export default function FontEditor() {
             محرر الخطوط المتقدم
           </h1>
           <Badge variant="secondary" className="text-xs">Luigi's Mansion 2 HD</Badge>
+          {hasArchive && <Badge className="text-xs bg-primary/20 text-primary border-primary/30">📦 وضع الأرشيف</Badge>}
           {fontData && (
             <Badge variant="outline" className="text-xs mr-auto">
-              {fileName} — {(fontData.length / 1024 / 1024).toFixed(1)} MB
+              {fileName} — {formatFileSize(fontData.length)}
             </Badge>
           )}
         </div>
@@ -550,9 +711,19 @@ export default function FontEditor() {
             onClick={() => fontInputRef.current?.click()}>
             <CardContent className="flex flex-col items-center justify-center py-20 text-center">
               <Upload className="w-16 h-16 text-muted-foreground mb-4" />
-              <p className="text-xl font-bold text-foreground">ارفع ملف الخط</p>
-              <p className="text-sm text-muted-foreground mt-2">FEBundleFonts_res.data</p>
-              <p className="text-xs text-muted-foreground mt-1">أو أي ملف .data يحتوي على أنسجة DDS/DXT5</p>
+              <p className="text-xl font-bold text-foreground">ارفع ملفات الخط</p>
+              <p className="text-sm text-muted-foreground mt-2">FEBundleFonts_res.dict + FEBundleFonts_res.data</p>
+              <p className="text-xs text-muted-foreground mt-1">ارفع الملفين معاً لدعم الأرشيف الكامل، أو ملف .data فقط للوضع المباشر</p>
+              <div className="flex gap-3 mt-4">
+                <Badge variant="outline" className="text-[10px]">
+                  <Archive className="w-3 h-3 ml-1" />
+                  .dict + .data = أرشيف كامل
+                </Badge>
+                <Badge variant="outline" className="text-[10px]">
+                  <HardDrive className="w-3 h-3 ml-1" />
+                  .data فقط = مسح DDS مباشر
+                </Badge>
+              </div>
               <input
                 ref={fontInputRef}
                 type="file"
@@ -566,8 +737,14 @@ export default function FontEditor() {
         )}
 
         {textures.length > 0 && (
-          <Tabs defaultValue="atlas" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-4 h-auto">
+          <Tabs defaultValue={hasArchive ? "archive" : "atlas"} className="space-y-4">
+            <TabsList className={`grid w-full h-auto ${hasArchive ? "grid-cols-5" : "grid-cols-4"}`}>
+              {hasArchive && (
+                <TabsTrigger value="archive" className="gap-1.5 text-xs py-2">
+                  <Archive className="w-3.5 h-3.5" />
+                  الأرشيف
+                </TabsTrigger>
+              )}
               <TabsTrigger value="atlas" className="gap-1.5 text-xs py-2">
                 <Layers className="w-3.5 h-3.5" />
                 الأطلس
@@ -585,6 +762,99 @@ export default function FontEditor() {
                 البناء
               </TabsTrigger>
             </TabsList>
+
+            {/* ═══════════════ ARCHIVE TAB ═══════════════ */}
+            {hasArchive && archiveInfo && (
+              <TabsContent value="archive" className="space-y-4">
+                {/* Archive summary */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <Card className="p-3">
+                    <p className="text-[10px] text-muted-foreground">عدد الملفات</p>
+                    <p className="text-2xl font-bold text-foreground">{archiveInfo.fileCount}</p>
+                  </Card>
+                  <Card className="p-3">
+                    <p className="text-[10px] text-muted-foreground">صفحات DDS</p>
+                    <p className="text-2xl font-bold text-primary">{textures.filter(t => !t.isGenerated).length}</p>
+                  </Card>
+                  <Card className="p-3">
+                    <p className="text-[10px] text-muted-foreground">مضغوط</p>
+                    <p className="text-2xl font-bold">{archiveInfo.isCompressed ? "نعم" : "لا"}</p>
+                  </Card>
+                  <Card className="p-3">
+                    <p className="text-[10px] text-muted-foreground">حجم .data</p>
+                    <p className="text-lg font-bold font-mono">{formatFileSize(fontData?.length ?? 0)}</p>
+                  </Card>
+                </div>
+
+                {/* File table */}
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <FolderOpen className="w-4 h-4 text-primary" />
+                      ملفات الأرشيف
+                    </CardTitle>
+                    <p className="text-[10px] text-muted-foreground">
+                      {dictFileName} — Magic: 0x{archiveInfo.magic.toString(16).toUpperCase()}
+                    </p>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <ScrollArea className="max-h-[500px]">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-right text-[10px] w-12">#</TableHead>
+                            <TableHead className="text-right text-[10px]">النوع</TableHead>
+                            <TableHead className="text-right text-[10px]">الإزاحة</TableHead>
+                            <TableHead className="text-right text-[10px]">الحجم الأصلي</TableHead>
+                            <TableHead className="text-right text-[10px]">الحجم المضغوط</TableHead>
+                            <TableHead className="text-right text-[10px]">UNK</TableHead>
+                            <TableHead className="text-right text-[10px] w-20"></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {archiveFiles.map(file => {
+                            const type = detectFileType(file.data);
+                            const entry = file.originalEntry;
+                            const isDDS = type === "DDS";
+                            return (
+                              <TableRow key={file.index} className={isDDS ? "bg-primary/5" : ""}>
+                                <TableCell className="text-[10px] py-1.5 font-mono">{String(file.index).padStart(3, "0")}</TableCell>
+                                <TableCell className="py-1.5">
+                                  <Badge variant={isDDS ? "default" : "secondary"} className="text-[9px]">
+                                    {isDDS && <Layers className="w-2.5 h-2.5 ml-0.5" />}
+                                    {type === "text" && <FileText className="w-2.5 h-2.5 ml-0.5" />}
+                                    {type}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className="text-[10px] py-1.5 font-mono text-muted-foreground">
+                                  0x{entry.offset.toString(16).toUpperCase()}
+                                </TableCell>
+                                <TableCell className="text-[10px] py-1.5">{formatFileSize(entry.decompressedLength)}</TableCell>
+                                <TableCell className="text-[10px] py-1.5">
+                                  {entry.compressedLength !== entry.decompressedLength
+                                    ? formatFileSize(entry.compressedLength)
+                                    : "—"}
+                                </TableCell>
+                                <TableCell className="text-[10px] py-1.5 font-mono text-muted-foreground">
+                                  0x{entry.unk.toString(16).toUpperCase()}
+                                </TableCell>
+                                <TableCell className="py-1.5">
+                                  <Button variant="ghost" size="sm" className="h-6 text-[10px] gap-1"
+                                    onClick={() => handleExportArchiveFile(file)}>
+                                    <Download className="w-3 h-3" />
+                                    استخراج
+                                  </Button>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              </TabsContent>
+            )}
 
             {/* ═══════════════ ATLAS TAB ═══════════════ */}
             <TabsContent value="atlas" className="space-y-4">
@@ -605,7 +875,7 @@ export default function FontEditor() {
                           <SelectContent>
                             {textures.map((t, i) => (
                               <SelectItem key={i} value={String(i)}>
-                                صفحة {i} {t.isGenerated ? "🇸🇦" : t.ddsOffset >= 0 ? `(0x${t.ddsOffset.toString(16).toUpperCase()})` : ""}
+                                صفحة {i} {t.isGenerated ? "🇸🇦" : t.archiveFileIndex !== undefined ? `(ملف ${t.archiveFileIndex})` : t.ddsOffset >= 0 ? `(0x${t.ddsOffset.toString(16).toUpperCase()})` : ""}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -728,23 +998,15 @@ export default function FontEditor() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
-                    {/* Custom font upload */}
                     <div className="space-y-1.5">
                       <Label className="text-xs">ملف الخط (TTF/OTF/WOFF2)</Label>
                       <div className="flex gap-2 items-center">
-                        <Input
-                          ref={customFontInputRef}
-                          type="file"
-                          accept=".ttf,.otf,.woff,.woff2"
-                          onChange={handleCustomFont}
-                          className="h-8 text-xs flex-1"
-                        />
+                        <Input ref={customFontInputRef} type="file" accept=".ttf,.otf,.woff,.woff2" onChange={handleCustomFont} className="h-8 text-xs flex-1" />
                         {customFontLoaded && <Badge variant="secondary" className="text-[10px] shrink-0">✅ {arabicFontName}</Badge>}
                       </div>
                       <p className="text-[10px] text-muted-foreground">يُنصح بخط عربي يدعم جميع الأشكال: Tajawal, Noto Kufi Arabic, Cairo</p>
                     </div>
 
-                    {/* Font size & weight */}
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
                         <Label className="text-xs">حجم الخط: {fontSize}px</Label>
@@ -766,7 +1028,6 @@ export default function FontEditor() {
                       </div>
                     </div>
 
-                    {/* Colors */}
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
                         <Label className="text-xs flex items-center gap-1.5">
@@ -790,7 +1051,6 @@ export default function FontEditor() {
                       </div>
                     </div>
 
-                    {/* Padding & AA */}
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1">
                         <Label className="text-xs">هامش (Padding): {padding}px</Label>
@@ -802,7 +1062,6 @@ export default function FontEditor() {
                       </div>
                     </div>
 
-                    {/* Advanced toggle */}
                     <Button variant="ghost" size="sm" className="w-full gap-1.5 text-xs text-muted-foreground" onClick={() => setShowAdvanced(!showAdvanced)}>
                       {showAdvanced ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                       إعدادات متقدمة
@@ -827,7 +1086,7 @@ export default function FontEditor() {
                               <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
                               <SelectContent>
                                 {textures.filter(t => !t.isGenerated).map((t, i) => (
-                                  <SelectItem key={i} value={String(i)}>صفحة {i} (0x{t.ddsOffset.toString(16).toUpperCase()})</SelectItem>
+                                  <SelectItem key={i} value={String(i)}>صفحة {i} {t.archiveFileIndex !== undefined ? `(ملف ${t.archiveFileIndex})` : `(0x${t.ddsOffset.toString(16).toUpperCase()})`}</SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
@@ -848,7 +1107,6 @@ export default function FontEditor() {
                     <p className="text-[10px] text-muted-foreground">Presentation Forms — أشكال الحروف السياقية</p>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    {/* Form checkboxes */}
                     <div className="flex flex-wrap gap-3">
                       {[
                         { label: "معزول", checked: includeIsolated, set: setIncludeIsolated, count: ARABIC_LETTERS.filter(l => l.isolated).length },
@@ -865,14 +1123,10 @@ export default function FontEditor() {
                       ))}
                     </div>
 
-                    {/* Character grid preview */}
                     <ScrollArea className="h-[280px] rounded-lg border bg-card p-2">
                       <div className="grid grid-cols-[repeat(auto-fill,minmax(48px,1fr))] gap-1">
                         {arabicChars.map(c => (
-                          <div
-                            key={c.code}
-                            className="flex flex-col items-center p-1 rounded border border-border bg-background text-center hover:border-primary/40 transition-colors"
-                          >
+                          <div key={c.code} className="flex flex-col items-center p-1 rounded border border-border bg-background text-center hover:border-primary/40 transition-colors">
                             <span className="text-sm leading-tight" dir="rtl">
                               {c.code >= 0x064B && c.code <= 0x0652 ? `ـ${c.char}` : c.char}
                             </span>
@@ -882,7 +1136,6 @@ export default function FontEditor() {
                       </div>
                     </ScrollArea>
 
-                    {/* Summary & Generate */}
                     <div className="flex items-center justify-between flex-wrap gap-2">
                       <div className="flex gap-2 text-[10px]">
                         <Badge variant="secondary">{arabicChars.filter(c => c.code >= 0xFE00).length} عربي</Badge>
@@ -892,11 +1145,7 @@ export default function FontEditor() {
                     </div>
 
                     <div className="flex gap-2">
-                      <Button
-                        onClick={handleGenerateArabicAtlas}
-                        disabled={arabicChars.length === 0}
-                        className="flex-1 gap-1.5"
-                      >
+                      <Button onClick={handleGenerateArabicAtlas} disabled={arabicChars.length === 0} className="flex-1 gap-1.5">
                         <Paintbrush className="w-4 h-4" />
                         توليد أطلس عربي ({arabicChars.length} حرف)
                       </Button>
@@ -911,7 +1160,6 @@ export default function FontEditor() {
                 </Card>
               </div>
 
-              {/* Tashkeel reference */}
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-xs text-muted-foreground">مرجع التشكيل</CardTitle>
@@ -951,7 +1199,6 @@ export default function FontEditor() {
                         <div className="rounded-lg border border-border overflow-hidden">
                           <canvas ref={previewCanvasRef} className="w-full block" style={{ maxHeight: 400 }} />
                         </div>
-
                         <div className="grid grid-cols-2 gap-3">
                           <div className="space-y-1">
                             <Label className="text-xs">تكبير المعاينة: {previewScale.toFixed(1)}x</Label>
@@ -1010,26 +1257,32 @@ export default function FontEditor() {
             {/* ═══════════════ BUILD TAB ═══════════════ */}
             <TabsContent value="build" className="space-y-4">
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {/* Build Font */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-sm flex items-center gap-2">
-                      <Download className="w-4 h-4 text-primary" />
-                      بناء ملف الخط
+                      {hasArchive ? <Package className="w-4 h-4 text-primary" /> : <Download className="w-4 h-4 text-primary" />}
+                      {hasArchive ? "بناء الأرشيف" : "بناء ملف الخط"}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <p className="text-xs text-muted-foreground">
-                      يعيد ترميز جميع صفحات الأطلس المعدّلة كـ DXT5 ويحفظها في ملف .data الأصلي
+                      {hasArchive
+                        ? "يعيد بناء الأرشيف كاملاً (dict + data) مع الصفحات الجديدة ويحمّلهما كـ ZIP"
+                        : "يعيد ترميز جميع صفحات الأطلس المعدّلة كـ DXT5 ويحفظها في ملف .data الأصلي"}
                     </p>
+                    {hasArchive && generatedPages > 0 && (
+                      <div className="p-2 rounded bg-primary/5 border border-primary/20 text-[10px]">
+                        <p className="text-primary font-semibold">📦 سيتم إلحاق {generatedPages} صفحة DDS جديدة للأرشيف</p>
+                        <p className="text-muted-foreground">عدد ملفات الأرشيف: {archiveFiles.length} → {archiveFiles.length + generatedPages}</p>
+                      </div>
+                    )}
                     <Button onClick={handleBuildFont} className="w-full gap-1.5" disabled={!fontData}>
-                      <Download className="w-4 h-4" />
-                      بناء وتحميل .data
+                      {hasArchive ? <Package className="w-4 h-4" /> : <Download className="w-4 h-4" />}
+                      {hasArchive ? "بناء وتحميل ZIP (dict + data)" : "بناء وتحميل .data"}
                     </Button>
                   </CardContent>
                 </Card>
 
-                {/* Export Metrics */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-sm flex items-center gap-2">
@@ -1048,7 +1301,6 @@ export default function FontEditor() {
                   </CardContent>
                 </Card>
 
-                {/* Stats */}
                 <Card>
                   <CardHeader>
                     <CardTitle className="text-sm flex items-center gap-2">
@@ -1074,9 +1326,15 @@ export default function FontEditor() {
                         <p className="text-lg font-bold text-primary">{arabicGlyphCount}</p>
                       </div>
                     </div>
+                    {hasArchive && (
+                      <div className="p-2 rounded bg-muted/30">
+                        <p className="text-muted-foreground text-[10px]">ملفات الأرشيف</p>
+                        <p className="text-lg font-bold">{archiveFiles.length}</p>
+                      </div>
+                    )}
                     <div className="p-2 rounded bg-muted/30">
                       <p className="text-muted-foreground text-[10px]">حجم الملف</p>
-                      <p className="text-sm font-mono">{fontData ? `${(fontData.length / 1024 / 1024).toFixed(2)} MB` : "—"}</p>
+                      <p className="text-sm font-mono">{fontData ? formatFileSize(fontData.length) : "—"}</p>
                     </div>
                     {atlasResult && (
                       <div className="p-2 rounded bg-primary/5 border border-primary/20">
