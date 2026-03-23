@@ -193,34 +193,60 @@ export function reverseBidi(text: string): string {
   });
 
   const reversed = shielded.split('\n').map(line => {
-    const segments: { text: string; isLTR: boolean }[] = [];
+    // Split into directional segments, keeping boundary spaces as neutral segments
+    const segments: { text: string; dir: 'rtl' | 'ltr' | 'neutral' }[] = [];
     let current = '';
-    let currentIsLTR: boolean | null = null;
+    let currentDir: 'rtl' | 'ltr' | null = null;
+
+    const flush = () => {
+      if (!current) return;
+      segments.push({ text: current, dir: currentDir || 'neutral' });
+      current = '';
+      currentDir = null;
+    };
 
     for (const ch of line) {
       const code = ch.charCodeAt(0);
-      if (code >= 0xE000 && code <= 0xE0FF) { current += ch; continue; }
-      if (code >= 0xFFF9 && code <= 0xFFFC) { current += ch; continue; }
-      
+      // PUA / special markers stay in current segment
+      if ((code >= 0xE000 && code <= 0xE0FF) || (code >= 0xFFF9 && code <= 0xFFFC)) {
+        current += ch;
+        continue;
+      }
+
       const charIsArabic = isArabicChar(ch);
       const charIsLTR = /[a-zA-Z0-9]/.test(ch);
-      
+
       if (charIsArabic) {
-        if (currentIsLTR === true && current) { segments.push({ text: current, isLTR: true }); current = ''; }
-        currentIsLTR = false;
+        if (currentDir === 'ltr') {
+          // Transitioning LTR→RTL: split off trailing spaces as neutral
+          const trimmed = current.replace(/\s+$/, '');
+          const trailingSpaces = current.slice(trimmed.length);
+          current = trimmed;
+          flush();
+          if (trailingSpaces) segments.push({ text: trailingSpaces, dir: 'neutral' });
+        }
+        currentDir = 'rtl';
         current += ch;
       } else if (charIsLTR) {
-        if (currentIsLTR === false && current) { segments.push({ text: current, isLTR: false }); current = ''; }
-        currentIsLTR = true;
+        if (currentDir === 'rtl') {
+          // Transitioning RTL→LTR: split off trailing spaces as neutral
+          const trimmed = current.replace(/\s+$/, '');
+          const trailingSpaces = current.slice(trimmed.length);
+          current = trimmed;
+          flush();
+          if (trailingSpaces) segments.push({ text: trailingSpaces, dir: 'neutral' });
+        }
+        currentDir = 'ltr';
         current += ch;
       } else {
+        // Neutral char (space, punctuation) — stays in current segment
         current += ch;
       }
     }
-    if (current) segments.push({ text: current, isLTR: currentIsLTR === true });
+    flush();
 
     return segments.reverse().map(seg => {
-      if (seg.isLTR) return seg.text;
+      if (seg.dir !== 'rtl') return seg.text;
       // Reverse RTL segment using chunks: consecutive PUA/tag markers stay as atomic blocks
       const chunks: string[] = [];
       let ci = 0;
