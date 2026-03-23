@@ -6,6 +6,8 @@
  * and generates texture atlases with proper metrics for game engine consumption.
  */
 
+import { reshapeArabic } from "@/lib/arabic-processing";
+
 export interface GlyphMetrics {
   /** The character string */
   char: string;
@@ -207,7 +209,14 @@ export function generateFontAtlas(options: {
     measureCtx.textBaseline = "alphabetic";
     measureCtx.textAlign = "left";
 
-    const m = measureGlyph(c.char, measureCtx, measureCanvas, fontSize, padding);
+    let m = measureGlyph(c.char, measureCtx, measureCanvas, fontSize, padding);
+    if (m.width === 0) {
+      const fallbackChar = c.char.normalize("NFKC");
+      if (fallbackChar && fallbackChar !== c.char) {
+        m = measureGlyph(fallbackChar, measureCtx, measureCanvas, fontSize, padding);
+      }
+    }
+
     measured.push({
       char: c.char,
       code: c.code,
@@ -345,37 +354,50 @@ export function renderTextPreview(
     glyphMap.set(g.code, g);
   }
 
+  const atlasUsesPresentationForms = atlasResult.glyphs.some(g =>
+    (g.code >= 0xFB50 && g.code <= 0xFDFF) || (g.code >= 0xFE70 && g.code <= 0xFEFF),
+  );
+
   const lines = text.split("\n");
   let penY = y;
 
   for (const line of lines) {
-    // For RTL, we need to reverse render order
-    const codePoints = [...line].map(c => c.codePointAt(0)!);
-    if (rtl) codePoints.reverse();
+    const previewLine = atlasUsesPresentationForms ? reshapeArabic(line) : line;
+    const codePoints = [...previewLine].map(c => c.codePointAt(0)!);
 
-    let penX = rtl ? x : x;
+    let penX = x;
 
     for (const cp of codePoints) {
       const glyph = glyphMap.get(cp);
-      if (!glyph || glyph.width === 0) {
-        penX += (glyph?.advance || atlasResult.fontSize * 0.3) * scale;
-        continue;
+      const advance = (glyph?.advance || atlasResult.fontSize * 0.3) * scale;
+
+      if (rtl) {
+        penX -= advance;
       }
 
-      const page = atlasResult.pages[glyph.page];
-      if (!page) continue;
+      if (glyph && glyph.width > 0) {
+        const page = atlasResult.pages[glyph.page];
+        if (page) {
+          const drawX = penX + glyph.bearingX * scale;
+          const drawY = penY - glyph.bearingY * scale;
 
-      // Draw from atlas to preview
-      const drawX = penX + glyph.bearingX * scale;
-      const drawY = penY - glyph.bearingY * scale;
+          ctx.drawImage(
+            page.canvas,
+            glyph.atlasX,
+            glyph.atlasY,
+            glyph.width,
+            glyph.height,
+            drawX,
+            drawY,
+            glyph.width * scale,
+            glyph.height * scale,
+          );
+        }
+      }
 
-      ctx.drawImage(
-        page.canvas,
-        glyph.atlasX, glyph.atlasY, glyph.width, glyph.height,
-        drawX, drawY, glyph.width * scale, glyph.height * scale,
-      );
-
-      penX += glyph.advance * scale;
+      if (!rtl) {
+        penX += advance;
+      }
     }
 
     penY += atlasResult.lineHeight * scale;
