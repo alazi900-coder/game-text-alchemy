@@ -1615,7 +1615,6 @@ export default function FontEditor() {
         )}
       </div>
     </div>
-    </div>
 
     {/* ═══════════════ BUILD VERIFICATION DIALOG ═══════════════ */}
     {buildVerification?.show && (
