@@ -715,6 +715,7 @@ async function translateWithMyMemory(
   protectedEntries: { key: string; cleaned: string; tags: Map<string, string> }[],
   glossaryMap?: Map<string, string>,
   email?: string,
+  sourceLang: string = 'en',
 ): Promise<{ translations: Record<string, string>; charsUsed: number; glossaryStats: GlossaryStats }> {
   const result: Record<string, string> = {};
   let charsUsed = 0;
@@ -754,7 +755,7 @@ async function translateWithMyMemory(
     }
 
     try {
-      let url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(textForTranslation)}&langpair=en|ar`;
+      let url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(textForTranslation)}&langpair=${sourceLang}|ar`;
       if (email?.trim()) {
         url += `&de=${encodeURIComponent(email.trim())}`;
       }
@@ -798,6 +799,7 @@ async function translateWithGoogle(
   entries: { key: string; original: string }[],
   protectedEntries: { key: string; cleaned: string; tags: Map<string, string> }[],
   glossaryMap?: Map<string, string>,
+  sourceLang: string = 'en',
 ): Promise<{ translations: Record<string, string>; charsUsed: number; glossaryStats: GlossaryStats }> {
   const result: Record<string, string> = {};
   let charsUsed = 0;
@@ -836,7 +838,7 @@ async function translateWithGoogle(
       }
 
       try {
-        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=ar&dt=t&q=${encodeURIComponent(textForTranslation)}`;
+        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceLang}&tl=ar&dt=t&q=${encodeURIComponent(textForTranslation)}`;
         const response = await fetchWithRetry(url);
         if (!response.ok) {
           console.error(`Google Translate error for key ${entry.key}: ${response.status}`);
@@ -942,6 +944,7 @@ async function translateWithAI(
   context: { key: string; original: string; translation?: string }[] | undefined,
   userApiKey: string | undefined,
   aiModel: string | undefined,
+  sourceLang: string = 'en',
 ): Promise<{ translations: Record<string, string>; glossaryStats: GlossaryStats }> {
   const glossaryMap = glossary ? parseGlossaryToMap(glossary) : new Map<string, string>();
   const tmMap = buildTranslationMemory(context);
@@ -1053,7 +1056,9 @@ async function translateWithAI(
 
   const categorySection = categoryHint ? `\n\n${categoryHint}` : '';
 
-  const prompt = `You are a professional game translator specializing in Xenoblade Chronicles 3 (ゼノブレイド3). Translate the following game texts from English to Arabic.
+  const sourceLangName = ({ en: 'English', zh: 'Chinese', ja: 'Japanese', ko: 'Korean', fr: 'French', de: 'German', es: 'Spanish', it: 'Italian', pt: 'Portuguese', ru: 'Russian', nl: 'Dutch' } as Record<string, string>)[sourceLang] || sourceLang;
+
+  const prompt = `You are a professional game translator. Translate the following game texts from ${sourceLangName} to Arabic.
 
 CRITICAL RULES:
 1. Placeholders like ⟪T0⟫, ⟪T1⟫, etc. are LOCKED TERMS — copy them EXACTLY as-is into your translation. Do NOT translate, modify, or remove them.
@@ -1349,7 +1354,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { entries, glossary, context, userApiKey, provider, myMemoryEmail, rebalanceNewlines, npcMaxLines, aiModel } = await req.json() as {
+    const { entries, glossary, context, userApiKey, provider, myMemoryEmail, rebalanceNewlines, npcMaxLines, aiModel, sourceLang: rawSourceLang } = await req.json() as {
       entries: { key: string; original: string }[];
       glossary?: string;
       context?: { key: string; original: string; translation?: string }[];
@@ -1359,7 +1364,28 @@ Deno.serve(async (req) => {
       rebalanceNewlines?: boolean;
       npcMaxLines?: number;
       aiModel?: string;
+      sourceLang?: string;
     };
+
+    // Auto-detect source language from text content if not provided
+    function detectSourceLang(texts: string[]): string {
+      const sample = texts.slice(0, 10).join(' ');
+      // Chinese (Simplified + Traditional)
+      if (/[\u4E00-\u9FFF\u3400-\u4DBF]/.test(sample)) {
+        const chars = sample.match(/[\u4E00-\u9FFF\u3400-\u4DBF]/g) || [];
+        if (chars.length >= 3) return 'zh';
+      }
+      // Japanese (Hiragana/Katakana)
+      if (/[\u3040-\u309F\u30A0-\u30FF]/.test(sample)) return 'ja';
+      // Korean
+      if (/[\uAC00-\uD7AF\u1100-\u11FF]/.test(sample)) return 'ko';
+      // Cyrillic (Russian)
+      if (/[\u0400-\u04FF]/.test(sample)) return 'ru';
+      return 'en';
+    }
+
+    const sourceLang = rawSourceLang?.trim() || detectSourceLang(entries.map(e => e.original));
+    console.log(`Source language: ${sourceLang} (${rawSourceLang ? 'specified' : 'auto-detected'})`);
 
     // Set the global rebalance flag for this request
     _rebalanceNewlines = !!rebalanceNewlines;
@@ -1379,18 +1405,18 @@ Deno.serve(async (req) => {
 
     if (provider === 'mymemory') {
       const glossaryMap = glossary ? parseGlossaryToMap(glossary) : undefined;
-      const { translations, charsUsed, glossaryStats } = await translateWithMyMemory(entries, protectedEntries, glossaryMap, myMemoryEmail);
+      const { translations, charsUsed, glossaryStats } = await translateWithMyMemory(entries, protectedEntries, glossaryMap, myMemoryEmail, sourceLang);
       return new Response(JSON.stringify({ translations, charsUsed, glossaryStats }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     } else if (provider === 'google') {
       const glossaryMap = glossary ? parseGlossaryToMap(glossary) : undefined;
-      const { translations, charsUsed, glossaryStats } = await translateWithGoogle(entries, protectedEntries, glossaryMap);
+      const { translations, charsUsed, glossaryStats } = await translateWithGoogle(entries, protectedEntries, glossaryMap, sourceLang);
       return new Response(JSON.stringify({ translations, charsUsed, glossaryStats }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     } else {
-      const { translations, glossaryStats } = await translateWithAI(entries, protectedEntries, glossary, context, userApiKey, aiModel);
+      const { translations, glossaryStats } = await translateWithAI(entries, protectedEntries, glossary, context, userApiKey, aiModel, sourceLang);
       return new Response(JSON.stringify({ translations, glossaryStats }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
