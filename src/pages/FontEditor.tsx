@@ -920,6 +920,7 @@ export default function FontEditor() {
   const generatedPages = textures.filter(t => t.isGenerated).length;
 
   return (
+    <>
     <div className="min-h-screen bg-background" dir="rtl">
       {/* Header */}
       <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur px-4 py-3">
@@ -1614,6 +1615,7 @@ export default function FontEditor() {
         )}
       </div>
     </div>
+    </div>
 
     {/* ═══════════════ BUILD VERIFICATION DIALOG ═══════════════ */}
     {buildVerification?.show && (
@@ -1729,5 +1731,6 @@ export default function FontEditor() {
         </DialogContent>
       </Dialog>
     )}
+    </>
   );
 }
