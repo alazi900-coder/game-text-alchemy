@@ -497,7 +497,8 @@ export default function FontEditor() {
   /* ─── Replace existing page with generated Arabic ─── */
   const handleReplaceOnPage = () => {
     if (!atlasResult || targetReplacePage >= textures.length) return;
-    const tex = textures[targetReplacePage];
+    const baseTextures = textures.filter(t => !t.isGenerated);
+    const tex = baseTextures[targetReplacePage];
     if (!tex || tex.isGenerated) return;
 
     const page0 = atlasResult.pages[0];
@@ -507,7 +508,7 @@ export default function FontEditor() {
     tex.ctx.drawImage(page0.canvas, 0, 0);
     tex.imgData = tex.ctx.getImageData(0, 0, TEX_SIZE, TEX_SIZE);
 
-    const newGlyphs = glyphs.filter(g => g.page !== targetReplacePage);
+    const newGlyphs = glyphs.filter(g => g.page !== targetReplacePage && g.page < baseTextures.length);
     for (const gm of atlasResult.glyphs) {
       if (gm.width === 0) continue;
       newGlyphs.push({
@@ -519,7 +520,7 @@ export default function FontEditor() {
     }
 
     setGlyphs(newGlyphs);
-    setTextures([...textures]);
+    setTextures([...baseTextures]);
     setCurrentPage(targetReplacePage);
     toast({ title: "✅ تم الاستبدال", description: `تم استبدال صفحة ${targetReplacePage} بالأحرف العربية` });
   };
@@ -626,6 +627,9 @@ export default function FontEditor() {
 
     // Update DDS files in archive with modified textures
     const updatedFiles = [...archiveFiles];
+    const ddsTemplate = archiveFiles.find(f => detectFileType(f.data) === "DDS");
+    const templateUnk = ddsTemplate?.originalEntry.unk ?? 0;
+    const templateCompressionMode = ddsTemplate?.compressionMode ?? (archiveInfo.isCompressed ? "zlib" : "none");
 
     // Map: archiveFileIndex → texture
     const texByArchiveIdx = new Map<number, TextureInfo>();
@@ -672,12 +676,13 @@ export default function FontEditor() {
         index: newIndex,
         data: newDDS,
         wasCompressed: archiveInfo.isCompressed,
+        compressionMode: archiveInfo.isCompressed ? templateCompressionMode : "none",
         originalEntry: {
           index: newIndex,
           offset: 0,
           decompressedLength: newDDS.length,
           compressedLength: newDDS.length,
-          unk: 0,
+          unk: templateUnk,
         },
       });
     }
