@@ -36,6 +36,8 @@ export interface NLGExtractedFile {
   index: number;
   data: Uint8Array;
   wasCompressed: boolean;
+  /** How this file was compressed originally (used to preserve round-trip fidelity) */
+  compressionMode?: "none" | "zlib" | "raw";
   originalEntry: NLGFileEntry;
 }
 
@@ -111,6 +113,7 @@ export function extractNLGFiles(
           index: entry.index,
           data: available,
           wasCompressed: false,
+          compressionMode: "none",
           originalEntry: entry,
         });
         continue;
@@ -125,6 +128,7 @@ export function extractNLGFiles(
             index: entry.index,
             data: decompressed,
             wasCompressed: true,
+            compressionMode: "zlib",
             originalEntry: entry,
           });
         } catch {
@@ -135,6 +139,7 @@ export function extractNLGFiles(
               index: entry.index,
               data: decompressed,
               wasCompressed: true,
+              compressionMode: "raw",
               originalEntry: entry,
             });
           } catch {
@@ -143,6 +148,7 @@ export function extractNLGFiles(
               index: entry.index,
               data: rawData,
               wasCompressed: false,
+              compressionMode: "none",
               originalEntry: entry,
             });
           }
@@ -152,6 +158,7 @@ export function extractNLGFiles(
           index: entry.index,
           data: rawData,
           wasCompressed: false,
+          compressionMode: "none",
           originalEntry: entry,
         });
       }
@@ -226,7 +233,10 @@ export function repackNLGArchive(
       // Re-compress
       decompressedLength = file.data.length;
       try {
-        writeData = pako.deflate(file.data);
+        const compressionMode = file.compressionMode ?? "zlib";
+        writeData = compressionMode === "raw"
+          ? pako.deflateRaw(file.data)
+          : pako.deflate(file.data);
         compressedLength = writeData.length;
       } catch {
         writeData = file.data;
@@ -265,9 +275,26 @@ export function repackNLGArchive(
   // Build new .dict
   // Header (0x2C bytes) + unkArray (fileCount bytes) + file table (fileCount * 16 bytes) + footer
   const newUnkArray = new Uint8Array(newFileCount);
+  const inferredUnkByte = (() => {
+    if (originalInfo.unkArray.length === 0) return 0;
+    const counts = new Map<number, number>();
+    for (const v of originalInfo.unkArray) {
+      counts.set(v, (counts.get(v) || 0) + 1);
+    }
+    let bestValue = 0;
+    let bestCount = -1;
+    for (const [value, count] of counts) {
+      if (count > bestCount) {
+        bestValue = value;
+        bestCount = count;
+      }
+    }
+    return bestValue;
+  })();
+
   // Copy from original unkArray where available
   for (let i = 0; i < newFileCount; i++) {
-    newUnkArray[i] = i < originalInfo.unkArray.length ? originalInfo.unkArray[i] : 0;
+    newUnkArray[i] = i < originalInfo.unkArray.length ? originalInfo.unkArray[i] : inferredUnkByte;
   }
 
   const dictSize = 0x2C + newFileCount + newFileCount * 16 + originalInfo.footerBytes.length;
