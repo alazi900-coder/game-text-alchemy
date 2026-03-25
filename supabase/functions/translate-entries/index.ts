@@ -715,6 +715,7 @@ async function translateWithMyMemory(
   protectedEntries: { key: string; cleaned: string; tags: Map<string, string> }[],
   glossaryMap?: Map<string, string>,
   email?: string,
+  sourceLang: string = 'en',
 ): Promise<{ translations: Record<string, string>; charsUsed: number; glossaryStats: GlossaryStats }> {
   const result: Record<string, string> = {};
   let charsUsed = 0;
@@ -754,7 +755,7 @@ async function translateWithMyMemory(
     }
 
     try {
-      let url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(textForTranslation)}&langpair=en|ar`;
+      let url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(textForTranslation)}&langpair=${sourceLang}|ar`;
       if (email?.trim()) {
         url += `&de=${encodeURIComponent(email.trim())}`;
       }
@@ -798,6 +799,7 @@ async function translateWithGoogle(
   entries: { key: string; original: string }[],
   protectedEntries: { key: string; cleaned: string; tags: Map<string, string> }[],
   glossaryMap?: Map<string, string>,
+  sourceLang: string = 'en',
 ): Promise<{ translations: Record<string, string>; charsUsed: number; glossaryStats: GlossaryStats }> {
   const result: Record<string, string> = {};
   let charsUsed = 0;
@@ -836,7 +838,7 @@ async function translateWithGoogle(
       }
 
       try {
-        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=ar&dt=t&q=${encodeURIComponent(textForTranslation)}`;
+        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceLang}&tl=ar&dt=t&q=${encodeURIComponent(textForTranslation)}`;
         const response = await fetchWithRetry(url);
         if (!response.ok) {
           console.error(`Google Translate error for key ${entry.key}: ${response.status}`);
@@ -942,6 +944,7 @@ async function translateWithAI(
   context: { key: string; original: string; translation?: string }[] | undefined,
   userApiKey: string | undefined,
   aiModel: string | undefined,
+  sourceLang: string = 'en',
 ): Promise<{ translations: Record<string, string>; glossaryStats: GlossaryStats }> {
   const glossaryMap = glossary ? parseGlossaryToMap(glossary) : new Map<string, string>();
   const tmMap = buildTranslationMemory(context);
