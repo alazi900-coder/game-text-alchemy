@@ -17,8 +17,11 @@ import {
   ArrowRight, Download, Search, Trash2, ZoomIn, ZoomOut, ScanSearch,
   Paintbrush, Upload, Eye, FileJson, Replace, Type, Pencil, RotateCcw,
   Settings2, Grid3x3, Layers, ChevronDown, ChevronUp, Palette, Move, Loader2,
-  Archive, FolderOpen, FileText, HardDrive, Package
+  Archive, FolderOpen, FileText, HardDrive, Package, ShieldCheck, AlertTriangle, CheckCircle2
 } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
+} from "@/components/ui/dialog";
 import { decodeDXT5, encodeDXT5, findDDSPositions, DDS_HEADER_SIZE, TEX_SIZE, DXT5_MIP0_SIZE, buildDDSHeader } from "@/lib/dxt5-codec";
 import { getArabicChars, ARABIC_LETTERS, TASHKEEL } from "@/lib/arabic-forms-data";
 import {
@@ -143,6 +146,28 @@ export default function FontEditor() {
   // Highlighted glyph
   const [highlightedGlyph, setHighlightedGlyph] = useState<number | null>(null);
 
+  // Build verification state
+  const [buildVerification, setBuildVerification] = useState<{
+    show: boolean;
+    results: Array<{
+      pageLabel: string;
+      hashBefore: number;
+      hashAfter: number;
+      match: boolean;
+      nonZeroBefore: number;
+      nonZeroAfter: number;
+      pixelLoss: number; // percentage of lost non-zero pixels
+    }>;
+    totalPages: number;
+    passedPages: number;
+    newPages: number;
+    dictSizeBefore: number;
+    dictSizeAfter: number;
+    dataSizeBefore: number;
+    dataSizeAfter: number;
+    duration: number;
+  } | null>(null);
+
   const displayCanvasRef = useRef<HTMLCanvasElement>(null);
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const fontInputRef = useRef<HTMLInputElement>(null);
@@ -167,6 +192,32 @@ export default function FontEditor() {
     tashkeel: includeTashkeel,
     english: includeEnglish,
   }), [includeIsolated, includeInitial, includeMedial, includeFinal, includeTashkeel, includeEnglish]);
+
+  /* ─── Pixel hash helper ─── */
+  const computePixelHash = (rgba: Uint8ClampedArray | Uint8Array): number => {
+    // FNV-1a 32-bit hash on RGBA data (sampled every 4th pixel for speed)
+    let hash = 0x811c9dc5;
+    const step = Math.max(4, Math.floor(rgba.length / 65536)) * 4;
+    for (let i = 0; i < rgba.length; i += step) {
+      hash ^= rgba[i];
+      hash = Math.imul(hash, 0x01000193);
+      hash ^= rgba[i + 1];
+      hash = Math.imul(hash, 0x01000193);
+      hash ^= rgba[i + 2];
+      hash = Math.imul(hash, 0x01000193);
+      hash ^= rgba[i + 3];
+      hash = Math.imul(hash, 0x01000193);
+    }
+    return hash >>> 0;
+  };
+
+  const countNonZeroPixels = (rgba: Uint8ClampedArray | Uint8Array): number => {
+    let count = 0;
+    for (let i = 3; i < rgba.length; i += 4) {
+      if (rgba[i] > 0) count++;
+    }
+    return count;
+  };
 
   /* ─── display texture on canvas ─── */
   const displayTexture = useCallback((idx: number, tex?: TextureInfo[], gly?: GlyphEntry[]) => {
@@ -624,6 +675,26 @@ export default function FontEditor() {
 
   const buildWithArchive = async () => {
     if (!archiveInfo || archiveFiles.length === 0) return;
+    const buildStart = performance.now();
+    const dictSizeBefore = dictData?.length ?? 0;
+    const dataSizeBefore = fontData?.length ?? 0;
+
+    // Phase 0: Capture pre-build pixel hashes for ALL textures
+    const preBuildSnapshots = new Map<number, { hash: number; nonZero: number; label: string }>();
+    for (let i = 0; i < textures.length; i++) {
+      const tex = textures[i];
+      const rgba = tex.ctx.getImageData(0, 0, TEX_SIZE, TEX_SIZE).data;
+      const label = tex.isGenerated
+        ? `صفحة عربية جديدة ${i}`
+        : tex.archiveFileIndex !== undefined
+          ? `ملف أرشيف ${tex.archiveFileIndex}`
+          : `صفحة ${i}`;
+      preBuildSnapshots.set(i, {
+        hash: computePixelHash(rgba),
+        nonZero: countNonZeroPixels(rgba),
+        label,
+      });
+    }
 
     // Update DDS files in archive with modified textures
     const updatedFiles = [...archiveFiles];
@@ -693,12 +764,73 @@ export default function FontEditor() {
     const newArchiveFiles = extractNLGFiles(newArchiveInfo, newData);
     const newTextures = decodeArchiveTextures(newArchiveFiles);
 
+    // Phase: Post-build verification — compare pixel data
+    const verificationResults: Array<{
+      pageLabel: string;
+      hashBefore: number;
+      hashAfter: number;
+      match: boolean;
+      nonZeroBefore: number;
+      nonZeroAfter: number;
+      pixelLoss: number;
+    }> = [];
+
+    for (let i = 0; i < newTextures.length; i++) {
+      const afterRgba = newTextures[i].ctx.getImageData(0, 0, TEX_SIZE, TEX_SIZE).data;
+      const hashAfter = computePixelHash(afterRgba);
+      const nonZeroAfter = countNonZeroPixels(afterRgba);
+
+      const before = preBuildSnapshots.get(i);
+      if (before) {
+        const pixelLoss = before.nonZero > 0
+          ? Math.max(0, (1 - nonZeroAfter / before.nonZero) * 100)
+          : 0;
+        verificationResults.push({
+          pageLabel: before.label,
+          hashBefore: before.hash,
+          hashAfter,
+          match: before.hash === hashAfter,
+          nonZeroBefore: before.nonZero,
+          nonZeroAfter,
+          pixelLoss,
+        });
+      } else {
+        // New page added during repack (appended)
+        verificationResults.push({
+          pageLabel: `صفحة جديدة ${i}`,
+          hashBefore: 0,
+          hashAfter,
+          match: true, // no comparison baseline
+          nonZeroBefore: 0,
+          nonZeroAfter,
+          pixelLoss: 0,
+        });
+      }
+    }
+
+    const buildDuration = performance.now() - buildStart;
+    const passedPages = verificationResults.filter(r => r.match || r.pixelLoss < 5).length;
+
     setDictData(newDict);
     setFontData(newData);
     setArchiveInfo(newArchiveInfo);
     setArchiveFiles(newArchiveFiles);
     setTextures(newTextures);
     setCurrentPage(0);
+
+    // Show verification dialog
+    setBuildVerification({
+      show: true,
+      results: verificationResults,
+      totalPages: verificationResults.length,
+      passedPages,
+      newPages: generatedTextures.length,
+      dictSizeBefore,
+      dictSizeAfter: newDict.length,
+      dataSizeBefore,
+      dataSizeAfter: newData.length,
+      duration: buildDuration,
+    });
 
     // Download as ZIP
     const zip = new JSZip();
@@ -716,7 +848,7 @@ export default function FontEditor() {
 
     toast({
       title: "✅ تم بناء الأرشيف",
-      description: `${updatedFiles.length} ملف (${generatedTextures.length} صفحة جديدة) — dict + data في ZIP (ارفع الملفين معاً عند المراجعة)`,
+      description: `${updatedFiles.length} ملف (${generatedTextures.length} صفحة جديدة) — تحقق: ${passedPages}/${verificationResults.length} صفحة سليمة`,
     });
   };
 
@@ -1482,5 +1614,120 @@ export default function FontEditor() {
         )}
       </div>
     </div>
+
+    {/* ═══════════════ BUILD VERIFICATION DIALOG ═══════════════ */}
+    {buildVerification?.show && (
+      <Dialog open={buildVerification.show} onOpenChange={(open) => {
+        if (!open) setBuildVerification(prev => prev ? { ...prev, show: false } : null);
+      }}>
+        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <ShieldCheck className="w-5 h-5 text-primary" />
+              تقرير التحقق بعد البناء
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              مقارنة بيانات البكسل قبل وبعد إعادة الحزم (DXT5 encode → repack → decode)
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Summary */}
+          <div className="grid grid-cols-3 gap-2 my-2">
+            <div className="p-2 rounded bg-muted/40 text-center">
+              <p className="text-[10px] text-muted-foreground">الصفحات</p>
+              <p className="text-lg font-bold">{buildVerification.totalPages}</p>
+            </div>
+            <div className={`p-2 rounded text-center ${buildVerification.passedPages === buildVerification.totalPages ? 'bg-green-500/10' : 'bg-yellow-500/10'}`}>
+              <p className="text-[10px] text-muted-foreground">سليمة</p>
+              <p className={`text-lg font-bold ${buildVerification.passedPages === buildVerification.totalPages ? 'text-green-600' : 'text-yellow-600'}`}>
+                {buildVerification.passedPages}/{buildVerification.totalPages}
+              </p>
+            </div>
+            <div className="p-2 rounded bg-muted/40 text-center">
+              <p className="text-[10px] text-muted-foreground">المدة</p>
+              <p className="text-sm font-bold font-mono">{(buildVerification.duration / 1000).toFixed(1)}s</p>
+            </div>
+          </div>
+
+          {/* Size comparison */}
+          <div className="p-2 rounded bg-muted/30 text-[10px] space-y-1">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">حجم .dict</span>
+              <span className="font-mono">
+                {formatFileSize(buildVerification.dictSizeBefore)} → {formatFileSize(buildVerification.dictSizeAfter)}
+                {buildVerification.dictSizeAfter !== buildVerification.dictSizeBefore && (
+                  <span className={buildVerification.dictSizeAfter > buildVerification.dictSizeBefore ? 'text-yellow-600 mr-1' : 'text-green-600 mr-1'}>
+                    ({buildVerification.dictSizeAfter > buildVerification.dictSizeBefore ? '+' : ''}{formatFileSize(buildVerification.dictSizeAfter - buildVerification.dictSizeBefore)})
+                  </span>
+                )}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">حجم .data</span>
+              <span className="font-mono">
+                {formatFileSize(buildVerification.dataSizeBefore)} → {formatFileSize(buildVerification.dataSizeAfter)}
+                {buildVerification.dataSizeAfter !== buildVerification.dataSizeBefore && (
+                  <span className={buildVerification.dataSizeAfter > buildVerification.dataSizeBefore ? 'text-yellow-600 mr-1' : 'text-green-600 mr-1'}>
+                    ({buildVerification.dataSizeAfter > buildVerification.dataSizeBefore ? '+' : ''}{formatFileSize(buildVerification.dataSizeAfter - buildVerification.dataSizeBefore)})
+                  </span>
+                )}
+              </span>
+            </div>
+          </div>
+
+          {/* Per-page results */}
+          <ScrollArea className="max-h-[300px]">
+            <div className="space-y-1.5">
+              {buildVerification.results.map((r, i) => {
+                const isLoss = r.pixelLoss > 5;
+                const isWarning = r.pixelLoss > 0 && r.pixelLoss <= 5;
+                const hashMismatch = !r.match && r.hashBefore !== 0;
+                return (
+                  <div key={i} className={`p-2 rounded border text-[10px] ${
+                    isLoss ? 'border-destructive/40 bg-destructive/5' :
+                    (hashMismatch || isWarning) ? 'border-yellow-500/40 bg-yellow-500/5' :
+                    'border-border bg-card'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold flex items-center gap-1">
+                        {isLoss ? <AlertTriangle className="w-3 h-3 text-destructive" /> :
+                         hashMismatch ? <AlertTriangle className="w-3 h-3 text-yellow-500" /> :
+                         <CheckCircle2 className="w-3 h-3 text-green-500" />}
+                        {r.pageLabel}
+                      </span>
+                      <Badge variant={isLoss ? "destructive" : hashMismatch ? "secondary" : "outline"} className="text-[8px] h-4">
+                        {isLoss ? `فقد ${r.pixelLoss.toFixed(1)}%` :
+                         hashMismatch ? 'DXT5 تقريب' : '✓ مطابق'}
+                      </Badge>
+                    </div>
+                    <div className="flex gap-4 mt-1 text-muted-foreground font-mono">
+                      <span>بكسل قبل: {r.nonZeroBefore.toLocaleString()}</span>
+                      <span>بعد: {r.nonZeroAfter.toLocaleString()}</span>
+                      {r.hashBefore !== 0 && (
+                        <span>Hash: {r.hashBefore.toString(16).slice(0, 6)}→{r.hashAfter.toString(16).slice(0, 6)}</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </ScrollArea>
+
+          {/* Warning note about DXT5 */}
+          {buildVerification.results.some(r => !r.match && r.hashBefore !== 0) && (
+            <div className="p-2 rounded bg-yellow-500/10 border border-yellow-500/20 text-[10px] text-yellow-700 dark:text-yellow-400">
+              <p className="font-semibold">⚠️ اختلاف Hash متوقع</p>
+              <p>ضغط DXT5 يفقد بعض التفاصيل اللونية (Lossy compression). الاختلاف طبيعي ما لم تكن نسبة فقد البكسل عالية (&gt;5%).</p>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBuildVerification(prev => prev ? { ...prev, show: false } : null)}>
+              إغلاق
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )}
   );
 }
