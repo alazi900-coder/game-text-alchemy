@@ -1056,7 +1056,9 @@ async function translateWithAI(
 
   const categorySection = categoryHint ? `\n\n${categoryHint}` : '';
 
-  const prompt = `You are a professional game translator specializing in Xenoblade Chronicles 3 (ゼノブレイド3). Translate the following game texts from English to Arabic.
+  const sourceLangName = ({ en: 'English', zh: 'Chinese', ja: 'Japanese', ko: 'Korean', fr: 'French', de: 'German', es: 'Spanish', it: 'Italian', pt: 'Portuguese', ru: 'Russian', nl: 'Dutch' } as Record<string, string>)[sourceLang] || sourceLang;
+
+  const prompt = `You are a professional game translator. Translate the following game texts from ${sourceLangName} to Arabic.
 
 CRITICAL RULES:
 1. Placeholders like ⟪T0⟫, ⟪T1⟫, etc. are LOCKED TERMS — copy them EXACTLY as-is into your translation. Do NOT translate, modify, or remove them.
