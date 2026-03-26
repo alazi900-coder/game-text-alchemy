@@ -306,6 +306,17 @@ export default function FontDiagnosticPanel({ fontDef, textures, onBatchUpdate }
     }, 100);
   };
 
+  const hasMissingArabic = issues?.some(i => i.category === "حروف مفقودة") ?? false;
+  const hasFixableMetrics = useMemo(() => {
+    return fontDef.glyphs.some(g => {
+      if (g.code < 0x0600) return false;
+      const pixW = g.x2 - g.x1;
+      if (pixW <= 0) return false;
+      const optimal = calculateOptimalMetrics(g, fontDef.header);
+      return optimal.width !== g.width || optimal.renderWidth !== g.renderWidth || optimal.xOffset !== g.xOffset;
+    });
+  }, [fontDef]);
+
   const handleAutoFix = () => {
     if (!onBatchUpdate) return;
     const updates: Array<{ index: number; changes: Partial<NLGGlyphEntry> }> = [];
@@ -328,7 +339,6 @@ export default function FontDiagnosticPanel({ fontDef, textures, onBatchUpdate }
 
     if (updates.length > 0) {
       onBatchUpdate(updates);
-      // Re-run diagnostic
       setTimeout(runDiagnostic, 200);
     }
   };
