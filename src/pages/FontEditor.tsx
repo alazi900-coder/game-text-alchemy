@@ -20,7 +20,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
 } from "@/components/ui/dialog";
-import { decodeDXT5, encodeDXT5, findDDSPositions, DDS_HEADER_SIZE, TEX_SIZE, DXT5_MIP0_SIZE, buildDDSHeader } from "@/lib/dxt5-codec";
+import { decodeDXT5, encodeDXT5, findDDSPositions, DDS_HEADER_SIZE, TEX_SIZE, DXT5_MIP0_SIZE, buildDDSHeader, buildDDSHeaderWithMipmaps, encodeDXT5WithMipmaps, DDS_FULL_SIZE_WITH_MIPS } from "@/lib/dxt5-codec";
 import {
   generateFontAtlas, renderTextPreview, exportMetricsJSON,
   type AtlasResult
