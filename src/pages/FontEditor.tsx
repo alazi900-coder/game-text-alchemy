@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "@/hooks/use-toast";
 import {
-  ArrowRight, Download, Search, ZoomIn, ZoomOut, ScanSearch,
+  ArrowRight, Download, Search, ZoomIn, ZoomOut, ScanSearch, XCircle,
   Upload, Eye, FileJson, Type, Pencil, Trash2,
   Grid3x3, Layers, Loader2,
   Archive, FolderOpen, HardDrive, Package, ShieldCheck, AlertTriangle,
