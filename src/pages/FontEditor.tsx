@@ -367,12 +367,25 @@ export default function FontEditor() {
 
         const newTextures = decodeArchiveTextures(extracted);
 
+        // Parse font definition (character table) from data
+        const fontDefResult = findFontDefInData(data);
+        if (fontDefResult) {
+          const parsedFontDef = parseNLGFontDef(fontDefResult.text);
+          setFontDefData(parsedFontDef);
+          setFontDefOffset(fontDefResult.offset);
+          setFontDefLength(fontDefResult.length);
+          console.log(`Font def found: "${parsedFontDef.header.fontName}" with ${parsedFontDef.glyphs.length} glyphs on ${parsedFontDef.header.pageCount} pages`);
+        } else {
+          setFontDefData(null);
+          console.warn("No font definition found in data file");
+        }
+
         setTextures(newTextures);
         setCurrentPage(0);
         setAtlasResult(null);
         toast({
           title: "✅ تم تحميل الأرشيف",
-          description: `${info.fileCount} ملف في الأرشيف — ${newTextures.length} صفحة DDS — ${formatFileSize(data.length)}`,
+          description: `${info.fileCount} ملف — ${newTextures.length} صفحة DDS${fontDefResult ? ` — ${parseNLGFontDef(fontDefResult.text).glyphs.length} حرف في جدول الخط` : ''} — ${formatFileSize(data.length)}`,
         });
       } catch (err: any) {
         console.error("NLG parse error:", err);
