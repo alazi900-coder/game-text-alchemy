@@ -32,6 +32,11 @@ import {
   parseNLGDict, extractNLGFiles, repackNLGArchive, detectFileType, formatFileSize,
   type NLGArchiveInfo, type NLGExtractedFile
 } from "@/lib/nlg-archive";
+import {
+  parseNLGFontDef, serializeNLGFontDef, findFontDefInData,
+  generateArabicGlyphEntries, mergeArabicIntoFontDef,
+  type NLGFontDef, type NLGGlyphEntry
+} from "@/lib/nlg-font-def";
 import GlyphDrawingEditor from "@/components/editor/GlyphDrawingEditor";
 import JSZip from "jszip";
 
@@ -105,6 +110,11 @@ export default function FontEditor() {
   const [dictData, setDictData] = useState<Uint8Array | null>(null);
   const [dictFileName, setDictFileName] = useState("");
   const [hasArchive, setHasArchive] = useState(false);
+  
+  // Font definition (character table)
+  const [fontDefData, setFontDefData] = useState<NLGFontDef | null>(null);
+  const [fontDefOffset, setFontDefOffset] = useState(0);
+  const [fontDefLength, setFontDefLength] = useState(0);
 
   // Arabic generation settings
   const [arabicFontName, setArabicFontName] = useState("Tajawal");
@@ -357,12 +367,25 @@ export default function FontEditor() {
 
         const newTextures = decodeArchiveTextures(extracted);
 
+        // Parse font definition (character table) from data
+        const fontDefResult = findFontDefInData(data);
+        if (fontDefResult) {
+          const parsedFontDef = parseNLGFontDef(fontDefResult.text);
+          setFontDefData(parsedFontDef);
+          setFontDefOffset(fontDefResult.offset);
+          setFontDefLength(fontDefResult.length);
+          console.log(`Font def found: "${parsedFontDef.header.fontName}" with ${parsedFontDef.glyphs.length} glyphs on ${parsedFontDef.header.pageCount} pages`);
+        } else {
+          setFontDefData(null);
+          console.warn("No font definition found in data file");
+        }
+
         setTextures(newTextures);
         setCurrentPage(0);
         setAtlasResult(null);
         toast({
           title: "✅ تم تحميل الأرشيف",
-          description: `${info.fileCount} ملف في الأرشيف — ${newTextures.length} صفحة DDS — ${formatFileSize(data.length)}`,
+          description: `${info.fileCount} ملف — ${newTextures.length} صفحة DDS${fontDefResult ? ` — ${parseNLGFontDef(fontDefResult.text).glyphs.length} حرف في جدول الخط` : ''} — ${formatFileSize(data.length)}`,
         });
       } catch (err: any) {
         console.error("NLG parse error:", err);
@@ -756,6 +779,45 @@ export default function FontEditor() {
           unk: templateUnk,
         },
       });
+    }
+
+    // === CRITICAL FIX: Inject Arabic glyph entries into font definition ===
+    if (fontDefData && atlasResult && fontData) {
+      // Find the font definition file in the archive (non-DDS, non-empty text file)
+      const fontDefFileIdx = updatedFiles.findIndex(f => {
+        const type = detectFileType(f.data);
+        return type === "text" || (type !== "DDS" && f.data.length > 100 && f.data.length < 100000);
+      });
+
+      if (fontDefFileIdx >= 0) {
+        // Determine base page index for Arabic atlas pages
+        const existingDDSCount = updatedFiles.filter(f => detectFileType(f.data) === "DDS").length - generatedTextures.length;
+        const basePageIdx = existingDDSCount;
+
+        // Generate Arabic glyph entries from atlas
+        const arabicEntries = generateArabicGlyphEntries(
+          atlasResult.glyphs,
+          basePageIdx,
+          fontDefData.header.renderHeight,
+        );
+
+        // Merge into font def
+        const totalPages = existingDDSCount + generatedTextures.length;
+        const mergedFontDef = mergeArabicIntoFontDef(fontDefData, arabicEntries, totalPages);
+        const newFontDefText = serializeNLGFontDef(mergedFontDef);
+        const newFontDefBytes = new TextEncoder().encode(newFontDefText);
+
+        // Pad to alignment
+        const padded = new Uint8Array(Math.ceil(newFontDefBytes.length / 16) * 16);
+        padded.set(newFontDefBytes);
+
+        updatedFiles[fontDefFileIdx] = {
+          ...updatedFiles[fontDefFileIdx],
+          data: padded,
+        };
+
+        console.log(`Font def updated: ${mergedFontDef.glyphs.length} glyphs (${arabicEntries.length} Arabic) on ${totalPages} pages`);
+      }
     }
 
     // Repack
