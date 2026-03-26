@@ -38,6 +38,9 @@ import GlyphDrawingEditor from "@/components/editor/GlyphDrawingEditor";
 import GlyphPreviewGrid from "@/components/font-editor/GlyphPreviewGrid";
 import ArabicWizard, { type ArabicWizardSettings } from "@/components/font-editor/ArabicWizard";
 import FontDefInspector from "@/components/font-editor/FontDefInspector";
+import GlyphMetricsStats from "@/components/font-editor/GlyphMetricsStats";
+import FontDefExporter from "@/components/font-editor/FontDefExporter";
+import GlyphBatchEditor from "@/components/font-editor/GlyphBatchEditor";
 import JSZip from "jszip";
 
 /* ─── types ─── */
@@ -67,8 +70,11 @@ export default function FontEditor() {
   const [hasArchive, setHasArchive] = useState(false);
 
   const [fontDefData, setFontDefData] = useState<NLGFontDef | null>(null);
+  const [originalFontDefData, setOriginalFontDefData] = useState<NLGFontDef | null>(null);
   const [fontDefOffset, setFontDefOffset] = useState(0);
   const [fontDefLength, setFontDefLength] = useState(0);
+  const [fontDefHistory, setFontDefHistory] = useState<NLGFontDef[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
   const [atlasResult, setAtlasResult] = useState<AtlasResult | null>(null);
   const [arabicFontName, setArabicFontName] = useState("Tajawal");
@@ -243,8 +249,10 @@ export default function FontEditor() {
         const fontDefResult = findFontDefInData(data);
         if (fontDefResult) {
           const parsed = parseNLGFontDef(fontDefResult.text);
-          setFontDefData(parsed); setFontDefOffset(fontDefResult.offset); setFontDefLength(fontDefResult.length);
-        } else { setFontDefData(null); }
+          setFontDefData(parsed); setOriginalFontDefData(parsed);
+          setFontDefOffset(fontDefResult.offset); setFontDefLength(fontDefResult.length);
+          setFontDefHistory([parsed]); setHistoryIndex(0);
+        } else { setFontDefData(null); setOriginalFontDefData(null); }
         setTextures(newTextures); setCurrentPage(0); setAtlasResult(null);
         toast({
           title: "✅ تم تحميل الأرشيف",
@@ -553,34 +561,87 @@ export default function FontEditor() {
             <TabsContent value="inspect" className="space-y-3">
               {fontDefData ? (
                 <>
+                  {/* Undo/Redo bar */}
+                  {fontDefHistory.length > 1 && (
+                    <div className="flex items-center gap-1.5">
+                      <Button size="sm" variant="outline" className="h-6 text-[9px] gap-1 px-2"
+                        disabled={historyIndex <= 0}
+                        onClick={() => {
+                          const newIdx = historyIndex - 1;
+                          setHistoryIndex(newIdx);
+                          setFontDefData(fontDefHistory[newIdx]);
+                        }}>
+                        ↩ تراجع
+                      </Button>
+                      <Button size="sm" variant="outline" className="h-6 text-[9px] gap-1 px-2"
+                        disabled={historyIndex >= fontDefHistory.length - 1}
+                        onClick={() => {
+                          const newIdx = historyIndex + 1;
+                          setHistoryIndex(newIdx);
+                          setFontDefData(fontDefHistory[newIdx]);
+                        }}>
+                        إعادة ↪
+                      </Button>
+                      <Badge variant="outline" className="text-[7px] font-mono">{historyIndex + 1}/{fontDefHistory.length}</Badge>
+                    </div>
+                  )}
+
                   <FontDefInspector fontDef={fontDefData} />
-                  <GlyphPreviewGrid
-                    fontDef={fontDefData}
-                    textures={textureCanvases}
-                    selectedGlyphCode={selectedFontDefGlyph}
-                    onGlyphSelect={(g) => {
-                      setSelectedFontDefGlyph(g.code);
-                      setCurrentPage(g.page);
-                    }}
-                    onGlyphUpdate={(idx, changes) => {
-                      setFontDefData(prev => {
-                        if (!prev) return prev;
-                        const newGlyphs = [...prev.glyphs];
-                        newGlyphs[idx] = { ...newGlyphs[idx], ...changes };
-                        return { ...prev, glyphs: newGlyphs, rawText: '' };
-                      });
-                    }}
-                    onBatchUpdate={(updates) => {
-                      setFontDefData(prev => {
-                        if (!prev) return prev;
-                        const newGlyphs = [...prev.glyphs];
-                        for (const u of updates) {
-                          newGlyphs[u.index] = { ...newGlyphs[u.index], ...u.changes };
-                        }
-                        return { ...prev, glyphs: newGlyphs, rawText: '' };
-                      });
-                    }}
-                  />
+                  
+                  <div className="grid lg:grid-cols-[1fr_280px] gap-3">
+                    <GlyphPreviewGrid
+                      fontDef={fontDefData}
+                      textures={textureCanvases}
+                      selectedGlyphCode={selectedFontDefGlyph}
+                      onGlyphSelect={(g) => {
+                        setSelectedFontDefGlyph(g.code);
+                        setCurrentPage(g.page);
+                      }}
+                      onGlyphUpdate={(idx, changes) => {
+                        setFontDefData(prev => {
+                          if (!prev) return prev;
+                          const newGlyphs = [...prev.glyphs];
+                          newGlyphs[idx] = { ...newGlyphs[idx], ...changes };
+                          const updated = { ...prev, glyphs: newGlyphs, rawText: '' };
+                          setFontDefHistory(h => [...h.slice(0, historyIndex + 1), updated]);
+                          setHistoryIndex(i => i + 1);
+                          return updated;
+                        });
+                      }}
+                      onBatchUpdate={(updates) => {
+                        setFontDefData(prev => {
+                          if (!prev) return prev;
+                          const newGlyphs = [...prev.glyphs];
+                          for (const u of updates) {
+                            newGlyphs[u.index] = { ...newGlyphs[u.index], ...u.changes };
+                          }
+                          const updated = { ...prev, glyphs: newGlyphs, rawText: '' };
+                          setFontDefHistory(h => [...h.slice(0, historyIndex + 1), updated]);
+                          setHistoryIndex(i => i + 1);
+                          return updated;
+                        });
+                      }}
+                    />
+
+                    {/* Side panel with tools */}
+                    <div className="space-y-3">
+                      <GlyphMetricsStats fontDef={fontDefData} />
+                      <GlyphBatchEditor fontDef={fontDefData} onBatchUpdate={(updates) => {
+                        setFontDefData(prev => {
+                          if (!prev) return prev;
+                          const newGlyphs = [...prev.glyphs];
+                          for (const u of updates) {
+                            newGlyphs[u.index] = { ...newGlyphs[u.index], ...u.changes };
+                          }
+                          const updated = { ...prev, glyphs: newGlyphs, rawText: '' };
+                          setFontDefHistory(h => [...h.slice(0, historyIndex + 1), updated]);
+                          setHistoryIndex(i => i + 1);
+                          return updated;
+                        });
+                      }} />
+                      <FontDefExporter fontDef={fontDefData} originalFontDef={originalFontDefData} />
+                    </div>
+                  </div>
                 </>
               ) : (
                 <Card>
