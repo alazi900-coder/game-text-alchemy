@@ -425,13 +425,9 @@ export default function FontEditor() {
         const merged = mergeArabicIntoFontDef(fontDefData, entries, newPageCount);
         updatedFontDefText = serializeNLGFontDef(merged);
       } else {
-        // Preserve manual edits even without fresh atlas generation
-        // Always fix PageCount to match actual DDS count
-        const fixedDef = {
-          ...fontDefData,
-          header: { ...fontDefData.header, pageCount: newPageCount },
-        };
-        updatedFontDefText = serializeNLGFontDef(fixedDef);
+        // Preserve manual edits — keep ORIGINAL PageCount when no new pages added
+        // The game's FontDef PageCount may intentionally differ from total DDS count
+        updatedFontDefText = serializeNLGFontDef(fontDefData);
       }
     } else if (fontDefResult) {
       updatedFontDefText = fontDefResult.text;
