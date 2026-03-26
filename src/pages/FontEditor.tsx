@@ -426,7 +426,12 @@ export default function FontEditor() {
         updatedFontDefText = serializeNLGFontDef(merged);
       } else {
         // Preserve manual edits even without fresh atlas generation
-        updatedFontDefText = serializeNLGFontDef(fontDefData);
+        // Always fix PageCount to match actual DDS count
+        const fixedDef = {
+          ...fontDefData,
+          header: { ...fontDefData.header, pageCount: newPageCount },
+        };
+        updatedFontDefText = serializeNLGFontDef(fixedDef);
       }
     } else if (fontDefResult) {
       updatedFontDefText = fontDefResult.text;
