@@ -381,261 +381,148 @@ export default function FontEditor() {
   const buildWithArchive = async () => {
     if (!archiveInfo || !fontData) return;
     const t0 = performance.now();
-    const dsBefore = dictData?.length ?? 0, daBefore = fontData.length;
+    const dsBefore = dictData?.length ?? 0;
+    const daBefore = fontData.length;
 
-    // Snapshot textures before build for verification
-    const snaps = new Map<number, { hash: number; nonZero: number; label: string }>();
-    textures.forEach((tex, i) => {
-      const rgba = tex.ctx.getImageData(0, 0, TEX_SIZE, TEX_SIZE).data;
-      snaps.set(i, { hash: computePixelHash(rgba), nonZero: countNonZeroPixels(rgba), label: tex.isGenerated ? `عربية ${i}` : `أصلية ${i}` });
-    });
-
-    // Find DDS positions and font def in original data
     const ddsPositions = findDDSPositions(fontData);
     const fontDefResult = findFontDefInData(fontData);
-    
+
     if (ddsPositions.length === 0) {
       toast({ title: "خطأ", description: "لا توجد صفحات DDS في الملف الأصلي", variant: "destructive" });
       return;
     }
 
-    // Calculate original DDS spacing (includes all mipmaps + padding)
-    const ddsSpacing = ddsPositions.length > 1 
-      ? ddsPositions[1] - ddsPositions[0] 
-      : DDS_FULL_SIZE_WITH_MIPS;
-
-    // Collect generated (Arabic) textures
+    const ddsSpacing = ddsPositions.length > 1 ? ddsPositions[1] - ddsPositions[0] : DDS_FULL_SIZE_WITH_MIPS;
     const generatedTextures = textures.filter(t => t.isGenerated);
-    const newPageCount = ddsPositions.length + generatedTextures.length;
 
-    // Build new DDS pages with full mipmaps (matching original format)
     const newDDSPages: Uint8Array[] = [];
     for (const tex of generatedTextures) {
       const rgba = new Uint8Array(tex.ctx.getImageData(0, 0, TEX_SIZE, TEX_SIZE).data);
       const header = buildDDSHeaderWithMipmaps(TEX_SIZE, TEX_SIZE, 9);
       const mipData = encodeDXT5WithMipmaps(rgba, TEX_SIZE, TEX_SIZE, 9);
-      
-      // Pad to match original DDS spacing
+
       const fullPage = new Uint8Array(ddsSpacing);
       fullPage.set(header, 0);
       fullPage.set(mipData, header.length);
       newDDSPages.push(fullPage);
     }
 
-    // Build updated font def text
+    const newPageCount = ddsPositions.length + newDDSPages.length;
+
     let updatedFontDefText = "";
-    if (fontDefData && atlasResult) {
-      const entries = generateArabicGlyphEntries(atlasResult.glyphs, ddsPositions.length, fontDefData.header.renderHeight);
-      const merged = mergeArabicIntoFontDef(fontDefData, entries, newPageCount);
-      updatedFontDefText = serializeNLGFontDef(merged);
+    if (fontDefData) {
+      if (atlasResult && newDDSPages.length > 0) {
+        const entries = generateArabicGlyphEntries(atlasResult.glyphs, ddsPositions.length, fontDefData.header.renderHeight);
+        const merged = mergeArabicIntoFontDef(fontDefData, entries, newPageCount);
+        updatedFontDefText = serializeNLGFontDef(merged);
+      } else {
+        // Preserve manual edits even without fresh atlas generation
+        updatedFontDefText = serializeNLGFontDef(fontDefData);
+      }
     } else if (fontDefResult) {
       updatedFontDefText = fontDefResult.text;
     }
 
-    // ═══ Assemble the new .data file ═══
-    // Strategy: PRESERVE all original bytes, APPEND new DDS pages, then font def
-    // [original data up to font def] + [new DDS pages (aligned)] + [updated font def] + [padding]
+    if (!updatedFontDefText) {
+      toast({ title: "خطأ", description: "تعذر إنشاء تعريف الخط النهائي", variant: "destructive" });
+      return;
+    }
+
     const originalFontDefOffset = fontDefResult?.offset ?? fontData.length;
+    const originalFontDefLength = fontDefResult?.length ?? 0;
+    const originalSuffixStart = Math.min(fontData.length, originalFontDefOffset + originalFontDefLength);
+    const originalSuffix = fontData.subarray(originalSuffixStart);
+
+    // Keep all original binary data, replace old fontDef block, and append new Arabic pages safely
+    const prefix = fontData.subarray(0, originalFontDefOffset);
+    const alignedPagesStart = Math.ceil(prefix.length / 16) * 16;
+    const pagesPad = alignedPagesStart - prefix.length;
+
     const fontDefBytes = new TextEncoder().encode(updatedFontDefText);
-    
-    // Align the insertion point to 16-byte boundary
-    const alignedInsertPoint = Math.ceil(originalFontDefOffset / 16) * 16;
-    
-    // Calculate total new data size
-    const newDDSSize = newDDSPages.reduce((s, p) => s + p.length, 0);
-    const newFontDefStart = alignedInsertPoint + newDDSSize;
-    const newDataSize = newFontDefStart + fontDefBytes.length;
-    const alignedSize = Math.ceil(newDataSize / 16) * 16;
-    
-    const newData = new Uint8Array(alignedSize);
-    
-    // 1. Copy everything from original up to font def (preserves ALL original DDS + metadata)
-    newData.set(fontData.subarray(0, originalFontDefOffset), 0);
-    
-    // 2. Insert new Arabic DDS pages at aligned position
-    let insertOffset = alignedInsertPoint;
+    const pagesTotalSize = newDDSPages.reduce((sum, p) => sum + p.length, 0);
+    const newFontDefOffset = alignedPagesStart + pagesTotalSize;
+
+    // Keep a null terminator before remaining tail for parser/game safety
+    const explicitNullTerminatorSize = originalSuffix.length > 0 && originalSuffix[0] === 0x00 ? 0 : 1;
+
+    const rawNewSize = prefix.length + pagesPad + pagesTotalSize + fontDefBytes.length + explicitNullTerminatorSize + originalSuffix.length;
+    const alignedFinalSize = Math.ceil(rawNewSize / 16) * 16;
+    const newData = new Uint8Array(alignedFinalSize);
+
+    let cursor = 0;
+    newData.set(prefix, cursor);
+    cursor += prefix.length;
+
+    if (pagesPad > 0) {
+      cursor += pagesPad;
+    }
+
     for (const page of newDDSPages) {
-      newData.set(page, insertOffset);
-      insertOffset += page.length;
-    }
-    
-    // 3. Write updated font def after all DDS pages
-    newData.set(fontDefBytes, newFontDefStart);
-
-    // ═══ Update .dict to include new DDS page entries ═══
-    let newDict: Uint8Array;
-    if (dictData && archiveInfo && newDDSPages.length > 0) {
-      // Create new archive files list: original files + new DDS pages + updated font def entry
-      const updatedFiles: NLGExtractedFile[] = [];
-      
-      // Keep all original archive files
-      for (const file of archiveFiles) {
-        // If this is the font def text file, update it with the new content
-        if (detectFileType(file.data) === "text" && file.data.length > 100) {
-          const text = new TextDecoder().decode(file.data);
-          if (text.includes("Font ") && text.includes("Glyph ")) {
-            updatedFiles.push({
-              ...file,
-              data: fontDefBytes,
-            });
-            continue;
-          }
-        }
-        updatedFiles.push(file);
-      }
-      
-      // Add new DDS pages as new archive entries
-      for (let i = 0; i < newDDSPages.length; i++) {
-        const newIndex = archiveInfo.fileCount + i;
-        updatedFiles.push({
-          index: newIndex,
-          data: newDDSPages[i],
-          wasCompressed: false,
-          compressionMode: "none",
-          originalEntry: {
-            index: newIndex,
-            offset: 0, // will be recalculated
-            decompressedLength: newDDSPages[i].length,
-            compressedLength: newDDSPages[i].length,
-            unk: archiveFiles[0]?.originalEntry?.unk ?? 0,
-          },
-        });
-      }
-      
-      // Repack with updated file list
-      const repacked = repackNLGArchive(archiveInfo, updatedFiles);
-      newDict = repacked.dict;
-      
-      // IMPORTANT: Use the repacked .data instead if we're using the archive system
-      // But we already built our .data with direct injection, so just update the dict
-      // The dict entries just need correct offsets for the NEW layout
-      // Since we preserved the original layout and appended, the original entries' offsets are still valid
-      // We only need to add entries for the new DDS pages
-      
-      // Actually, let's rebuild the dict manually to match our direct injection layout
-      const originalEntries = archiveInfo.entries;
-      const newEntryCount = originalEntries.length + newDDSPages.length;
-      
-      // Find the font def entry in original entries (usually the last text file)
-      let fontDefEntryIdx = -1;
-      for (let i = originalEntries.length - 1; i >= 0; i--) {
-        const entry = originalEntries[i];
-        const off = entry.offset;
-        const len = entry.decompressedLength;
-        if (off >= 0 && len > 50 && len < 500000) {
-          // Check if this entry's data starts with text-like content
-          const slice = fontData.subarray(off, Math.min(off + 20, fontData.length));
-          const isText = Array.from(slice).every(b => (b >= 0x20 && b <= 0x7E) || b === 0x0A || b === 0x0D || b === 0);
-          if (isText) {
-            fontDefEntryIdx = i;
-            break;
-          }
-        }
-      }
-
-      // Build new dict with proper offsets
-      const dictHeaderSize = 0x2C;
-      const unkArraySize = newEntryCount;
-      const fileTableSize = newEntryCount * 16;
-      const newDictSize = dictHeaderSize + unkArraySize + fileTableSize + archiveInfo.footerBytes.length;
-      newDict = new Uint8Array(newDictSize);
-      const dv = new DataView(newDict.buffer);
-      
-      // Copy original header
-      newDict.set(archiveInfo.headerBytes.subarray(0, dictHeaderSize), 0);
-      dv.setUint32(0x8, newEntryCount, true);
-      
-      // Write unk array
-      const inferredUnk = archiveInfo.unkArray.length > 0 ? archiveInfo.unkArray[0] : 0;
-      for (let i = 0; i < newEntryCount; i++) {
-        newDict[dictHeaderSize + i] = i < archiveInfo.unkArray.length ? archiveInfo.unkArray[i] : inferredUnk;
-      }
-      
-      // Write file table entries
-      const tableStart = dictHeaderSize + newEntryCount;
-      
-      // Original entries (offsets unchanged since we preserved original layout)
-      for (let i = 0; i < originalEntries.length; i++) {
-        const e = originalEntries[i];
-        const off = tableStart + i * 16;
-        
-        // If this is the font def entry, update its offset and length
-        if (i === fontDefEntryIdx) {
-          dv.setUint32(off, newFontDefStart, true);
-          dv.setUint32(off + 4, fontDefBytes.length, true);
-          dv.setUint32(off + 8, fontDefBytes.length, true);
-          dv.setUint32(off + 12, e.unk, true);
-        } else {
-          dv.setUint32(off, e.offset, true);
-          dv.setUint32(off + 4, e.decompressedLength, true);
-          dv.setUint32(off + 8, e.compressedLength, true);
-          dv.setUint32(off + 12, e.unk, true);
-        }
-      }
-      
-      // New DDS page entries
-      for (let i = 0; i < newDDSPages.length; i++) {
-        const entryIdx = originalEntries.length + i;
-        const off = tableStart + entryIdx * 16;
-        const pageOffset = alignedInsertPoint + i * ddsSpacing;
-        dv.setUint32(off, pageOffset, true);
-        dv.setUint32(off + 4, newDDSPages[i].length, true);
-        dv.setUint32(off + 8, newDDSPages[i].length, true);
-        dv.setUint32(off + 12, originalEntries[0]?.unk ?? 0, true);
-      }
-      
-      // Write footer
-      if (archiveInfo.footerBytes.length > 0) {
-        newDict.set(archiveInfo.footerBytes, tableStart + newEntryCount * 16);
-      }
-    } else {
-      newDict = dictData ?? new Uint8Array(0);
+      newData.set(page, cursor);
+      cursor += page.length;
     }
 
-    // Verification
-    const dur = performance.now() - t0;
-    
-    // Verify by re-reading the new data
+    newData.set(fontDefBytes, cursor);
+    cursor += fontDefBytes.length;
+
+    if (explicitNullTerminatorSize === 1) {
+      newData[cursor] = 0x00;
+      cursor += 1;
+    }
+
+    newData.set(originalSuffix, cursor);
+
+    // Minimal safe dict patch: only update the existing fontDef entry if an exact offset match exists
+    let newDict = dictData ?? new Uint8Array(0);
+    if (dictData && archiveInfo.entries.length > 0 && fontDefResult) {
+      const fontEntryIdx = archiveInfo.entries.findIndex(e => e.offset === fontDefResult.offset);
+      if (fontEntryIdx >= 0) {
+        newDict = new Uint8Array(dictData);
+        const view = new DataView(newDict.buffer, newDict.byteOffset, newDict.byteLength);
+        const fileCount = view.getUint32(0x8, true);
+        const tableStart = 0x2C + fileCount;
+        const entryOffset = tableStart + fontEntryIdx * 16;
+
+        if (entryOffset + 12 < newDict.length) {
+          view.setUint32(entryOffset, newFontDefOffset, true);
+          view.setUint32(entryOffset + 4, fontDefBytes.length, true);
+          view.setUint32(entryOffset + 8, fontDefBytes.length, true);
+        }
+      }
+    }
+
     const verifyDDS = findDDSPositions(newData);
     const verifyFontDef = findFontDefInData(newData);
-    
+    const dur = performance.now() - t0;
+
     const results: typeof buildVerification extends { results: infer R } | null ? NonNullable<R> : never = [];
-    // Check original pages are intact (byte-for-byte comparison)
+
     for (let i = 0; i < ddsPositions.length; i++) {
-      const checkSize = Math.min(1024, fontData.length - ddsPositions[i]);
-      const origSlice = fontData.subarray(ddsPositions[i], ddsPositions[i] + checkSize);
-      const newSlice = newData.subarray(ddsPositions[i], ddsPositions[i] + checkSize);
-      let match = true;
-      for (let j = 0; j < origSlice.length; j++) {
-        if (origSlice[j] !== newSlice[j]) { match = false; break; }
+      const orig = fontData.subarray(ddsPositions[i], ddsPositions[i] + 256);
+      const now = newData.subarray(ddsPositions[i], ddsPositions[i] + 256);
+      let match = orig.length === now.length;
+      for (let j = 0; j < orig.length && match; j++) {
+        if (orig[j] !== now[j]) match = false;
       }
-      results.push({
-        pageLabel: `أصلية ${i}`, hashBefore: 1, hashAfter: match ? 1 : 0,
-        match, nonZeroBefore: 1, nonZeroAfter: 1, pixelLoss: match ? 0 : 100,
-      });
+      results.push({ pageLabel: `أصلية ${i}`, hashBefore: 1, hashAfter: match ? 1 : 0, match, nonZeroBefore: 1, nonZeroAfter: 1, pixelLoss: match ? 0 : 100 });
     }
-    // Check new pages have DDS header
+
     for (let i = 0; i < newDDSPages.length; i++) {
-      const pageStart = alignedInsertPoint + i * ddsSpacing;
-      const hasDDS = newData[pageStart] === 0x44 && newData[pageStart+1] === 0x44 && 
-                     newData[pageStart+2] === 0x53 && newData[pageStart+3] === 0x20;
-      results.push({
-        pageLabel: `عربية ${i}`, hashBefore: 0, hashAfter: hasDDS ? 1 : 0,
-        match: hasDDS, nonZeroBefore: 0, nonZeroAfter: 1, pixelLoss: hasDDS ? 0 : 100,
-      });
+      const pageStart = alignedPagesStart + i * ddsSpacing;
+      const hasDDSHeader =
+        newData[pageStart] === 0x44 &&
+        newData[pageStart + 1] === 0x44 &&
+        newData[pageStart + 2] === 0x53 &&
+        newData[pageStart + 3] === 0x20;
+      results.push({ pageLabel: `عربية ${i}`, hashBefore: 0, hashAfter: hasDDSHeader ? 1 : 0, match: hasDDSHeader, nonZeroBefore: 0, nonZeroAfter: 1, pixelLoss: hasDDSHeader ? 0 : 100 });
     }
-    // Verify font def was written correctly
-    if (verifyFontDef) {
-      const parsedVerify = parseNLGFontDef(verifyFontDef.text);
-      const hasArabic = parsedVerify.glyphs.some(g => g.code >= 0x0600);
-      const pcCorrect = parsedVerify.header.pageCount === newPageCount;
-      if (!hasArabic) results.push({ pageLabel: "⚠️ FontDef", hashBefore: 0, hashAfter: 0, match: false, nonZeroBefore: 0, nonZeroAfter: 0, pixelLoss: 100 });
-      if (!pcCorrect) results.push({ pageLabel: `⚠️ PageCount ${parsedVerify.header.pageCount}≠${newPageCount}`, hashBefore: 0, hashAfter: 0, match: false, nonZeroBefore: 0, nonZeroAfter: 0, pixelLoss: 100 });
+
+    if (!verifyFontDef) {
+      results.push({ pageLabel: "FontDef", hashBefore: 0, hashAfter: 0, match: false, nonZeroBefore: 0, nonZeroAfter: 0, pixelLoss: 100 });
     }
 
     const passed = results.filter(r => r.match).length;
-    
-    // Update state
+
     setFontData(newData);
     if (verifyFontDef) {
       const parsed = parseNLGFontDef(verifyFontDef.text);
@@ -644,39 +531,52 @@ export default function FontEditor() {
       setFontDefLength(verifyFontDef.length);
     }
 
-    // Re-decode textures from new data
-    const newTextures: TextureInfo[] = [];
+    const decodedTextures: TextureInfo[] = [];
     for (const pos of verifyDDS) {
       try {
         const rgba = decodeDXT5(newData.slice(pos + DDS_HEADER_SIZE, pos + DDS_HEADER_SIZE + DXT5_MIP0_SIZE), TEX_SIZE, TEX_SIZE);
-        const canvas = document.createElement("canvas"); canvas.width = TEX_SIZE; canvas.height = TEX_SIZE;
+        const canvas = document.createElement("canvas");
+        canvas.width = TEX_SIZE;
+        canvas.height = TEX_SIZE;
         const ctx = canvas.getContext("2d")!;
         const imgData = ctx.createImageData(TEX_SIZE, TEX_SIZE);
-        imgData.data.set(rgba); ctx.putImageData(imgData, 0, 0);
-        newTextures.push({ canvas, ctx, imgData, ddsOffset: pos, isGenerated: pos >= originalFontDefOffset });
-      } catch { /* skip broken */ }
+        imgData.data.set(rgba);
+        ctx.putImageData(imgData, 0, 0);
+        decodedTextures.push({ canvas, ctx, imgData, ddsOffset: pos, isGenerated: pos >= alignedPagesStart && pos < newFontDefOffset });
+      } catch {
+        // ignore corrupted page fragments
+      }
     }
-    setTextures(newTextures); setCurrentPage(0);
+
+    setTextures(decodedTextures);
+    setCurrentPage(0);
 
     setBuildVerification({
-      show: true, results, totalPages: results.length, passedPages: passed,
+      show: true,
+      results,
+      totalPages: results.length,
+      passedPages: passed,
       newPages: newDDSPages.length,
-      dictSizeBefore: dsBefore, dictSizeAfter: newDict.length,
-      dataSizeBefore: daBefore, dataSizeAfter: newData.length,
+      dictSizeBefore: dsBefore,
+      dictSizeAfter: newDict.length,
+      dataSizeBefore: daBefore,
+      dataSizeAfter: newData.length,
       duration: dur,
     });
 
-    // Download as ZIP
     const zip = new JSZip();
     const base = dictFileName.replace(/_res\.dict$/i, "_res").replace(/\.dict$/i, "_res");
     zip.file(`${base}.dict`, newDict);
     zip.file(`${base}.data`, newData);
     const blob = await zip.generateAsync({ type: "blob" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${base}_arabized.zip`; a.click();
-    
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${base}_arabized.zip`;
+    a.click();
+
     toast({
-      title: "✅ تم البناء بنجاح",
-      description: `${ddsPositions.length} أصلية + ${newDDSPages.length} عربية — ${verifyFontDef ? parseNLGFontDef(verifyFontDef.text).glyphs.length : '?'} حرف — ${(newData.length / 1048576).toFixed(1)} MB (كان ${(daBefore / 1048576).toFixed(1)} MB)`,
+      title: "✅ تم البناء",
+      description: `${ddsPositions.length} أصلية + ${newDDSPages.length} عربية — ${(newData.length / 1048576).toFixed(1)} MB`,
     });
   };
 
