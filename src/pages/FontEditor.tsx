@@ -38,6 +38,9 @@ import GlyphDrawingEditor from "@/components/editor/GlyphDrawingEditor";
 import GlyphPreviewGrid from "@/components/font-editor/GlyphPreviewGrid";
 import ArabicWizard, { type ArabicWizardSettings } from "@/components/font-editor/ArabicWizard";
 import FontDefInspector from "@/components/font-editor/FontDefInspector";
+import GlyphMetricsStats from "@/components/font-editor/GlyphMetricsStats";
+import FontDefExporter from "@/components/font-editor/FontDefExporter";
+import GlyphBatchEditor from "@/components/font-editor/GlyphBatchEditor";
 import JSZip from "jszip";
 
 /* ─── types ─── */
