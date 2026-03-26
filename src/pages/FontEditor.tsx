@@ -532,7 +532,7 @@ export default function FontEditor() {
           </Card>
         )}
 
-        {textures.length > 0 && (
+        {(textures.length > 0 || fontDefData) && (
           <Tabs defaultValue={fontDefData ? "inspect" : "atlas"} className="space-y-3">
             <div className="overflow-x-auto -mx-2.5 px-2.5 sm:mx-0 sm:px-0 pb-0.5">
               <TabsList className="inline-flex h-8 w-auto min-w-full sm:grid sm:grid-cols-6 gap-0.5 p-0.5">
