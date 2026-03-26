@@ -44,6 +44,7 @@ import GlyphBatchEditor from "@/components/font-editor/GlyphBatchEditor";
 import FontDiagnosticPanel from "@/components/font-editor/FontDiagnosticPanel";
 import FontQualityEnhancer from "@/components/font-editor/FontQualityEnhancer";
 import CompatibilityCheck from "@/components/font-editor/CompatibilityCheck";
+import SafePatchPanel, { type SafePatchResult } from "@/components/font-editor/SafePatchPanel";
 import JSZip from "jszip";
 
 /* ─── types ─── */
@@ -1203,6 +1204,36 @@ export default function FontEditor() {
                   </CardContent>
                 </Card>
               </div>
+
+              {/* Safe Patch Panel */}
+              {fontDefData && textures.length > 0 && (
+                <SafePatchPanel
+                  fontDef={fontDefData}
+                  textures={textureCanvases}
+                  onApplyPatch={(result: SafePatchResult) => {
+                    // Update font def
+                    setFontDefData(result.updatedFontDef);
+                    setFontDefHistory(h => [...h.slice(0, historyIndex + 1), result.updatedFontDef]);
+                    setHistoryIndex(i => i + 1);
+
+                    // Update texture canvases in-place
+                    const newTextures = [...textures];
+                    for (const [pageIdx, canvas] of result.updatedPages) {
+                      if (newTextures[pageIdx]) {
+                        const ctx = canvas.getContext("2d")!;
+                        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        newTextures[pageIdx] = {
+                          ...newTextures[pageIdx],
+                          canvas,
+                          ctx,
+                          imgData,
+                        };
+                      }
+                    }
+                    setTextures(newTextures);
+                  }}
+                />
+              )}
             </TabsContent>
 
             {/* ═══ ARCHIVE TAB ═══ */}
