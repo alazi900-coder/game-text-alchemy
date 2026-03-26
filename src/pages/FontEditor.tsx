@@ -110,6 +110,11 @@ export default function FontEditor() {
   const [dictData, setDictData] = useState<Uint8Array | null>(null);
   const [dictFileName, setDictFileName] = useState("");
   const [hasArchive, setHasArchive] = useState(false);
+  
+  // Font definition (character table)
+  const [fontDefData, setFontDefData] = useState<NLGFontDef | null>(null);
+  const [fontDefOffset, setFontDefOffset] = useState(0);
+  const [fontDefLength, setFontDefLength] = useState(0);
 
   // Arabic generation settings
   const [arabicFontName, setArabicFontName] = useState("Tajawal");
