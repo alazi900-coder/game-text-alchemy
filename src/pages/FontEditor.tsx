@@ -247,7 +247,19 @@ export default function FontEditor() {
         setArchiveInfo(info); setHasArchive(true);
         const extracted = extractNLGFiles(info, data);
         setArchiveFiles(extracted);
-        const newTextures = decodeArchiveTextures(extracted);
+        let newTextures = decodeArchiveTextures(extracted);
+        // Fallback: if no DDS found in extracted files, scan raw .data directly
+        if (newTextures.length === 0) {
+          const positions = findDDSPositions(data);
+          newTextures = positions.map((ddsOff, i) => {
+            const rgba = decodeDXT5(data.slice(ddsOff + DDS_HEADER_SIZE, ddsOff + DDS_HEADER_SIZE + DXT5_MIP0_SIZE), TEX_SIZE, TEX_SIZE);
+            const canvas = document.createElement("canvas"); canvas.width = TEX_SIZE; canvas.height = TEX_SIZE;
+            const ctx = canvas.getContext("2d")!;
+            const imgData = ctx.createImageData(TEX_SIZE, TEX_SIZE);
+            imgData.data.set(rgba); ctx.putImageData(imgData, 0, 0);
+            return { canvas, ctx, imgData, ddsOffset: ddsOff } as TextureInfo;
+          });
+        }
         const fontDefResult = findFontDefInData(data);
         if (fontDefResult) {
           const parsed = parseNLGFontDef(fontDefResult.text);
