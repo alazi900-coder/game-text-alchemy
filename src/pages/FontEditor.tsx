@@ -41,6 +41,8 @@ import FontDefInspector from "@/components/font-editor/FontDefInspector";
 import GlyphMetricsStats from "@/components/font-editor/GlyphMetricsStats";
 import FontDefExporter from "@/components/font-editor/FontDefExporter";
 import GlyphBatchEditor from "@/components/font-editor/GlyphBatchEditor";
+import FontDiagnosticPanel from "@/components/font-editor/FontDiagnosticPanel";
+import FontQualityEnhancer from "@/components/font-editor/FontQualityEnhancer";
 import JSZip from "jszip";
 
 /* ─── types ─── */
@@ -625,6 +627,23 @@ export default function FontEditor() {
 
                     {/* Side panel with tools */}
                     <div className="space-y-3">
+                      <FontDiagnosticPanel
+                        fontDef={fontDefData}
+                        textures={textureCanvases}
+                        onBatchUpdate={(updates) => {
+                          setFontDefData(prev => {
+                            if (!prev) return prev;
+                            const newGlyphs = [...prev.glyphs];
+                            for (const u of updates) {
+                              newGlyphs[u.index] = { ...newGlyphs[u.index], ...u.changes };
+                            }
+                            const updated = { ...prev, glyphs: newGlyphs, rawText: '' };
+                            setFontDefHistory(h => [...h.slice(0, historyIndex + 1), updated]);
+                            setHistoryIndex(i => i + 1);
+                            return updated;
+                          });
+                        }}
+                      />
                       <GlyphMetricsStats fontDef={fontDefData} />
                       <GlyphBatchEditor fontDef={fontDefData} onBatchUpdate={(updates) => {
                         setFontDefData(prev => {
@@ -811,6 +830,13 @@ export default function FontEditor() {
                       </CardContent>
                     </Card>
                   )}
+
+                  <FontQualityEnhancer
+                    currentAtlas={atlasResult}
+                    fontFamily={arabicFontName}
+                    textureSize={TEX_SIZE}
+                    onEnhancedAtlas={(result) => handleAtlasGenerated(result, arabicFontName, lastWizardSettings!)}
+                  />
                 </div>
               </div>
             </TabsContent>

@@ -200,7 +200,7 @@ export function findFontDefInData(data: Uint8Array): { text: string; offset: num
 
 /**
  * Generate NLG glyph entries from atlas result for Arabic characters.
- * Maps atlas coordinates to the NLG Glyph format.
+ * Uses form-aware metrics: connected forms get tighter width, isolated forms get padding.
  */
 export function generateArabicGlyphEntries(
   atlasGlyphs: Array<{
@@ -223,13 +223,40 @@ export function generateArabicGlyphEntries(
     if (g.width === 0) continue;
 
     const charSpec = g.code.toString(); // Use decimal code for non-ASCII
+    const code = g.code;
     
+    // Determine Arabic form type for metric optimization
+    let isInitial = false, isMedial = false;
+    if (code >= 0xFE70 && code <= 0xFEFF) {
+      const offset = (code - 0xFE70) % 4;
+      isInitial = offset === 2;
+      isMedial = offset === 3;
+    }
+
+    // Calculate form-aware metrics
+    let width: number, renderWidth: number, xOffset: number;
+    
+    if (isInitial || isMedial) {
+      // Connected forms: tighter for better joining
+      width = Math.max(1, g.width - 1);
+      renderWidth = Math.max(width, g.width);
+      xOffset = 0;
+    } else {
+      // Isolated/final: use advance with small padding
+      width = Math.max(g.advance, g.width + 1);
+      renderWidth = Math.max(width, g.width + Math.abs(g.bearingX) + 1);
+      xOffset = Math.max(0, g.bearingX);
+    }
+
+    // Ensure renderWidth >= width always
+    renderWidth = Math.max(renderWidth, width);
+
     entries.push({
       charSpec,
       code: g.code,
-      width: g.advance,
-      renderWidth: Math.max(g.advance, g.width + Math.abs(g.bearingX)),
-      xOffset: Math.max(0, g.bearingX),
+      width,
+      renderWidth,
+      xOffset,
       x1: g.atlasX,
       y1: g.atlasY,
       x2: g.atlasX + g.width,
