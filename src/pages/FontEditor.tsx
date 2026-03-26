@@ -502,113 +502,104 @@ export default function FontEditor() {
     const verifyFontDef = findFontDefInData(newData);
     const dur = performance.now() - t0;
 
+    // ═══ Build comparison report ═══
+    const hex = (n: number) => `0x${n.toString(16).toUpperCase().padStart(8, "0")}`;
+    const fmtSz = formatFileSize;
+
+    const reportOrigDDS = ddsPositions.map((pos, i) => {
+      const orig = fontData.subarray(pos, pos + 256);
+      const now = newData.subarray(pos, pos + 256);
+      let intact = orig.length === now.length;
+      for (let j = 0; j < orig.length && intact; j++) if (orig[j] !== now[j]) intact = false;
+      return { index: i, offset: hex(pos), size: fmtSz(ddsSpacing), intact };
+    });
+
+    const reportNewDDS = newDDSPages.map((_, i) => {
+      const pageStart = alignedPagesStart + i * ddsSpacing;
+      const hasDDS = newData[pageStart] === 0x44 && newData[pageStart + 1] === 0x44 && newData[pageStart + 2] === 0x53 && newData[pageStart + 3] === 0x20;
+      return { index: ddsPositions.length + i, offset: hex(pageStart), size: fmtSz(ddsSpacing), hasDDS };
+    });
+
+    const originalFontDefParsed = fontDefResult ? parseNLGFontDef(fontDefResult.text) : null;
+    const reportFontDefBefore = fontDefResult ? {
+      offset: hex(fontDefResult.offset),
+      length: fmtSz(fontDefResult.length),
+      glyphs: originalFontDefParsed?.glyphs.length ?? 0,
+      pageCount: originalFontDefParsed?.header.pageCount ?? 0,
+    } : null;
+
+    const verifiedParsed = verifyFontDef ? parseNLGFontDef(verifyFontDef.text) : null;
+    const reportFontDefAfter = verifyFontDef ? {
+      offset: hex(verifyFontDef.offset),
+      length: fmtSz(verifyFontDef.length),
+      glyphs: verifiedParsed?.glyphs.length ?? 0,
+      arabicGlyphs: verifiedParsed?.glyphs.filter(g => g.code >= 0x0600).length ?? 0,
+      pageCount: verifiedParsed?.header.pageCount ?? 0,
+    } : null;
+
     const results: typeof buildVerification extends { results: infer R } | null ? NonNullable<R> : never = [];
 
-    for (let i = 0; i < ddsPositions.length; i++) {
-      const orig = fontData.subarray(ddsPositions[i], ddsPositions[i] + 256);
-      const now = newData.subarray(ddsPositions[i], ddsPositions[i] + 256);
-      let match = orig.length === now.length;
-      for (let j = 0; j < orig.length && match; j++) {
-        if (orig[j] !== now[j]) match = false;
-      }
-      results.push({ pageLabel: `أصلية ${i}`, hashBefore: 1, hashAfter: match ? 1 : 0, match, nonZeroBefore: 1, nonZeroAfter: 1, pixelLoss: match ? 0 : 100 });
+    for (const rd of reportOrigDDS) {
+      results.push({ pageLabel: `أصلية ${rd.index}`, hashBefore: 1, hashAfter: rd.intact ? 1 : 0, match: rd.intact, nonZeroBefore: 1, nonZeroAfter: 1, pixelLoss: rd.intact ? 0 : 100 });
     }
-
-    for (let i = 0; i < newDDSPages.length; i++) {
-      const pageStart = alignedPagesStart + i * ddsSpacing;
-      const hasDDSHeader =
-        newData[pageStart] === 0x44 &&
-        newData[pageStart + 1] === 0x44 &&
-        newData[pageStart + 2] === 0x53 &&
-        newData[pageStart + 3] === 0x20;
-      results.push({ pageLabel: `عربية ${i}`, hashBefore: 0, hashAfter: hasDDSHeader ? 1 : 0, match: hasDDSHeader, nonZeroBefore: 0, nonZeroAfter: 1, pixelLoss: hasDDSHeader ? 0 : 100 });
+    for (const rn of reportNewDDS) {
+      results.push({ pageLabel: `عربية ${rn.index - ddsPositions.length}`, hashBefore: 0, hashAfter: rn.hasDDS ? 1 : 0, match: rn.hasDDS, nonZeroBefore: 0, nonZeroAfter: 1, pixelLoss: rn.hasDDS ? 0 : 100 });
     }
-
     if (!verifyFontDef) {
       results.push({ pageLabel: "FontDef", hashBefore: 0, hashAfter: 0, match: false, nonZeroBefore: 0, nonZeroAfter: 0, pixelLoss: 100 });
     }
 
     const passed = results.filter(r => r.match).length;
-    const failed = results.filter(r => !r.match);
 
     // ═══ STRICT PRE-DOWNLOAD VALIDATION ═══
     const errors: string[] = [];
-
-    // 1. FontDef must exist in output
     if (!verifyFontDef) {
       errors.push("تعريف الخط (FontDef) غير موجود في الملف الناتج");
-    } else {
-      const parsedVerify = parseNLGFontDef(verifyFontDef.text);
-      
-      // 2. Arabic glyphs must be present if we injected them
-      const arabicInOutput = parsedVerify.glyphs.filter(g => g.code >= 0x0600).length;
-      if (newDDSPages.length > 0 && arabicInOutput === 0) {
-        errors.push("لم يتم العثور على أي حرف عربي في تعريف الخط الناتج");
-      }
-
-      // 3. PageCount must match actual pages
+    } else if (verifiedParsed) {
+      const arabicInOutput = verifiedParsed.glyphs.filter(g => g.code >= 0x0600).length;
+      if (newDDSPages.length > 0 && arabicInOutput === 0) errors.push("لا حروف عربية في FontDef الناتج");
       const expectedPC = ddsPositions.length + newDDSPages.length;
-      if (parsedVerify.header.pageCount !== expectedPC) {
-        errors.push(`PageCount غير متطابق: التعريف يعلن ${parsedVerify.header.pageCount} لكن المتوقع ${expectedPC}`);
-      }
-
-      // 4. Latin glyphs must survive
-      const latinInOutput = parsedVerify.glyphs.filter(g => g.code < 0x0600).length;
-      if (latinInOutput === 0) {
-        errors.push("جميع الحروف اللاتينية الأصلية مفقودة — الخط تالف");
-      }
-
-      // 5. No page references beyond actual page count
-      const maxPageRef = Math.max(0, ...parsedVerify.glyphs.map(g => g.page));
-      if (maxPageRef >= expectedPC) {
-        errors.push(`حروف تشير لصفحة ${maxPageRef} لكن يوجد فقط ${expectedPC} صفحة`);
-      }
+      if (verifiedParsed.header.pageCount !== expectedPC) errors.push(`PageCount ${verifiedParsed.header.pageCount} ≠ المتوقع ${expectedPC}`);
+      if (verifiedParsed.glyphs.filter(g => g.code < 0x0600).length === 0) errors.push("الحروف اللاتينية مفقودة");
+      const maxRef = Math.max(0, ...verifiedParsed.glyphs.map(g => g.page));
+      if (maxRef >= expectedPC) errors.push(`حرف يشير لصفحة ${maxRef} غير موجودة`);
     }
+    if (reportOrigDDS.some(r => !r.intact)) errors.push("صفحات أصلية تالفة");
+    if (newData.length < fontData.length * 0.95) errors.push("حجم الناتج أصغر من الأصلي");
 
-    // 6. Original pages must be byte-identical
-    const corruptedOriginals = results.filter(r => r.pageLabel.startsWith("أصلية") && !r.match);
-    if (corruptedOriginals.length > 0) {
-      errors.push(`${corruptedOriginals.length} صفحة أصلية تالفة — البيانات الأصلية لم تُحفظ`);
-    }
+    const buildReport = {
+      originalDDS: reportOrigDDS,
+      newDDS: reportNewDDS,
+      fontDefBefore: reportFontDefBefore,
+      fontDefAfter: reportFontDefAfter,
+      blocked: errors.length > 0,
+      blockReasons: errors,
+    };
 
-    // 7. File size sanity — output must not be smaller than original
-    if (newData.length < fontData.length * 0.95) {
-      errors.push(`حجم الملف الناتج (${(newData.length / 1048576).toFixed(1)} MB) أصغر من الأصلي (${(daBefore / 1048576).toFixed(1)} MB) — بيانات مفقودة`);
-    }
-
-    // If ANY validation failed, BLOCK the download
     if (errors.length > 0) {
       setBuildVerification({
         show: true, results, totalPages: results.length, passedPages: passed,
         newPages: newDDSPages.length,
         dictSizeBefore: dsBefore, dictSizeAfter: newDict.length,
         dataSizeBefore: daBefore, dataSizeAfter: newData.length,
-        duration: dur,
+        duration: dur, report: buildReport,
       });
-      toast({
-        title: "⛔ تم إيقاف البناء — الملف تالف",
-        description: errors.join(" | "),
-        variant: "destructive",
-      });
-      console.error("Build blocked:", errors);
-      return; // DO NOT download
+      toast({ title: "⛔ تم إيقاف البناء", description: errors.join(" | "), variant: "destructive" });
+      return;
     }
 
-    // ═══ PASSED — safe to export ═══
+    // ═══ PASSED ═══
     setFontData(newData);
     if (verifyFontDef) {
       const parsed = parseNLGFontDef(verifyFontDef.text);
-      setFontDefData(parsed);
-      setFontDefOffset(verifyFontDef.offset);
-      setFontDefLength(verifyFontDef.length);
+      setFontDefData(parsed); setFontDefOffset(verifyFontDef.offset); setFontDefLength(verifyFontDef.length);
     }
 
     const decodedTextures: TextureInfo[] = [];
     for (const pos of verifyDDS) {
       try {
         const rgba = decodeDXT5(newData.slice(pos + DDS_HEADER_SIZE, pos + DDS_HEADER_SIZE + DXT5_MIP0_SIZE), TEX_SIZE, TEX_SIZE);
-        const canvas = document.createElement("canvas");
-        canvas.width = TEX_SIZE; canvas.height = TEX_SIZE;
+        const canvas = document.createElement("canvas"); canvas.width = TEX_SIZE; canvas.height = TEX_SIZE;
         const ctx = canvas.getContext("2d")!;
         const imgData = ctx.createImageData(TEX_SIZE, TEX_SIZE);
         imgData.data.set(rgba); ctx.putImageData(imgData, 0, 0);
@@ -622,10 +613,9 @@ export default function FontEditor() {
       newPages: newDDSPages.length,
       dictSizeBefore: dsBefore, dictSizeAfter: newDict.length,
       dataSizeBefore: daBefore, dataSizeAfter: newData.length,
-      duration: dur,
+      duration: dur, report: buildReport,
     });
 
-    // Download
     const zip = new JSZip();
     const base = dictFileName.replace(/_res\.dict$/i, "_res").replace(/\.dict$/i, "_res");
     zip.file(`${base}.dict`, newDict);
@@ -634,10 +624,10 @@ export default function FontEditor() {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = `${base}_arabized.zip`; a.click();
 
-    const parsedFinal = verifyFontDef ? parseNLGFontDef(verifyFontDef.text) : null;
     toast({
       title: "✅ تم البناء — جميع الفحوصات ناجحة",
-      description: `${ddsPositions.length} أصلية + ${newDDSPages.length} عربية — ${parsedFinal?.glyphs.length ?? "?"} حرف (${parsedFinal?.glyphs.filter(g => g.code >= 0x0600).length ?? 0} عربي) — ${(newData.length / 1048576).toFixed(1)} MB`,
+      description: `${ddsPositions.length} أصلية + ${newDDSPages.length} عربية — ${verifiedParsed?.glyphs.length ?? "?"} حرف (${verifiedParsed?.glyphs.filter(g => g.code >= 0x0600).length ?? 0} عربي) — ${(newData.length / 1048576).toFixed(1)} MB`,
+    });
     });
   };
 
