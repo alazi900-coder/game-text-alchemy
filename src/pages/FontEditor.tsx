@@ -781,6 +781,45 @@ export default function FontEditor() {
       });
     }
 
+    // === CRITICAL FIX: Inject Arabic glyph entries into font definition ===
+    if (fontDefData && atlasResult && fontData) {
+      // Find the font definition file in the archive (non-DDS, non-empty text file)
+      const fontDefFileIdx = updatedFiles.findIndex(f => {
+        const type = detectFileType(f.data);
+        return type === "text" || (type !== "DDS" && f.data.length > 100 && f.data.length < 100000);
+      });
+
+      if (fontDefFileIdx >= 0) {
+        // Determine base page index for Arabic atlas pages
+        const existingDDSCount = updatedFiles.filter(f => detectFileType(f.data) === "DDS").length - generatedTextures.length;
+        const basePageIdx = existingDDSCount;
+
+        // Generate Arabic glyph entries from atlas
+        const arabicEntries = generateArabicGlyphEntries(
+          atlasResult.glyphs,
+          basePageIdx,
+          fontDefData.header.renderHeight,
+        );
+
+        // Merge into font def
+        const totalPages = existingDDSCount + generatedTextures.length;
+        const mergedFontDef = mergeArabicIntoFontDef(fontDefData, arabicEntries, totalPages);
+        const newFontDefText = serializeNLGFontDef(mergedFontDef);
+        const newFontDefBytes = new TextEncoder().encode(newFontDefText);
+
+        // Pad to alignment
+        const padded = new Uint8Array(Math.ceil(newFontDefBytes.length / 16) * 16);
+        padded.set(newFontDefBytes);
+
+        updatedFiles[fontDefFileIdx] = {
+          ...updatedFiles[fontDefFileIdx],
+          data: padded,
+        };
+
+        console.log(`Font def updated: ${mergedFontDef.glyphs.length} glyphs (${arabicEntries.length} Arabic) on ${totalPages} pages`);
+      }
+    }
+
     // Repack
     const { dict: newDict, data: newData } = repackNLGArchive(archiveInfo, updatedFiles);
     const newArchiveInfo = parseNLGDict(newDict);
