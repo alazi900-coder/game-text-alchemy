@@ -71,6 +71,7 @@ export const TASHKEEL: TashkeelMark[] = [
 
 /**
  * Get all presentation form characters based on filter options.
+ * Also includes essential Arabic base characters and punctuation.
  */
 export function getArabicChars(options: {
   isolated?: boolean;
@@ -81,23 +82,45 @@ export function getArabicChars(options: {
   english?: boolean;
 }): { char: string; code: number; name: string }[] {
   const result: { char: string; code: number; name: string }[] = [];
+  const addedCodes = new Set<number>();
 
+  const addChar = (char: string, code: number, name: string) => {
+    if (!addedCodes.has(code)) {
+      addedCodes.add(code);
+      result.push({ char, code, name });
+    }
+  };
+
+  // Presentation forms
   for (const letter of ARABIC_LETTERS) {
-    if (options.isolated && letter.isolated) result.push({ char: letter.isolated, code: letter.isolated.codePointAt(0)!, name: letter.name + ' معزول' });
-    if (options.final && letter.final) result.push({ char: letter.final, code: letter.final.codePointAt(0)!, name: letter.name + ' نهاية' });
-    if (options.initial && letter.initial) result.push({ char: letter.initial, code: letter.initial.codePointAt(0)!, name: letter.name + ' بداية' });
-    if (options.medial && letter.medial) result.push({ char: letter.medial, code: letter.medial.codePointAt(0)!, name: letter.name + ' وسط' });
+    if (options.isolated && letter.isolated) addChar(letter.isolated, letter.isolated.codePointAt(0)!, letter.name + ' معزول');
+    if (options.final && letter.final) addChar(letter.final, letter.final.codePointAt(0)!, letter.name + ' نهاية');
+    if (options.initial && letter.initial) addChar(letter.initial, letter.initial.codePointAt(0)!, letter.name + ' بداية');
+    if (options.medial && letter.medial) addChar(letter.medial, letter.medial.codePointAt(0)!, letter.name + ' وسط');
+  }
+
+  // Always include essential Arabic base characters (some engines look up base range)
+  if (options.isolated || options.initial || options.medial || options.final) {
+    // Arabic punctuation and digits
+    addChar('\u060C', 0x060C, 'فاصلة عربية');     // ،
+    addChar('\u061B', 0x061B, 'فاصلة منقوطة');     // ؛
+    addChar('\u061F', 0x061F, 'علامة استفهام');     // ؟
+    addChar('\u0640', 0x0640, 'تطويل');             // ـ (kashida/tatweel)
+    // Arabic-Indic digits
+    for (let i = 0x0660; i <= 0x0669; i++) {
+      addChar(String.fromCharCode(i), i, `رقم عربي ${i - 0x0660}`);
+    }
   }
 
   if (options.tashkeel) {
     for (const t of TASHKEEL) {
-      result.push({ char: t.char, code: t.code, name: t.name });
+      addChar(t.char, t.code, t.name);
     }
   }
 
   if (options.english) {
     for (let i = 0x21; i <= 0x7E; i++) {
-      result.push({ char: String.fromCharCode(i), code: i, name: String.fromCharCode(i) });
+      addChar(String.fromCharCode(i), i, String.fromCharCode(i));
     }
   }
 
