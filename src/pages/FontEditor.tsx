@@ -43,6 +43,7 @@ import FontDefExporter from "@/components/font-editor/FontDefExporter";
 import GlyphBatchEditor from "@/components/font-editor/GlyphBatchEditor";
 import FontDiagnosticPanel from "@/components/font-editor/FontDiagnosticPanel";
 import FontQualityEnhancer from "@/components/font-editor/FontQualityEnhancer";
+import CompatibilityCheck from "@/components/font-editor/CompatibilityCheck";
 import JSZip from "jszip";
 
 /* ─── types ─── */
@@ -1149,6 +1150,16 @@ export default function FontEditor() {
 
             {/* ═══ BUILD TAB ═══ */}
             <TabsContent value="build" className="space-y-3">
+              {/* Compatibility Check */}
+              <CompatibilityCheck
+                fontData={fontData}
+                dictData={dictData}
+                archiveInfo={archiveInfo}
+                fontDefData={fontDefData}
+                generatedPages={generatedPages}
+                hasArchive={hasArchive}
+              />
+
               <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 <Card>
                   <CardHeader className="px-3 pt-3 pb-2">
