@@ -830,6 +830,13 @@ export default function FontEditor() {
                       </CardContent>
                     </Card>
                   )}
+
+                  <FontQualityEnhancer
+                    currentAtlas={atlasResult}
+                    fontFamily={arabicFontName}
+                    textureSize={TEX_SIZE}
+                    onEnhancedAtlas={(result) => handleAtlasGenerated(result, arabicFontName, lastWizardSettings!)}
+                  />
                 </div>
               </div>
             </TabsContent>
