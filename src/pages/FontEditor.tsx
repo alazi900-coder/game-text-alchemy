@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "@/hooks/use-toast";
 import {
-  ArrowRight, Download, Search, ZoomIn, ZoomOut, ScanSearch,
+  ArrowRight, Download, Search, ZoomIn, ZoomOut, ScanSearch, XCircle,
   Upload, Eye, FileJson, Type, Pencil, Trash2,
   Grid3x3, Layers, Loader2,
   Archive, FolderOpen, HardDrive, Package, ShieldCheck, AlertTriangle,
@@ -95,6 +95,13 @@ export default function FontEditor() {
     results: Array<{ pageLabel: string; hashBefore: number; hashAfter: number; match: boolean; nonZeroBefore: number; nonZeroAfter: number; pixelLoss: number; }>;
     totalPages: number; passedPages: number; newPages: number;
     dictSizeBefore: number; dictSizeAfter: number; dataSizeBefore: number; dataSizeAfter: number; duration: number;
+    report?: {
+      originalDDS: Array<{ index: number; offset: string; size: string; intact: boolean }>;
+      newDDS: Array<{ index: number; offset: string; size: string; hasDDS: boolean }>;
+      fontDefBefore: { offset: string; length: string; glyphs: number; pageCount: number } | null;
+      fontDefAfter: { offset: string; length: string; glyphs: number; arabicGlyphs: number; pageCount: number } | null;
+      blocked: boolean; blockReasons: string[];
+    };
   } | null>(null);
 
   const displayCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -495,113 +502,104 @@ export default function FontEditor() {
     const verifyFontDef = findFontDefInData(newData);
     const dur = performance.now() - t0;
 
+    // ═══ Build comparison report ═══
+    const hex = (n: number) => `0x${n.toString(16).toUpperCase().padStart(8, "0")}`;
+    const fmtSz = formatFileSize;
+
+    const reportOrigDDS = ddsPositions.map((pos, i) => {
+      const orig = fontData.subarray(pos, pos + 256);
+      const now = newData.subarray(pos, pos + 256);
+      let intact = orig.length === now.length;
+      for (let j = 0; j < orig.length && intact; j++) if (orig[j] !== now[j]) intact = false;
+      return { index: i, offset: hex(pos), size: fmtSz(ddsSpacing), intact };
+    });
+
+    const reportNewDDS = newDDSPages.map((_, i) => {
+      const pageStart = alignedPagesStart + i * ddsSpacing;
+      const hasDDS = newData[pageStart] === 0x44 && newData[pageStart + 1] === 0x44 && newData[pageStart + 2] === 0x53 && newData[pageStart + 3] === 0x20;
+      return { index: ddsPositions.length + i, offset: hex(pageStart), size: fmtSz(ddsSpacing), hasDDS };
+    });
+
+    const originalFontDefParsed = fontDefResult ? parseNLGFontDef(fontDefResult.text) : null;
+    const reportFontDefBefore = fontDefResult ? {
+      offset: hex(fontDefResult.offset),
+      length: fmtSz(fontDefResult.length),
+      glyphs: originalFontDefParsed?.glyphs.length ?? 0,
+      pageCount: originalFontDefParsed?.header.pageCount ?? 0,
+    } : null;
+
+    const verifiedParsed = verifyFontDef ? parseNLGFontDef(verifyFontDef.text) : null;
+    const reportFontDefAfter = verifyFontDef ? {
+      offset: hex(verifyFontDef.offset),
+      length: fmtSz(verifyFontDef.length),
+      glyphs: verifiedParsed?.glyphs.length ?? 0,
+      arabicGlyphs: verifiedParsed?.glyphs.filter(g => g.code >= 0x0600).length ?? 0,
+      pageCount: verifiedParsed?.header.pageCount ?? 0,
+    } : null;
+
     const results: typeof buildVerification extends { results: infer R } | null ? NonNullable<R> : never = [];
 
-    for (let i = 0; i < ddsPositions.length; i++) {
-      const orig = fontData.subarray(ddsPositions[i], ddsPositions[i] + 256);
-      const now = newData.subarray(ddsPositions[i], ddsPositions[i] + 256);
-      let match = orig.length === now.length;
-      for (let j = 0; j < orig.length && match; j++) {
-        if (orig[j] !== now[j]) match = false;
-      }
-      results.push({ pageLabel: `أصلية ${i}`, hashBefore: 1, hashAfter: match ? 1 : 0, match, nonZeroBefore: 1, nonZeroAfter: 1, pixelLoss: match ? 0 : 100 });
+    for (const rd of reportOrigDDS) {
+      results.push({ pageLabel: `أصلية ${rd.index}`, hashBefore: 1, hashAfter: rd.intact ? 1 : 0, match: rd.intact, nonZeroBefore: 1, nonZeroAfter: 1, pixelLoss: rd.intact ? 0 : 100 });
     }
-
-    for (let i = 0; i < newDDSPages.length; i++) {
-      const pageStart = alignedPagesStart + i * ddsSpacing;
-      const hasDDSHeader =
-        newData[pageStart] === 0x44 &&
-        newData[pageStart + 1] === 0x44 &&
-        newData[pageStart + 2] === 0x53 &&
-        newData[pageStart + 3] === 0x20;
-      results.push({ pageLabel: `عربية ${i}`, hashBefore: 0, hashAfter: hasDDSHeader ? 1 : 0, match: hasDDSHeader, nonZeroBefore: 0, nonZeroAfter: 1, pixelLoss: hasDDSHeader ? 0 : 100 });
+    for (const rn of reportNewDDS) {
+      results.push({ pageLabel: `عربية ${rn.index - ddsPositions.length}`, hashBefore: 0, hashAfter: rn.hasDDS ? 1 : 0, match: rn.hasDDS, nonZeroBefore: 0, nonZeroAfter: 1, pixelLoss: rn.hasDDS ? 0 : 100 });
     }
-
     if (!verifyFontDef) {
       results.push({ pageLabel: "FontDef", hashBefore: 0, hashAfter: 0, match: false, nonZeroBefore: 0, nonZeroAfter: 0, pixelLoss: 100 });
     }
 
     const passed = results.filter(r => r.match).length;
-    const failed = results.filter(r => !r.match);
 
     // ═══ STRICT PRE-DOWNLOAD VALIDATION ═══
     const errors: string[] = [];
-
-    // 1. FontDef must exist in output
     if (!verifyFontDef) {
       errors.push("تعريف الخط (FontDef) غير موجود في الملف الناتج");
-    } else {
-      const parsedVerify = parseNLGFontDef(verifyFontDef.text);
-      
-      // 2. Arabic glyphs must be present if we injected them
-      const arabicInOutput = parsedVerify.glyphs.filter(g => g.code >= 0x0600).length;
-      if (newDDSPages.length > 0 && arabicInOutput === 0) {
-        errors.push("لم يتم العثور على أي حرف عربي في تعريف الخط الناتج");
-      }
-
-      // 3. PageCount must match actual pages
+    } else if (verifiedParsed) {
+      const arabicInOutput = verifiedParsed.glyphs.filter(g => g.code >= 0x0600).length;
+      if (newDDSPages.length > 0 && arabicInOutput === 0) errors.push("لا حروف عربية في FontDef الناتج");
       const expectedPC = ddsPositions.length + newDDSPages.length;
-      if (parsedVerify.header.pageCount !== expectedPC) {
-        errors.push(`PageCount غير متطابق: التعريف يعلن ${parsedVerify.header.pageCount} لكن المتوقع ${expectedPC}`);
-      }
-
-      // 4. Latin glyphs must survive
-      const latinInOutput = parsedVerify.glyphs.filter(g => g.code < 0x0600).length;
-      if (latinInOutput === 0) {
-        errors.push("جميع الحروف اللاتينية الأصلية مفقودة — الخط تالف");
-      }
-
-      // 5. No page references beyond actual page count
-      const maxPageRef = Math.max(0, ...parsedVerify.glyphs.map(g => g.page));
-      if (maxPageRef >= expectedPC) {
-        errors.push(`حروف تشير لصفحة ${maxPageRef} لكن يوجد فقط ${expectedPC} صفحة`);
-      }
+      if (verifiedParsed.header.pageCount !== expectedPC) errors.push(`PageCount ${verifiedParsed.header.pageCount} ≠ المتوقع ${expectedPC}`);
+      if (verifiedParsed.glyphs.filter(g => g.code < 0x0600).length === 0) errors.push("الحروف اللاتينية مفقودة");
+      const maxRef = Math.max(0, ...verifiedParsed.glyphs.map(g => g.page));
+      if (maxRef >= expectedPC) errors.push(`حرف يشير لصفحة ${maxRef} غير موجودة`);
     }
+    if (reportOrigDDS.some(r => !r.intact)) errors.push("صفحات أصلية تالفة");
+    if (newData.length < fontData.length * 0.95) errors.push("حجم الناتج أصغر من الأصلي");
 
-    // 6. Original pages must be byte-identical
-    const corruptedOriginals = results.filter(r => r.pageLabel.startsWith("أصلية") && !r.match);
-    if (corruptedOriginals.length > 0) {
-      errors.push(`${corruptedOriginals.length} صفحة أصلية تالفة — البيانات الأصلية لم تُحفظ`);
-    }
+    const buildReport = {
+      originalDDS: reportOrigDDS,
+      newDDS: reportNewDDS,
+      fontDefBefore: reportFontDefBefore,
+      fontDefAfter: reportFontDefAfter,
+      blocked: errors.length > 0,
+      blockReasons: errors,
+    };
 
-    // 7. File size sanity — output must not be smaller than original
-    if (newData.length < fontData.length * 0.95) {
-      errors.push(`حجم الملف الناتج (${(newData.length / 1048576).toFixed(1)} MB) أصغر من الأصلي (${(daBefore / 1048576).toFixed(1)} MB) — بيانات مفقودة`);
-    }
-
-    // If ANY validation failed, BLOCK the download
     if (errors.length > 0) {
       setBuildVerification({
         show: true, results, totalPages: results.length, passedPages: passed,
         newPages: newDDSPages.length,
         dictSizeBefore: dsBefore, dictSizeAfter: newDict.length,
         dataSizeBefore: daBefore, dataSizeAfter: newData.length,
-        duration: dur,
+        duration: dur, report: buildReport,
       });
-      toast({
-        title: "⛔ تم إيقاف البناء — الملف تالف",
-        description: errors.join(" | "),
-        variant: "destructive",
-      });
-      console.error("Build blocked:", errors);
-      return; // DO NOT download
+      toast({ title: "⛔ تم إيقاف البناء", description: errors.join(" | "), variant: "destructive" });
+      return;
     }
 
-    // ═══ PASSED — safe to export ═══
+    // ═══ PASSED ═══
     setFontData(newData);
     if (verifyFontDef) {
       const parsed = parseNLGFontDef(verifyFontDef.text);
-      setFontDefData(parsed);
-      setFontDefOffset(verifyFontDef.offset);
-      setFontDefLength(verifyFontDef.length);
+      setFontDefData(parsed); setFontDefOffset(verifyFontDef.offset); setFontDefLength(verifyFontDef.length);
     }
 
     const decodedTextures: TextureInfo[] = [];
     for (const pos of verifyDDS) {
       try {
         const rgba = decodeDXT5(newData.slice(pos + DDS_HEADER_SIZE, pos + DDS_HEADER_SIZE + DXT5_MIP0_SIZE), TEX_SIZE, TEX_SIZE);
-        const canvas = document.createElement("canvas");
-        canvas.width = TEX_SIZE; canvas.height = TEX_SIZE;
+        const canvas = document.createElement("canvas"); canvas.width = TEX_SIZE; canvas.height = TEX_SIZE;
         const ctx = canvas.getContext("2d")!;
         const imgData = ctx.createImageData(TEX_SIZE, TEX_SIZE);
         imgData.data.set(rgba); ctx.putImageData(imgData, 0, 0);
@@ -615,10 +613,9 @@ export default function FontEditor() {
       newPages: newDDSPages.length,
       dictSizeBefore: dsBefore, dictSizeAfter: newDict.length,
       dataSizeBefore: daBefore, dataSizeAfter: newData.length,
-      duration: dur,
+      duration: dur, report: buildReport,
     });
 
-    // Download
     const zip = new JSZip();
     const base = dictFileName.replace(/_res\.dict$/i, "_res").replace(/\.dict$/i, "_res");
     zip.file(`${base}.dict`, newDict);
@@ -627,10 +624,9 @@ export default function FontEditor() {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob); a.download = `${base}_arabized.zip`; a.click();
 
-    const parsedFinal = verifyFontDef ? parseNLGFontDef(verifyFontDef.text) : null;
     toast({
       title: "✅ تم البناء — جميع الفحوصات ناجحة",
-      description: `${ddsPositions.length} أصلية + ${newDDSPages.length} عربية — ${parsedFinal?.glyphs.length ?? "?"} حرف (${parsedFinal?.glyphs.filter(g => g.code >= 0x0600).length ?? 0} عربي) — ${(newData.length / 1048576).toFixed(1)} MB`,
+      description: `${ddsPositions.length} أصلية + ${newDDSPages.length} عربية — ${verifiedParsed?.glyphs.length ?? "?"} حرف (${verifiedParsed?.glyphs.filter(g => g.code >= 0x0600).length ?? 0} عربي) — ${(newData.length / 1048576).toFixed(1)} MB`,
     });
   };
 
@@ -1180,38 +1176,132 @@ export default function FontEditor() {
     {/* Build verification dialog */}
     {buildVerification?.show && (
       <Dialog open={buildVerification.show} onOpenChange={open => { if (!open) setBuildVerification(p => p ? { ...p, show: false } : null); }}>
-        <DialogContent className="max-w-[95vw] sm:max-w-md max-h-[80vh] overflow-y-auto" dir="rtl">
+        <DialogContent className="max-w-[95vw] sm:max-w-lg max-h-[85vh] overflow-y-auto" dir="rtl">
           <DialogHeader>
-            <DialogTitle className="text-sm flex items-center gap-1.5"><ShieldCheck className="w-4 h-4 text-primary" /> تقرير التحقق</DialogTitle>
-            <DialogDescription className="text-[9px]">مقارنة بيانات البكسل بعد إعادة الحزم</DialogDescription>
+            <DialogTitle className="text-sm flex items-center gap-1.5">
+              {buildVerification.report?.blocked
+                ? <AlertTriangle className="w-4 h-4 text-destructive" />
+                : <ShieldCheck className="w-4 h-4 text-primary" />}
+              {buildVerification.report?.blocked ? "⛔ البناء محظور — تقرير المقارنة" : "✅ تقرير المقارنة — قبل / بعد"}
+            </DialogTitle>
+            <DialogDescription className="text-[9px]">مقارنة تفصيلية للبنية الثنائية</DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-3 gap-1.5">
-            <div className="p-1.5 rounded bg-muted/40 text-center"><p className="text-[8px] text-muted-foreground">الصفحات</p><p className="text-base font-bold">{buildVerification.totalPages}</p></div>
-            <div className={`p-1.5 rounded text-center ${buildVerification.passedPages === buildVerification.totalPages ? 'bg-green-500/10' : 'bg-yellow-500/10'}`}>
-              <p className="text-[8px] text-muted-foreground">سليمة</p>
-              <p className={`text-base font-bold ${buildVerification.passedPages === buildVerification.totalPages ? 'text-green-600' : 'text-yellow-600'}`}>{buildVerification.passedPages}/{buildVerification.totalPages}</p>
-            </div>
-            <div className="p-1.5 rounded bg-muted/40 text-center"><p className="text-[8px] text-muted-foreground">المدة</p><p className="text-xs font-mono font-bold">{(buildVerification.duration / 1000).toFixed(1)}s</p></div>
-          </div>
-          <div className="p-1.5 rounded bg-muted/30 text-[8px] space-y-0.5">
-            <div className="flex justify-between"><span className="text-muted-foreground">.dict</span><span className="font-mono">{formatFileSize(buildVerification.dictSizeBefore)} → {formatFileSize(buildVerification.dictSizeAfter)}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">.data</span><span className="font-mono">{formatFileSize(buildVerification.dataSizeBefore)} → {formatFileSize(buildVerification.dataSizeAfter)}</span></div>
-          </div>
-          <ScrollArea className="max-h-[200px]">
-            <div className="space-y-0.5">
-              {buildVerification.results.map((r, i) => (
-                <div key={i} className={`p-1.5 rounded border text-[8px] ${r.pixelLoss > 5 ? 'border-destructive/40 bg-destructive/5' : !r.match && r.hashBefore !== 0 ? 'border-yellow-500/40 bg-yellow-500/5' : 'border-border bg-card'}`}>
-                  <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-0.5 font-semibold">
-                      {r.pixelLoss > 5 ? <AlertTriangle className="w-2.5 h-2.5 text-destructive" /> : <CheckCircle2 className="w-2.5 h-2.5 text-green-500" />}
-                      {r.pageLabel}
-                    </span>
-                    <Badge variant="outline" className="text-[7px] h-3.5 px-1">{r.pixelLoss > 5 ? `فقد ${r.pixelLoss.toFixed(1)}%` : "✓"}</Badge>
-                  </div>
+
+          {/* Block reasons */}
+          {buildVerification.report?.blocked && buildVerification.report.blockReasons.length > 0 && (
+            <div className="p-2 rounded-lg bg-destructive/10 border border-destructive/30 space-y-1">
+              {buildVerification.report.blockReasons.map((r, i) => (
+                <div key={i} className="flex items-start gap-1.5 text-[9px] text-destructive">
+                  <XCircle className="w-3 h-3 shrink-0 mt-0.5" />
+                  <span>{r}</span>
                 </div>
               ))}
             </div>
-          </ScrollArea>
+          )}
+
+          {/* Summary stats */}
+          <div className="grid grid-cols-4 gap-1">
+            <div className="p-1.5 rounded bg-muted/40 text-center"><p className="text-[7px] text-muted-foreground">صفحات</p><p className="text-sm font-bold">{buildVerification.totalPages}</p></div>
+            <div className={`p-1.5 rounded text-center ${buildVerification.passedPages === buildVerification.totalPages ? 'bg-green-500/10' : 'bg-destructive/10'}`}>
+              <p className="text-[7px] text-muted-foreground">سليمة</p>
+              <p className={`text-sm font-bold ${buildVerification.passedPages === buildVerification.totalPages ? 'text-green-600' : 'text-destructive'}`}>{buildVerification.passedPages}/{buildVerification.totalPages}</p>
+            </div>
+            <div className="p-1.5 rounded bg-muted/40 text-center"><p className="text-[7px] text-muted-foreground">جديدة</p><p className="text-sm font-bold text-primary">{buildVerification.newPages}</p></div>
+            <div className="p-1.5 rounded bg-muted/40 text-center"><p className="text-[7px] text-muted-foreground">المدة</p><p className="text-[10px] font-mono font-bold">{(buildVerification.duration / 1000).toFixed(1)}s</p></div>
+          </div>
+
+          {/* File sizes */}
+          <div className="p-2 rounded bg-muted/30 text-[8px] space-y-0.5">
+            <div className="flex justify-between"><span className="text-muted-foreground">.dict</span><span className="font-mono">{formatFileSize(buildVerification.dictSizeBefore)} → {formatFileSize(buildVerification.dictSizeAfter)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">.data</span><span className="font-mono">{formatFileSize(buildVerification.dataSizeBefore)} → {formatFileSize(buildVerification.dataSizeAfter)}</span></div>
+          </div>
+
+          {/* FontDef comparison */}
+          {buildVerification.report && (
+            <div className="space-y-1.5">
+              <p className="text-[9px] font-bold text-foreground">📋 تعريف الخط (FontDef)</p>
+              <div className="grid grid-cols-2 gap-1.5">
+                <div className="p-2 rounded border border-border bg-card space-y-0.5">
+                  <p className="text-[8px] font-semibold text-muted-foreground">قبل</p>
+                  {buildVerification.report.fontDefBefore ? (
+                    <>
+                      <p className="text-[8px] font-mono">Offset: {buildVerification.report.fontDefBefore.offset}</p>
+                      <p className="text-[8px] font-mono">Size: {buildVerification.report.fontDefBefore.length}</p>
+                      <p className="text-[8px]">حروف: {buildVerification.report.fontDefBefore.glyphs}</p>
+                      <p className="text-[8px]">PageCount: {buildVerification.report.fontDefBefore.pageCount}</p>
+                    </>
+                  ) : <p className="text-[8px] text-muted-foreground">غير موجود</p>}
+                </div>
+                <div className={`p-2 rounded border space-y-0.5 ${buildVerification.report.fontDefAfter ? 'border-primary/30 bg-primary/5' : 'border-destructive/30 bg-destructive/5'}`}>
+                  <p className="text-[8px] font-semibold text-muted-foreground">بعد</p>
+                  {buildVerification.report.fontDefAfter ? (
+                    <>
+                      <p className="text-[8px] font-mono">Offset: {buildVerification.report.fontDefAfter.offset}</p>
+                      <p className="text-[8px] font-mono">Size: {buildVerification.report.fontDefAfter.length}</p>
+                      <p className="text-[8px]">حروف: {buildVerification.report.fontDefAfter.glyphs} <Badge variant="secondary" className="text-[6px] h-3 px-0.5">{buildVerification.report.fontDefAfter.arabicGlyphs} عربي</Badge></p>
+                      <p className="text-[8px]">PageCount: {buildVerification.report.fontDefAfter.pageCount}</p>
+                    </>
+                  ) : <p className="text-[8px] text-destructive">⚠️ غير موجود!</p>}
+                </div>
+              </div>
+
+              {/* DDS Pages table */}
+              <p className="text-[9px] font-bold text-foreground mt-2">📄 صفحات DDS</p>
+              <div className="rounded border border-border overflow-hidden">
+                <table className="w-full text-[8px]">
+                  <thead>
+                    <tr className="bg-muted/50">
+                      <th className="text-right px-1.5 py-1 font-medium">#</th>
+                      <th className="text-right px-1.5 py-1 font-medium">النوع</th>
+                      <th className="text-right px-1.5 py-1 font-medium">Offset</th>
+                      <th className="text-right px-1.5 py-1 font-medium">الحجم</th>
+                      <th className="text-center px-1.5 py-1 font-medium">الحالة</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {buildVerification.report.originalDDS.map(r => (
+                      <tr key={`o${r.index}`} className={r.intact ? "bg-card" : "bg-destructive/5"}>
+                        <td className="px-1.5 py-0.5 font-mono">{r.index}</td>
+                        <td className="px-1.5 py-0.5">أصلية</td>
+                        <td className="px-1.5 py-0.5 font-mono text-muted-foreground">{r.offset}</td>
+                        <td className="px-1.5 py-0.5 font-mono">{r.size}</td>
+                        <td className="px-1.5 py-0.5 text-center">{r.intact ? <CheckCircle2 className="w-3 h-3 text-green-500 inline" /> : <XCircle className="w-3 h-3 text-destructive inline" />}</td>
+                      </tr>
+                    ))}
+                    {buildVerification.report.newDDS.map(r => (
+                      <tr key={`n${r.index}`} className={r.hasDDS ? "bg-primary/5" : "bg-destructive/5"}>
+                        <td className="px-1.5 py-0.5 font-mono">{r.index}</td>
+                        <td className="px-1.5 py-0.5 text-primary font-semibold">عربية</td>
+                        <td className="px-1.5 py-0.5 font-mono text-muted-foreground">{r.offset}</td>
+                        <td className="px-1.5 py-0.5 font-mono">{r.size}</td>
+                        <td className="px-1.5 py-0.5 text-center">{r.hasDDS ? <CheckCircle2 className="w-3 h-3 text-green-500 inline" /> : <XCircle className="w-3 h-3 text-destructive inline" />}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Legacy results fallback */}
+          {!buildVerification.report && (
+            <ScrollArea className="max-h-[200px]">
+              <div className="space-y-0.5">
+                {buildVerification.results.map((r, i) => (
+                  <div key={i} className={`p-1.5 rounded border text-[8px] ${r.pixelLoss > 5 ? 'border-destructive/40 bg-destructive/5' : 'border-border bg-card'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-0.5 font-semibold">
+                        {r.pixelLoss > 5 ? <AlertTriangle className="w-2.5 h-2.5 text-destructive" /> : <CheckCircle2 className="w-2.5 h-2.5 text-green-500" />}
+                        {r.pageLabel}
+                      </span>
+                      <Badge variant="outline" className="text-[7px] h-3.5 px-1">{r.pixelLoss > 5 ? `فقد ${r.pixelLoss.toFixed(1)}%` : "✓"}</Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          )}
+
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setBuildVerification(p => p ? { ...p, show: false } : null)}>إغلاق</Button>
           </DialogFooter>
