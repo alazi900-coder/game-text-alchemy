@@ -44,6 +44,7 @@ import GlyphBatchEditor from "@/components/font-editor/GlyphBatchEditor";
 import FontDiagnosticPanel from "@/components/font-editor/FontDiagnosticPanel";
 import FontQualityEnhancer from "@/components/font-editor/FontQualityEnhancer";
 import CompatibilityCheck from "@/components/font-editor/CompatibilityCheck";
+import SafePatchPanel, { type SafePatchResult } from "@/components/font-editor/SafePatchPanel";
 import JSZip from "jszip";
 
 /* ─── types ─── */
