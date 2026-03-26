@@ -628,7 +628,6 @@ export default function FontEditor() {
       title: "✅ تم البناء — جميع الفحوصات ناجحة",
       description: `${ddsPositions.length} أصلية + ${newDDSPages.length} عربية — ${verifiedParsed?.glyphs.length ?? "?"} حرف (${verifiedParsed?.glyphs.filter(g => g.code >= 0x0600).length ?? 0} عربي) — ${(newData.length / 1048576).toFixed(1)} MB`,
     });
-    });
   };
 
   const handleExportMetrics = () => {
