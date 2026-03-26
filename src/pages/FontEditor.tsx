@@ -522,7 +522,72 @@ export default function FontEditor() {
     }
 
     const passed = results.filter(r => r.match).length;
+    const failed = results.filter(r => !r.match);
 
+    // ═══ STRICT PRE-DOWNLOAD VALIDATION ═══
+    const errors: string[] = [];
+
+    // 1. FontDef must exist in output
+    if (!verifyFontDef) {
+      errors.push("تعريف الخط (FontDef) غير موجود في الملف الناتج");
+    } else {
+      const parsedVerify = parseNLGFontDef(verifyFontDef.text);
+      
+      // 2. Arabic glyphs must be present if we injected them
+      const arabicInOutput = parsedVerify.glyphs.filter(g => g.code >= 0x0600).length;
+      if (newDDSPages.length > 0 && arabicInOutput === 0) {
+        errors.push("لم يتم العثور على أي حرف عربي في تعريف الخط الناتج");
+      }
+
+      // 3. PageCount must match actual pages
+      const expectedPC = ddsPositions.length + newDDSPages.length;
+      if (parsedVerify.header.pageCount !== expectedPC) {
+        errors.push(`PageCount غير متطابق: التعريف يعلن ${parsedVerify.header.pageCount} لكن المتوقع ${expectedPC}`);
+      }
+
+      // 4. Latin glyphs must survive
+      const latinInOutput = parsedVerify.glyphs.filter(g => g.code < 0x0600).length;
+      if (latinInOutput === 0) {
+        errors.push("جميع الحروف اللاتينية الأصلية مفقودة — الخط تالف");
+      }
+
+      // 5. No page references beyond actual page count
+      const maxPageRef = Math.max(0, ...parsedVerify.glyphs.map(g => g.page));
+      if (maxPageRef >= expectedPC) {
+        errors.push(`حروف تشير لصفحة ${maxPageRef} لكن يوجد فقط ${expectedPC} صفحة`);
+      }
+    }
+
+    // 6. Original pages must be byte-identical
+    const corruptedOriginals = results.filter(r => r.pageLabel.startsWith("أصلية") && !r.match);
+    if (corruptedOriginals.length > 0) {
+      errors.push(`${corruptedOriginals.length} صفحة أصلية تالفة — البيانات الأصلية لم تُحفظ`);
+    }
+
+    // 7. File size sanity — output must not be smaller than original
+    if (newData.length < fontData.length * 0.95) {
+      errors.push(`حجم الملف الناتج (${(newData.length / 1048576).toFixed(1)} MB) أصغر من الأصلي (${(daBefore / 1048576).toFixed(1)} MB) — بيانات مفقودة`);
+    }
+
+    // If ANY validation failed, BLOCK the download
+    if (errors.length > 0) {
+      setBuildVerification({
+        show: true, results, totalPages: results.length, passedPages: passed,
+        newPages: newDDSPages.length,
+        dictSizeBefore: dsBefore, dictSizeAfter: newDict.length,
+        dataSizeBefore: daBefore, dataSizeAfter: newData.length,
+        duration: dur,
+      });
+      toast({
+        title: "⛔ تم إيقاف البناء — الملف تالف",
+        description: errors.join(" | "),
+        variant: "destructive",
+      });
+      console.error("Build blocked:", errors);
+      return; // DO NOT download
+    }
+
+    // ═══ PASSED — safe to export ═══
     setFontData(newData);
     if (verifyFontDef) {
       const parsed = parseNLGFontDef(verifyFontDef.text);
@@ -536,47 +601,36 @@ export default function FontEditor() {
       try {
         const rgba = decodeDXT5(newData.slice(pos + DDS_HEADER_SIZE, pos + DDS_HEADER_SIZE + DXT5_MIP0_SIZE), TEX_SIZE, TEX_SIZE);
         const canvas = document.createElement("canvas");
-        canvas.width = TEX_SIZE;
-        canvas.height = TEX_SIZE;
+        canvas.width = TEX_SIZE; canvas.height = TEX_SIZE;
         const ctx = canvas.getContext("2d")!;
         const imgData = ctx.createImageData(TEX_SIZE, TEX_SIZE);
-        imgData.data.set(rgba);
-        ctx.putImageData(imgData, 0, 0);
+        imgData.data.set(rgba); ctx.putImageData(imgData, 0, 0);
         decodedTextures.push({ canvas, ctx, imgData, ddsOffset: pos, isGenerated: pos >= alignedPagesStart && pos < newFontDefOffset });
-      } catch {
-        // ignore corrupted page fragments
-      }
+      } catch { /* skip */ }
     }
-
-    setTextures(decodedTextures);
-    setCurrentPage(0);
+    setTextures(decodedTextures); setCurrentPage(0);
 
     setBuildVerification({
-      show: true,
-      results,
-      totalPages: results.length,
-      passedPages: passed,
+      show: true, results, totalPages: results.length, passedPages: passed,
       newPages: newDDSPages.length,
-      dictSizeBefore: dsBefore,
-      dictSizeAfter: newDict.length,
-      dataSizeBefore: daBefore,
-      dataSizeAfter: newData.length,
+      dictSizeBefore: dsBefore, dictSizeAfter: newDict.length,
+      dataSizeBefore: daBefore, dataSizeAfter: newData.length,
       duration: dur,
     });
 
+    // Download
     const zip = new JSZip();
     const base = dictFileName.replace(/_res\.dict$/i, "_res").replace(/\.dict$/i, "_res");
     zip.file(`${base}.dict`, newDict);
     zip.file(`${base}.data`, newData);
     const blob = await zip.generateAsync({ type: "blob" });
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `${base}_arabized.zip`;
-    a.click();
+    a.href = URL.createObjectURL(blob); a.download = `${base}_arabized.zip`; a.click();
 
+    const parsedFinal = verifyFontDef ? parseNLGFontDef(verifyFontDef.text) : null;
     toast({
-      title: "✅ تم البناء",
-      description: `${ddsPositions.length} أصلية + ${newDDSPages.length} عربية — ${(newData.length / 1048576).toFixed(1)} MB`,
+      title: "✅ تم البناء — جميع الفحوصات ناجحة",
+      description: `${ddsPositions.length} أصلية + ${newDDSPages.length} عربية — ${parsedFinal?.glyphs.length ?? "?"} حرف (${parsedFinal?.glyphs.filter(g => g.code >= 0x0600).length ?? 0} عربي) — ${(newData.length / 1048576).toFixed(1)} MB`,
     });
   };
 
