@@ -489,6 +489,7 @@ export default function FontEditor() {
     // 2) shift offsets for entries that were originally after old FontDef tail
     let newDict = dictData ?? new Uint8Array(0);
     let patchedFontDefEntry = false;
+    let fontDefEntryCandidates = 0;
     let shiftedEntriesCount = 0;
     let entriesAfterOldSuffix = 0;
     if (dictData && archiveInfo.entries.length > 0 && fontDefResult) {
@@ -513,6 +514,8 @@ export default function FontEditor() {
           oldOffset <= originalFontDefOffset &&
           oldOffset + declaredSpan >= oldFontDefEnd
         );
+
+        if (isFontDefEntry) fontDefEntryCandidates++;
 
         if (!patchedFontDefEntry && isFontDefEntry) {
           view.setUint32(entryOffset, newFontDefOffset, true);
@@ -600,7 +603,7 @@ export default function FontEditor() {
     }
     if (reportOrigDDS.some(r => !r.intact)) errors.push("صفحات أصلية تالفة");
     if (newData.length < fontData.length * 0.95) errors.push("حجم الناتج أصغر من الأصلي");
-    if (dictData && archiveInfo.entries.length > 0 && fontDefResult && !patchedFontDefEntry) {
+    if (dictData && archiveInfo.entries.length > 0 && fontDefResult && fontDefEntryCandidates > 0 && !patchedFontDefEntry) {
       errors.push("تعذر تحديث مرجع FontDef داخل .dict");
     }
     if (suffixShiftDelta !== 0 && entriesAfterOldSuffix > 0 && shiftedEntriesCount === 0) {
