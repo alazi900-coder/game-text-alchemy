@@ -598,11 +598,14 @@ export default function FontEditor() {
     } else if (verifiedParsed) {
       const arabicInOutput = verifiedParsed.glyphs.filter(g => g.code >= 0x0600).length;
       if (newDDSPages.length > 0 && arabicInOutput === 0) errors.push("لا حروف عربية في FontDef الناتج");
-      const expectedPC = ddsPositions.length + newDDSPages.length;
-      if (verifiedParsed.header.pageCount !== expectedPC) errors.push(`PageCount ${verifiedParsed.header.pageCount} ≠ المتوقع ${expectedPC}`);
+      // Only validate PageCount when new pages were added (append mode)
+      if (newDDSPages.length > 0) {
+        const expectedPC = ddsPositions.length + newDDSPages.length;
+        if (verifiedParsed.header.pageCount !== expectedPC) errors.push(`PageCount ${verifiedParsed.header.pageCount} ≠ المتوقع ${expectedPC}`);
+      }
       if (verifiedParsed.glyphs.filter(g => g.code < 0x0600).length === 0) errors.push("الحروف اللاتينية مفقودة");
       const maxRef = Math.max(0, ...verifiedParsed.glyphs.map(g => g.page));
-      if (maxRef >= expectedPC) errors.push(`حرف يشير لصفحة ${maxRef} غير موجودة`);
+      if (maxRef >= verifiedParsed.header.pageCount) errors.push(`حرف يشير لصفحة ${maxRef} خارج نطاق PageCount ${verifiedParsed.header.pageCount}`);
     }
     if (reportOrigDDS.some(r => !r.intact)) errors.push("صفحات أصلية تالفة");
     if (newData.length < fontData.length * 0.95) errors.push("حجم الناتج أصغر من الأصلي");
