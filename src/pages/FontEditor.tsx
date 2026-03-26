@@ -627,6 +627,23 @@ export default function FontEditor() {
 
                     {/* Side panel with tools */}
                     <div className="space-y-3">
+                      <FontDiagnosticPanel
+                        fontDef={fontDefData}
+                        textures={textureCanvases}
+                        onBatchUpdate={(updates) => {
+                          setFontDefData(prev => {
+                            if (!prev) return prev;
+                            const newGlyphs = [...prev.glyphs];
+                            for (const u of updates) {
+                              newGlyphs[u.index] = { ...newGlyphs[u.index], ...u.changes };
+                            }
+                            const updated = { ...prev, glyphs: newGlyphs, rawText: '' };
+                            setFontDefHistory(h => [...h.slice(0, historyIndex + 1), updated]);
+                            setHistoryIndex(i => i + 1);
+                            return updated;
+                          });
+                        }}
+                      />
                       <GlyphMetricsStats fontDef={fontDefData} />
                       <GlyphBatchEditor fontDef={fontDefData} onBatchUpdate={(updates) => {
                         setFontDefData(prev => {
