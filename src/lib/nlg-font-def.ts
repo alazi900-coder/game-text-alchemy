@@ -186,8 +186,8 @@ export function findFontDefInData(data: Uint8Array): { text: string; offset: num
   // Try without leading newline
   for (let i = searchStart; i < data.length - 10; i++) {
     if (data[i] === 0x46 && data[i + 1] === 0x6F && data[i + 2] === 0x6E &&
-        data[i + 3] === 0x6E && data[i + 4] === 0x74 && data[i + 5] === 0x20 &&
-        data[i + 6] === 0x22) {
+        data[i + 3] === 0x74 && data[i + 4] === 0x20 &&
+        data[i + 5] === 0x22) {
       let end = i;
       while (end < data.length && data[end] !== 0x00) end++;
       const text = new TextDecoder('ascii').decode(data.slice(i, end));
