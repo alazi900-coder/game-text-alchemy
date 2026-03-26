@@ -70,8 +70,11 @@ export default function FontEditor() {
   const [hasArchive, setHasArchive] = useState(false);
 
   const [fontDefData, setFontDefData] = useState<NLGFontDef | null>(null);
+  const [originalFontDefData, setOriginalFontDefData] = useState<NLGFontDef | null>(null);
   const [fontDefOffset, setFontDefOffset] = useState(0);
   const [fontDefLength, setFontDefLength] = useState(0);
+  const [fontDefHistory, setFontDefHistory] = useState<NLGFontDef[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
   const [atlasResult, setAtlasResult] = useState<AtlasResult | null>(null);
   const [arabicFontName, setArabicFontName] = useState("Tajawal");
