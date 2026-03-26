@@ -404,6 +404,21 @@ export default function FontEditor() {
     const ddsSpacing = ddsPositions.length > 1 ? ddsPositions[1] - ddsPositions[0] : DDS_FULL_SIZE_WITH_MIPS;
     const generatedTextures = textures.filter(t => t.isGenerated);
 
+    // Re-encode existing (potentially modified) texture pages back into fontData
+    // This handles in-place Arabic rendering on existing pages
+    for (let i = 0; i < ddsPositions.length && i < textures.length; i++) {
+      const tex = textures[i];
+      if (!tex || tex.isGenerated) continue;
+      const pos = ddsPositions[i];
+      if (pos < 0) continue;
+      const rgba = new Uint8Array(tex.ctx.getImageData(0, 0, TEX_SIZE, TEX_SIZE).data);
+      const dxt5 = encodeDXT5(rgba, TEX_SIZE, TEX_SIZE);
+      const off = pos + DDS_HEADER_SIZE;
+      for (let j = 0; j < dxt5.length && j < DXT5_MIP0_SIZE && off + j < fontData.length; j++) {
+        fontData[off + j] = dxt5[j];
+      }
+    }
+
     const newDDSPages: Uint8Array[] = [];
     for (const tex of generatedTextures) {
       const rgba = new Uint8Array(tex.ctx.getImageData(0, 0, TEX_SIZE, TEX_SIZE).data);
