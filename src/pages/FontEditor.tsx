@@ -404,6 +404,21 @@ export default function FontEditor() {
     const ddsSpacing = ddsPositions.length > 1 ? ddsPositions[1] - ddsPositions[0] : DDS_FULL_SIZE_WITH_MIPS;
     const generatedTextures = textures.filter(t => t.isGenerated);
 
+    // Re-encode existing (potentially modified) texture pages back into fontData
+    // This handles in-place Arabic rendering on existing pages
+    for (let i = 0; i < ddsPositions.length && i < textures.length; i++) {
+      const tex = textures[i];
+      if (!tex || tex.isGenerated) continue;
+      const pos = ddsPositions[i];
+      if (pos < 0) continue;
+      const rgba = new Uint8Array(tex.ctx.getImageData(0, 0, TEX_SIZE, TEX_SIZE).data);
+      const dxt5 = encodeDXT5(rgba, TEX_SIZE, TEX_SIZE);
+      const off = pos + DDS_HEADER_SIZE;
+      for (let j = 0; j < dxt5.length && j < DXT5_MIP0_SIZE && off + j < fontData.length; j++) {
+        fontData[off + j] = dxt5[j];
+      }
+    }
+
     const newDDSPages: Uint8Array[] = [];
     for (const tex of generatedTextures) {
       const rgba = new Uint8Array(tex.ctx.getImageData(0, 0, TEX_SIZE, TEX_SIZE).data);
@@ -876,28 +891,42 @@ export default function FontEditor() {
                         fontDef={fontDefData}
                         textures={textureCanvases}
                         onFullRepair={({ updatedFontDef, atlasResult: newAtlas, fontFamily }) => {
-                          // Update font def
                           setFontDefData(updatedFontDef);
                           setFontDefHistory(h => [...h.slice(0, historyIndex + 1), updatedFontDef]);
                           setHistoryIndex(i => i + 1);
                           
-                          // Add atlas pages as generated textures
                           if (newAtlas) {
                             setAtlasResult(newAtlas);
                             setArabicFontName(fontFamily);
-                            const newTextures = [...textures.filter(t => !t.isGenerated)];
-                            const newGlyphs = [...glyphs.filter(g => { const t = textures[g.page]; return t && !t.isGenerated; })];
-                            const startPage = newTextures.length;
-                            for (const page of newAtlas.pages) {
-                              const imgData = page.ctx.getImageData(0, 0, TEX_SIZE, TEX_SIZE);
-                              newTextures.push({ canvas: page.canvas, ctx: page.ctx, imgData, ddsOffset: -1, isGenerated: true });
+
+                            if (newAtlas.pages.length > 0) {
+                              // Append mode: add new generated texture pages
+                              const newTextures = [...textures.filter(t => !t.isGenerated)];
+                              const newGlyphs = [...glyphs.filter(g => { const t = textures[g.page]; return t && !t.isGenerated; })];
+                              const startPage = newTextures.length;
+                              for (const page of newAtlas.pages) {
+                                const imgData = page.ctx.getImageData(0, 0, TEX_SIZE, TEX_SIZE);
+                                newTextures.push({ canvas: page.canvas, ctx: page.ctx, imgData, ddsOffset: -1, isGenerated: true });
+                              }
+                              for (const gm of newAtlas.glyphs) {
+                                if (gm.width === 0) continue;
+                                newGlyphs.push({ char: gm.char, code: gm.code, x: gm.atlasX, y: gm.atlasY, w: gm.width, h: gm.height, page: startPage + gm.page, advance: gm.advance });
+                              }
+                              setTextures(newTextures);
+                              setGlyphs(newGlyphs);
+                            } else {
+                              // In-place mode: glyphs rendered on existing textures
+                              const refreshedTextures = textures.map(t => {
+                                const ctx = t.canvas.getContext("2d")!;
+                                return { ...t, imgData: ctx.getImageData(0, 0, TEX_SIZE, TEX_SIZE) };
+                              });
+                              setTextures(refreshedTextures);
+                              const existingGlyphs = glyphs.filter(g => g.code < 0x0600);
+                              const arabicGlyphs = newAtlas.glyphs
+                                .filter(gm => gm.width > 0)
+                                .map(gm => ({ char: gm.char, code: gm.code, x: gm.atlasX, y: gm.atlasY, w: gm.width, h: gm.height, page: gm.page, advance: gm.advance }));
+                              setGlyphs([...existingGlyphs, ...arabicGlyphs]);
                             }
-                            for (const gm of newAtlas.glyphs) {
-                              if (gm.width === 0) continue;
-                              newGlyphs.push({ char: gm.char, code: gm.code, x: gm.atlasX, y: gm.atlasY, w: gm.width, h: gm.height, page: startPage + gm.page, advance: gm.advance });
-                            }
-                            setTextures(newTextures);
-                            setGlyphs(newGlyphs);
                           }
                         }}
                         onBatchUpdate={(updates) => {
