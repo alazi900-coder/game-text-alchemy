@@ -455,7 +455,7 @@ export default function FontEditor() {
   const handleExportArchiveFile = (file: NLGExtractedFile) => {
     const ext = detectFileType(file.data) === "DDS" ? ".dds" : detectFileType(file.data) === "text" ? ".txt" : ".bin";
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([file.data]));
+    a.href = URL.createObjectURL(new Blob([new Uint8Array(file.data)]));
     a.download = `file${String(file.index).padStart(3, "0")}${ext}`; a.click();
   };
 
