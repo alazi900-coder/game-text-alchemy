@@ -477,23 +477,57 @@ export default function FontEditor() {
       cursor += 1;
     }
 
+    const newSuffixStart = cursor;
     newData.set(originalSuffix, cursor);
 
-    // Minimal safe dict patch: only update the existing fontDef entry if an exact offset match exists
-    let newDict = dictData ?? new Uint8Array(0);
-    if (dictData && archiveInfo.entries.length > 0 && fontDefResult) {
-      const fontEntryIdx = archiveInfo.entries.findIndex(e => e.offset === fontDefResult.offset);
-      if (fontEntryIdx >= 0) {
-        newDict = new Uint8Array(dictData);
-        const view = new DataView(newDict.buffer, newDict.byteOffset, newDict.byteLength);
-        const fileCount = view.getUint32(0x8, true);
-        const tableStart = 0x2C + fileCount;
-        const entryOffset = tableStart + fontEntryIdx * 16;
+    // Any bytes after old FontDef were shifted in the rebuilt buffer.
+    // Keep .dict offsets in sync to avoid broken archive pointers in-game.
+    const suffixShiftDelta = newSuffixStart - originalSuffixStart;
 
-        if (entryOffset + 12 < newDict.length) {
+    // Safe dict patch:
+    // 1) update FontDef entry to new offset/size
+    // 2) shift offsets for entries that were originally after old FontDef tail
+    let newDict = dictData ?? new Uint8Array(0);
+    let patchedFontDefEntry = false;
+    let shiftedEntriesCount = 0;
+    let entriesAfterOldSuffix = 0;
+    if (dictData && archiveInfo.entries.length > 0 && fontDefResult) {
+      newDict = new Uint8Array(dictData);
+      const view = new DataView(newDict.buffer, newDict.byteOffset, newDict.byteLength);
+      const fileCount = view.getUint32(0x8, true);
+      const tableStart = 0x2C + fileCount;
+      const oldFontDefEnd = originalFontDefOffset + originalFontDefLength;
+
+      for (let i = 0; i < fileCount; i++) {
+        const entryOffset = tableStart + i * 16;
+        if (entryOffset + 16 > newDict.length) break;
+
+        const oldOffset = view.getUint32(entryOffset, true);
+        const decompLen = view.getUint32(entryOffset + 4, true);
+        const compLen = view.getUint32(entryOffset + 8, true);
+        const declaredSpan = Math.max(decompLen, compLen);
+
+        if (oldOffset >= originalSuffixStart) entriesAfterOldSuffix++;
+
+        const isFontDefEntry = oldOffset === fontDefResult.offset || (
+          oldOffset <= originalFontDefOffset &&
+          oldOffset + declaredSpan >= oldFontDefEnd
+        );
+
+        if (!patchedFontDefEntry && isFontDefEntry) {
           view.setUint32(entryOffset, newFontDefOffset, true);
           view.setUint32(entryOffset + 4, fontDefBytes.length, true);
           view.setUint32(entryOffset + 8, fontDefBytes.length, true);
+          patchedFontDefEntry = true;
+          continue;
+        }
+
+        if (suffixShiftDelta !== 0 && oldOffset >= originalSuffixStart) {
+          const shiftedOffset = oldOffset + suffixShiftDelta;
+          if (shiftedOffset >= 0 && shiftedOffset <= 0xFFFFFFFF) {
+            view.setUint32(entryOffset, shiftedOffset >>> 0, true);
+            shiftedEntriesCount++;
+          }
         }
       }
     }
@@ -566,6 +600,29 @@ export default function FontEditor() {
     }
     if (reportOrigDDS.some(r => !r.intact)) errors.push("صفحات أصلية تالفة");
     if (newData.length < fontData.length * 0.95) errors.push("حجم الناتج أصغر من الأصلي");
+    if (dictData && archiveInfo.entries.length > 0 && fontDefResult && !patchedFontDefEntry) {
+      errors.push("تعذر تحديث مرجع FontDef داخل .dict");
+    }
+    if (suffixShiftDelta !== 0 && entriesAfterOldSuffix > 0 && shiftedEntriesCount === 0) {
+      errors.push("فشل تحديث offsets للبيانات المزاحة داخل .dict");
+    }
+    if (dictData && archiveInfo.entries.length > 0) {
+      const view = new DataView(newDict.buffer, newDict.byteOffset, newDict.byteLength);
+      const fileCount = view.getUint32(0x8, true);
+      const tableStart = 0x2C + fileCount;
+      for (let i = 0; i < fileCount; i++) {
+        const entryOffset = tableStart + i * 16;
+        if (entryOffset + 16 > newDict.length) break;
+        const dataOffset = view.getUint32(entryOffset, true);
+        const decompLen = view.getUint32(entryOffset + 4, true);
+        const compLen = view.getUint32(entryOffset + 8, true);
+        const readLength = archiveInfo.isCompressed && compLen > 0 ? compLen : decompLen;
+        if (dataOffset + readLength > newData.length) {
+          errors.push(`مرجع .dict خارج حدود .data (entry ${i})`);
+          break;
+        }
+      }
+    }
 
     const buildReport = {
       originalDDS: reportOrigDDS,
