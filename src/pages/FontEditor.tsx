@@ -1176,38 +1176,132 @@ export default function FontEditor() {
     {/* Build verification dialog */}
     {buildVerification?.show && (
       <Dialog open={buildVerification.show} onOpenChange={open => { if (!open) setBuildVerification(p => p ? { ...p, show: false } : null); }}>
-        <DialogContent className="max-w-[95vw] sm:max-w-md max-h-[80vh] overflow-y-auto" dir="rtl">
+        <DialogContent className="max-w-[95vw] sm:max-w-lg max-h-[85vh] overflow-y-auto" dir="rtl">
           <DialogHeader>
-            <DialogTitle className="text-sm flex items-center gap-1.5"><ShieldCheck className="w-4 h-4 text-primary" /> تقرير التحقق</DialogTitle>
-            <DialogDescription className="text-[9px]">مقارنة بيانات البكسل بعد إعادة الحزم</DialogDescription>
+            <DialogTitle className="text-sm flex items-center gap-1.5">
+              {buildVerification.report?.blocked
+                ? <AlertTriangle className="w-4 h-4 text-destructive" />
+                : <ShieldCheck className="w-4 h-4 text-primary" />}
+              {buildVerification.report?.blocked ? "⛔ البناء محظور — تقرير المقارنة" : "✅ تقرير المقارنة — قبل / بعد"}
+            </DialogTitle>
+            <DialogDescription className="text-[9px]">مقارنة تفصيلية للبنية الثنائية</DialogDescription>
           </DialogHeader>
-          <div className="grid grid-cols-3 gap-1.5">
-            <div className="p-1.5 rounded bg-muted/40 text-center"><p className="text-[8px] text-muted-foreground">الصفحات</p><p className="text-base font-bold">{buildVerification.totalPages}</p></div>
-            <div className={`p-1.5 rounded text-center ${buildVerification.passedPages === buildVerification.totalPages ? 'bg-green-500/10' : 'bg-yellow-500/10'}`}>
-              <p className="text-[8px] text-muted-foreground">سليمة</p>
-              <p className={`text-base font-bold ${buildVerification.passedPages === buildVerification.totalPages ? 'text-green-600' : 'text-yellow-600'}`}>{buildVerification.passedPages}/{buildVerification.totalPages}</p>
-            </div>
-            <div className="p-1.5 rounded bg-muted/40 text-center"><p className="text-[8px] text-muted-foreground">المدة</p><p className="text-xs font-mono font-bold">{(buildVerification.duration / 1000).toFixed(1)}s</p></div>
-          </div>
-          <div className="p-1.5 rounded bg-muted/30 text-[8px] space-y-0.5">
-            <div className="flex justify-between"><span className="text-muted-foreground">.dict</span><span className="font-mono">{formatFileSize(buildVerification.dictSizeBefore)} → {formatFileSize(buildVerification.dictSizeAfter)}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">.data</span><span className="font-mono">{formatFileSize(buildVerification.dataSizeBefore)} → {formatFileSize(buildVerification.dataSizeAfter)}</span></div>
-          </div>
-          <ScrollArea className="max-h-[200px]">
-            <div className="space-y-0.5">
-              {buildVerification.results.map((r, i) => (
-                <div key={i} className={`p-1.5 rounded border text-[8px] ${r.pixelLoss > 5 ? 'border-destructive/40 bg-destructive/5' : !r.match && r.hashBefore !== 0 ? 'border-yellow-500/40 bg-yellow-500/5' : 'border-border bg-card'}`}>
-                  <div className="flex items-center justify-between">
-                    <span className="flex items-center gap-0.5 font-semibold">
-                      {r.pixelLoss > 5 ? <AlertTriangle className="w-2.5 h-2.5 text-destructive" /> : <CheckCircle2 className="w-2.5 h-2.5 text-green-500" />}
-                      {r.pageLabel}
-                    </span>
-                    <Badge variant="outline" className="text-[7px] h-3.5 px-1">{r.pixelLoss > 5 ? `فقد ${r.pixelLoss.toFixed(1)}%` : "✓"}</Badge>
-                  </div>
+
+          {/* Block reasons */}
+          {buildVerification.report?.blocked && buildVerification.report.blockReasons.length > 0 && (
+            <div className="p-2 rounded-lg bg-destructive/10 border border-destructive/30 space-y-1">
+              {buildVerification.report.blockReasons.map((r, i) => (
+                <div key={i} className="flex items-start gap-1.5 text-[9px] text-destructive">
+                  <XCircle className="w-3 h-3 shrink-0 mt-0.5" />
+                  <span>{r}</span>
                 </div>
               ))}
             </div>
-          </ScrollArea>
+          )}
+
+          {/* Summary stats */}
+          <div className="grid grid-cols-4 gap-1">
+            <div className="p-1.5 rounded bg-muted/40 text-center"><p className="text-[7px] text-muted-foreground">صفحات</p><p className="text-sm font-bold">{buildVerification.totalPages}</p></div>
+            <div className={`p-1.5 rounded text-center ${buildVerification.passedPages === buildVerification.totalPages ? 'bg-green-500/10' : 'bg-destructive/10'}`}>
+              <p className="text-[7px] text-muted-foreground">سليمة</p>
+              <p className={`text-sm font-bold ${buildVerification.passedPages === buildVerification.totalPages ? 'text-green-600' : 'text-destructive'}`}>{buildVerification.passedPages}/{buildVerification.totalPages}</p>
+            </div>
+            <div className="p-1.5 rounded bg-muted/40 text-center"><p className="text-[7px] text-muted-foreground">جديدة</p><p className="text-sm font-bold text-primary">{buildVerification.newPages}</p></div>
+            <div className="p-1.5 rounded bg-muted/40 text-center"><p className="text-[7px] text-muted-foreground">المدة</p><p className="text-[10px] font-mono font-bold">{(buildVerification.duration / 1000).toFixed(1)}s</p></div>
+          </div>
+
+          {/* File sizes */}
+          <div className="p-2 rounded bg-muted/30 text-[8px] space-y-0.5">
+            <div className="flex justify-between"><span className="text-muted-foreground">.dict</span><span className="font-mono">{formatFileSize(buildVerification.dictSizeBefore)} → {formatFileSize(buildVerification.dictSizeAfter)}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">.data</span><span className="font-mono">{formatFileSize(buildVerification.dataSizeBefore)} → {formatFileSize(buildVerification.dataSizeAfter)}</span></div>
+          </div>
+
+          {/* FontDef comparison */}
+          {buildVerification.report && (
+            <div className="space-y-1.5">
+              <p className="text-[9px] font-bold text-foreground">📋 تعريف الخط (FontDef)</p>
+              <div className="grid grid-cols-2 gap-1.5">
+                <div className="p-2 rounded border border-border bg-card space-y-0.5">
+                  <p className="text-[8px] font-semibold text-muted-foreground">قبل</p>
+                  {buildVerification.report.fontDefBefore ? (
+                    <>
+                      <p className="text-[8px] font-mono">Offset: {buildVerification.report.fontDefBefore.offset}</p>
+                      <p className="text-[8px] font-mono">Size: {buildVerification.report.fontDefBefore.length}</p>
+                      <p className="text-[8px]">حروف: {buildVerification.report.fontDefBefore.glyphs}</p>
+                      <p className="text-[8px]">PageCount: {buildVerification.report.fontDefBefore.pageCount}</p>
+                    </>
+                  ) : <p className="text-[8px] text-muted-foreground">غير موجود</p>}
+                </div>
+                <div className={`p-2 rounded border space-y-0.5 ${buildVerification.report.fontDefAfter ? 'border-primary/30 bg-primary/5' : 'border-destructive/30 bg-destructive/5'}`}>
+                  <p className="text-[8px] font-semibold text-muted-foreground">بعد</p>
+                  {buildVerification.report.fontDefAfter ? (
+                    <>
+                      <p className="text-[8px] font-mono">Offset: {buildVerification.report.fontDefAfter.offset}</p>
+                      <p className="text-[8px] font-mono">Size: {buildVerification.report.fontDefAfter.length}</p>
+                      <p className="text-[8px]">حروف: {buildVerification.report.fontDefAfter.glyphs} <Badge variant="secondary" className="text-[6px] h-3 px-0.5">{buildVerification.report.fontDefAfter.arabicGlyphs} عربي</Badge></p>
+                      <p className="text-[8px]">PageCount: {buildVerification.report.fontDefAfter.pageCount}</p>
+                    </>
+                  ) : <p className="text-[8px] text-destructive">⚠️ غير موجود!</p>}
+                </div>
+              </div>
+
+              {/* DDS Pages table */}
+              <p className="text-[9px] font-bold text-foreground mt-2">📄 صفحات DDS</p>
+              <div className="rounded border border-border overflow-hidden">
+                <table className="w-full text-[8px]">
+                  <thead>
+                    <tr className="bg-muted/50">
+                      <th className="text-right px-1.5 py-1 font-medium">#</th>
+                      <th className="text-right px-1.5 py-1 font-medium">النوع</th>
+                      <th className="text-right px-1.5 py-1 font-medium">Offset</th>
+                      <th className="text-right px-1.5 py-1 font-medium">الحجم</th>
+                      <th className="text-center px-1.5 py-1 font-medium">الحالة</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {buildVerification.report.originalDDS.map(r => (
+                      <tr key={`o${r.index}`} className={r.intact ? "bg-card" : "bg-destructive/5"}>
+                        <td className="px-1.5 py-0.5 font-mono">{r.index}</td>
+                        <td className="px-1.5 py-0.5">أصلية</td>
+                        <td className="px-1.5 py-0.5 font-mono text-muted-foreground">{r.offset}</td>
+                        <td className="px-1.5 py-0.5 font-mono">{r.size}</td>
+                        <td className="px-1.5 py-0.5 text-center">{r.intact ? <CheckCircle2 className="w-3 h-3 text-green-500 inline" /> : <XCircle className="w-3 h-3 text-destructive inline" />}</td>
+                      </tr>
+                    ))}
+                    {buildVerification.report.newDDS.map(r => (
+                      <tr key={`n${r.index}`} className={r.hasDDS ? "bg-primary/5" : "bg-destructive/5"}>
+                        <td className="px-1.5 py-0.5 font-mono">{r.index}</td>
+                        <td className="px-1.5 py-0.5 text-primary font-semibold">عربية</td>
+                        <td className="px-1.5 py-0.5 font-mono text-muted-foreground">{r.offset}</td>
+                        <td className="px-1.5 py-0.5 font-mono">{r.size}</td>
+                        <td className="px-1.5 py-0.5 text-center">{r.hasDDS ? <CheckCircle2 className="w-3 h-3 text-green-500 inline" /> : <XCircle className="w-3 h-3 text-destructive inline" />}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Legacy results fallback */}
+          {!buildVerification.report && (
+            <ScrollArea className="max-h-[200px]">
+              <div className="space-y-0.5">
+                {buildVerification.results.map((r, i) => (
+                  <div key={i} className={`p-1.5 rounded border text-[8px] ${r.pixelLoss > 5 ? 'border-destructive/40 bg-destructive/5' : 'border-border bg-card'}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="flex items-center gap-0.5 font-semibold">
+                        {r.pixelLoss > 5 ? <AlertTriangle className="w-2.5 h-2.5 text-destructive" /> : <CheckCircle2 className="w-2.5 h-2.5 text-green-500" />}
+                        {r.pageLabel}
+                      </span>
+                      <Badge variant="outline" className="text-[7px] h-3.5 px-1">{r.pixelLoss > 5 ? `فقد ${r.pixelLoss.toFixed(1)}%` : "✓"}</Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          )}
+
           <DialogFooter>
             <Button variant="outline" size="sm" onClick={() => setBuildVerification(p => p ? { ...p, show: false } : null)}>إغلاق</Button>
           </DialogFooter>
