@@ -249,8 +249,10 @@ export default function FontEditor() {
         const fontDefResult = findFontDefInData(data);
         if (fontDefResult) {
           const parsed = parseNLGFontDef(fontDefResult.text);
-          setFontDefData(parsed); setFontDefOffset(fontDefResult.offset); setFontDefLength(fontDefResult.length);
-        } else { setFontDefData(null); }
+          setFontDefData(parsed); setOriginalFontDefData(parsed);
+          setFontDefOffset(fontDefResult.offset); setFontDefLength(fontDefResult.length);
+          setFontDefHistory([parsed]); setHistoryIndex(0);
+        } else { setFontDefData(null); setOriginalFontDefData(null); }
         setTextures(newTextures); setCurrentPage(0); setAtlasResult(null);
         toast({
           title: "✅ تم تحميل الأرشيف",
