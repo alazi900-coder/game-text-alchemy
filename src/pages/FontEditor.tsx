@@ -562,6 +562,24 @@ export default function FontEditor() {
                       setSelectedFontDefGlyph(g.code);
                       setCurrentPage(g.page);
                     }}
+                    onGlyphUpdate={(idx, changes) => {
+                      setFontDefData(prev => {
+                        if (!prev) return prev;
+                        const newGlyphs = [...prev.glyphs];
+                        newGlyphs[idx] = { ...newGlyphs[idx], ...changes };
+                        return { ...prev, glyphs: newGlyphs, rawText: '' };
+                      });
+                    }}
+                    onBatchUpdate={(updates) => {
+                      setFontDefData(prev => {
+                        if (!prev) return prev;
+                        const newGlyphs = [...prev.glyphs];
+                        for (const u of updates) {
+                          newGlyphs[u.index] = { ...newGlyphs[u.index], ...u.changes };
+                        }
+                        return { ...prev, glyphs: newGlyphs, rawText: '' };
+                      });
+                    }}
                   />
                 </>
               ) : (
