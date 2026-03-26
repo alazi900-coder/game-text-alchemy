@@ -1,8 +1,9 @@
 import { useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, AlertTriangle, XCircle, Shield, Layers, Replace, Plus } from "lucide-react";
-import { findDDSPositions, DDS_FULL_SIZE_WITH_MIPS, formatFileSize } from "@/lib/nlg-archive";
+import { CheckCircle2, AlertTriangle, XCircle, Shield, Replace, Plus } from "lucide-react";
+import { findDDSPositions, DDS_FULL_SIZE_WITH_MIPS } from "@/lib/dxt5-codec";
+import { formatFileSize } from "@/lib/nlg-archive";
 import { findFontDefInData, parseNLGFontDef } from "@/lib/nlg-font-def";
 import type { NLGArchiveInfo } from "@/lib/nlg-archive";
 import type { NLGFontDef } from "@/lib/nlg-font-def";
