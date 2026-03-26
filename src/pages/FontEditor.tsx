@@ -95,6 +95,13 @@ export default function FontEditor() {
     results: Array<{ pageLabel: string; hashBefore: number; hashAfter: number; match: boolean; nonZeroBefore: number; nonZeroAfter: number; pixelLoss: number; }>;
     totalPages: number; passedPages: number; newPages: number;
     dictSizeBefore: number; dictSizeAfter: number; dataSizeBefore: number; dataSizeAfter: number; duration: number;
+    report?: {
+      originalDDS: Array<{ index: number; offset: string; size: string; intact: boolean }>;
+      newDDS: Array<{ index: number; offset: string; size: string; hasDDS: boolean }>;
+      fontDefBefore: { offset: string; length: string; glyphs: number; pageCount: number } | null;
+      fontDefAfter: { offset: string; length: string; glyphs: number; arabicGlyphs: number; pageCount: number } | null;
+      blocked: boolean; blockReasons: string[];
+    };
   } | null>(null);
 
   const displayCanvasRef = useRef<HTMLCanvasElement>(null);
