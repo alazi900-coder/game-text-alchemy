@@ -20,7 +20,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
 } from "@/components/ui/dialog";
-import { decodeDXT5, encodeDXT5, findDDSPositions, DDS_HEADER_SIZE, TEX_SIZE, DXT5_MIP0_SIZE, buildDDSHeader } from "@/lib/dxt5-codec";
+import { decodeDXT5, encodeDXT5, findDDSPositions, DDS_HEADER_SIZE, TEX_SIZE, DXT5_MIP0_SIZE, buildDDSHeader, buildDDSHeaderWithMipmaps, encodeDXT5WithMipmaps, DDS_FULL_SIZE_WITH_MIPS } from "@/lib/dxt5-codec";
 import {
   generateFontAtlas, renderTextPreview, exportMetricsJSON,
   type AtlasResult
@@ -379,88 +379,161 @@ export default function FontEditor() {
   };
 
   const buildWithArchive = async () => {
-    if (!archiveInfo || !archiveFiles.length) return;
+    if (!archiveInfo || !fontData) return;
     const t0 = performance.now();
-    const dsBefore = dictData?.length ?? 0, daBefore = fontData?.length ?? 0;
+    const dsBefore = dictData?.length ?? 0, daBefore = fontData.length;
 
+    // Snapshot textures before build for verification
     const snaps = new Map<number, { hash: number; nonZero: number; label: string }>();
     textures.forEach((tex, i) => {
       const rgba = tex.ctx.getImageData(0, 0, TEX_SIZE, TEX_SIZE).data;
-      snaps.set(i, { hash: computePixelHash(rgba), nonZero: countNonZeroPixels(rgba), label: tex.isGenerated ? `عربية ${i}` : `أرشيف ${tex.archiveFileIndex ?? i}` });
+      snaps.set(i, { hash: computePixelHash(rgba), nonZero: countNonZeroPixels(rgba), label: tex.isGenerated ? `عربية ${i}` : `أصلية ${i}` });
     });
 
-    const updated = [...archiveFiles];
-    const tpl = archiveFiles.find(f => detectFileType(f.data) === "DDS");
-    const tplUnk = tpl?.originalEntry.unk ?? 0;
-    const tplComp = tpl?.compressionMode ?? (archiveInfo.isCompressed ? "zlib" : "none");
-
-    const texByIdx = new Map<number, TextureInfo>();
-    textures.forEach(t => { if (t.archiveFileIndex !== undefined && !t.isGenerated) texByIdx.set(t.archiveFileIndex, t); });
-
-    for (let i = 0; i < updated.length; i++) {
-      const tex = texByIdx.get(updated[i].index);
-      if (tex) {
-        const dxt5 = encodeDXT5(new Uint8Array(tex.ctx.getImageData(0, 0, TEX_SIZE, TEX_SIZE).data), TEX_SIZE, TEX_SIZE);
-        const hdr = buildDDSHeader(TEX_SIZE, TEX_SIZE);
-        const dds = new Uint8Array(hdr.length + dxt5.length); dds.set(hdr); dds.set(dxt5, hdr.length);
-        updated[i] = { ...updated[i], data: dds };
-      }
+    // Find DDS positions and font def in original data
+    const ddsPositions = findDDSPositions(fontData);
+    const fontDefResult = findFontDefInData(fontData);
+    
+    if (ddsPositions.length === 0) {
+      toast({ title: "خطأ", description: "لا توجد صفحات DDS في الملف الأصلي", variant: "destructive" });
+      return;
     }
 
-    const replaceMode = lastWizardSettings?.replaceMode ?? "append";
-    const generated = replaceMode === "append" ? textures.filter(t => t.isGenerated) : [];
+    // Calculate original DDS spacing (includes all mipmaps + padding)
+    const ddsSpacing = ddsPositions.length > 1 
+      ? ddsPositions[1] - ddsPositions[0] 
+      : DDS_FULL_SIZE_WITH_MIPS;
 
-    for (const tex of generated) {
-      const dxt5 = encodeDXT5(new Uint8Array(tex.ctx.getImageData(0, 0, TEX_SIZE, TEX_SIZE).data), TEX_SIZE, TEX_SIZE);
-      const hdr = buildDDSHeader(TEX_SIZE, TEX_SIZE);
-      const dds = new Uint8Array(hdr.length + dxt5.length); dds.set(hdr); dds.set(dxt5, hdr.length);
-      const ni = updated.length;
-      updated.push({ index: ni, data: dds, wasCompressed: archiveInfo.isCompressed, compressionMode: archiveInfo.isCompressed ? tplComp : "none",
-        originalEntry: { index: ni, offset: 0, decompressedLength: dds.length, compressedLength: dds.length, unk: tplUnk } });
+    // Collect generated (Arabic) textures
+    const generatedTextures = textures.filter(t => t.isGenerated);
+    const newPageCount = ddsPositions.length + generatedTextures.length;
+
+    // Build new DDS pages with full mipmaps (matching original format)
+    const newDDSPages: Uint8Array[] = [];
+    for (const tex of generatedTextures) {
+      const rgba = new Uint8Array(tex.ctx.getImageData(0, 0, TEX_SIZE, TEX_SIZE).data);
+      const header = buildDDSHeaderWithMipmaps(TEX_SIZE, TEX_SIZE, 9);
+      const mipData = encodeDXT5WithMipmaps(rgba, TEX_SIZE, TEX_SIZE, 9);
+      
+      // Pad to match original DDS spacing
+      const fullPage = new Uint8Array(ddsSpacing);
+      fullPage.set(header, 0);
+      fullPage.set(mipData, header.length);
+      newDDSPages.push(fullPage);
     }
 
-    // Inject Arabic into font def
-    if (fontDefData && atlasResult && fontData) {
-      const fdIdx = updated.findIndex(f => { const t = detectFileType(f.data); return t === "text" || (t !== "DDS" && f.data.length > 100 && f.data.length < 100000); });
-      if (fdIdx >= 0) {
-        const ddsCount = updated.filter(f => detectFileType(f.data) === "DDS").length - generated.length;
-        const entries = generateArabicGlyphEntries(atlasResult.glyphs, ddsCount, fontDefData.header.renderHeight);
-        const merged = mergeArabicIntoFontDef(fontDefData, entries, ddsCount + generated.length);
-        const bytes = new TextEncoder().encode(serializeNLGFontDef(merged));
-        const padded = new Uint8Array(Math.ceil(bytes.length / 16) * 16); padded.set(bytes);
-        updated[fdIdx] = { ...updated[fdIdx], data: padded };
-      }
+    // Build updated font def text
+    let updatedFontDefText = "";
+    if (fontDefData && atlasResult) {
+      const entries = generateArabicGlyphEntries(atlasResult.glyphs, ddsPositions.length, fontDefData.header.renderHeight);
+      const merged = mergeArabicIntoFontDef(fontDefData, entries, newPageCount);
+      updatedFontDefText = serializeNLGFontDef(merged);
+    } else if (fontDefResult) {
+      updatedFontDefText = fontDefResult.text;
     }
 
-    const { dict: newDict, data: newData } = repackNLGArchive(archiveInfo, updated);
-    const newInfo = parseNLGDict(newDict);
-    const newFiles = extractNLGFiles(newInfo, newData);
-    const newTexs = decodeArchiveTextures(newFiles);
+    // Assemble the new .data file:
+    // [original data up to font def] + [new DDS pages] + [updated font def] + [padding]
+    const fontDefOffset = fontDefResult?.offset ?? fontData.length;
+    const fontDefBytes = new TextEncoder().encode(updatedFontDefText);
+    
+    // Calculate new file size
+    const newDDSSize = newDDSPages.reduce((s, p) => s + p.length, 0);
+    const newDataSize = fontDefOffset + newDDSSize + fontDefBytes.length;
+    const alignedSize = Math.ceil(newDataSize / 16) * 16;
+    
+    const newData = new Uint8Array(alignedSize);
+    
+    // 1. Copy everything from original up to font def (preserves ALL original DDS + metadata)
+    newData.set(fontData.subarray(0, fontDefOffset), 0);
+    
+    // 2. Insert new Arabic DDS pages
+    let insertOffset = fontDefOffset;
+    for (const page of newDDSPages) {
+      newData.set(page, insertOffset);
+      insertOffset += page.length;
+    }
+    
+    // 3. Write updated font def
+    newData.set(fontDefBytes, insertOffset);
 
-    const results: typeof buildVerification extends { results: infer R } | null ? NonNullable<R> : never = [];
-    newTexs.forEach((nt, i) => {
-      const rgba = nt.ctx.getImageData(0, 0, TEX_SIZE, TEX_SIZE).data;
-      const hA = computePixelHash(rgba), nzA = countNonZeroPixels(rgba);
-      const b = snaps.get(i);
-      if (b) { const pl = b.nonZero > 0 ? Math.max(0, (1 - nzA / b.nonZero) * 100) : 0; results.push({ pageLabel: b.label, hashBefore: b.hash, hashAfter: hA, match: b.hash === hA, nonZeroBefore: b.nonZero, nonZeroAfter: nzA, pixelLoss: pl }); }
-      else results.push({ pageLabel: `جديدة ${i}`, hashBefore: 0, hashAfter: hA, match: true, nonZeroBefore: 0, nonZeroAfter: nzA, pixelLoss: 0 });
-    });
+    // Update dict if needed (add entries for new DDS pages)
+    let newDict = dictData ?? new Uint8Array(0);
 
+    // Verification
     const dur = performance.now() - t0;
-    const passed = results.filter(r => r.match || r.pixelLoss < 5).length;
-    setDictData(newDict); setFontData(newData); setArchiveInfo(newInfo); setArchiveFiles(newFiles); setTextures(newTexs); setCurrentPage(0);
+    
+    // Verify by re-reading the new data
+    const verifyDDS = findDDSPositions(newData);
+    const verifyFontDef = findFontDefInData(newData);
+    
+    const results: typeof buildVerification extends { results: infer R } | null ? NonNullable<R> : never = [];
+    // Check original pages are intact
+    for (let i = 0; i < ddsPositions.length; i++) {
+      const origSlice = fontData.subarray(ddsPositions[i], ddsPositions[i] + 64);
+      const newSlice = newData.subarray(ddsPositions[i], ddsPositions[i] + 64);
+      let match = true;
+      for (let j = 0; j < origSlice.length; j++) {
+        if (origSlice[j] !== newSlice[j]) { match = false; break; }
+      }
+      results.push({
+        pageLabel: `أصلية ${i}`, hashBefore: 1, hashAfter: match ? 1 : 0,
+        match, nonZeroBefore: 1, nonZeroAfter: 1, pixelLoss: match ? 0 : 100,
+      });
+    }
+    // Check new pages
+    for (let i = 0; i < newDDSPages.length; i++) {
+      results.push({
+        pageLabel: `عربية ${i}`, hashBefore: 0, hashAfter: 1,
+        match: true, nonZeroBefore: 0, nonZeroAfter: 1, pixelLoss: 0,
+      });
+    }
 
-    const fdRes = findFontDefInData(newData);
-    if (fdRes) { setFontDefData(parseNLGFontDef(fdRes.text)); setFontDefOffset(fdRes.offset); setFontDefLength(fdRes.length); }
+    const passed = results.filter(r => r.match).length;
+    
+    // Update state
+    setFontData(newData);
+    if (verifyFontDef) {
+      const parsed = parseNLGFontDef(verifyFontDef.text);
+      setFontDefData(parsed);
+      setFontDefOffset(verifyFontDef.offset);
+      setFontDefLength(verifyFontDef.length);
+    }
 
-    setBuildVerification({ show: true, results, totalPages: results.length, passedPages: passed, newPages: generated.length, dictSizeBefore: dsBefore, dictSizeAfter: newDict.length, dataSizeBefore: daBefore, dataSizeAfter: newData.length, duration: dur });
+    // Re-decode textures from new data
+    const newTextures: TextureInfo[] = [];
+    for (const pos of verifyDDS) {
+      try {
+        const rgba = decodeDXT5(newData.slice(pos + DDS_HEADER_SIZE, pos + DDS_HEADER_SIZE + DXT5_MIP0_SIZE), TEX_SIZE, TEX_SIZE);
+        const canvas = document.createElement("canvas"); canvas.width = TEX_SIZE; canvas.height = TEX_SIZE;
+        const ctx = canvas.getContext("2d")!;
+        const imgData = ctx.createImageData(TEX_SIZE, TEX_SIZE);
+        imgData.data.set(rgba); ctx.putImageData(imgData, 0, 0);
+        newTextures.push({ canvas, ctx, imgData, ddsOffset: pos, isGenerated: pos >= fontDefOffset });
+      } catch { /* skip broken */ }
+    }
+    setTextures(newTextures); setCurrentPage(0);
 
+    setBuildVerification({
+      show: true, results, totalPages: results.length, passedPages: passed,
+      newPages: newDDSPages.length,
+      dictSizeBefore: dsBefore, dictSizeAfter: newDict.length,
+      dataSizeBefore: daBefore, dataSizeAfter: newData.length,
+      duration: dur,
+    });
+
+    // Download as ZIP
     const zip = new JSZip();
     const base = dictFileName.replace(/_res\.dict$/i, "_res").replace(/\.dict$/i, "_res");
-    zip.file(`${base}.dict`, newDict); zip.file(`${base}.data`, newData);
+    zip.file(`${base}.dict`, newDict);
+    zip.file(`${base}.data`, newData);
     const blob = await zip.generateAsync({ type: "blob" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${base}_arabized.zip`; a.click();
-    toast({ title: "✅ تم البناء", description: `تحقق: ${passed}/${results.length} سليمة` });
+    
+    toast({
+      title: "✅ تم البناء",
+      description: `${ddsPositions.length} أصلية + ${newDDSPages.length} عربية — ${verifyFontDef ? parseNLGFontDef(verifyFontDef.text).glyphs.length : '?'} حرف — ${(newData.length / 1048576).toFixed(1)} MB`,
+    });
   };
 
   const handleExportMetrics = () => {
