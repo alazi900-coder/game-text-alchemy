@@ -32,6 +32,11 @@ import {
   parseNLGDict, extractNLGFiles, repackNLGArchive, detectFileType, formatFileSize,
   type NLGArchiveInfo, type NLGExtractedFile
 } from "@/lib/nlg-archive";
+import {
+  parseNLGFontDef, serializeNLGFontDef, findFontDefInData,
+  generateArabicGlyphEntries, mergeArabicIntoFontDef,
+  type NLGFontDef, type NLGGlyphEntry
+} from "@/lib/nlg-font-def";
 import GlyphDrawingEditor from "@/components/editor/GlyphDrawingEditor";
 import JSZip from "jszip";
 
