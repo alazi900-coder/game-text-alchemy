@@ -444,15 +444,32 @@ export default function FontDiagnosticPanel({ fontDef, textures, onBatchUpdate }
             {/* Quick fix actions */}
             {onBatchUpdate && (errorCount > 0 || warningCount > 0) && (
               <div className="p-2 rounded bg-primary/5 border border-primary/20 space-y-1.5">
-                <p className="text-[10px] font-semibold text-primary flex items-center gap-1">
-                  <Zap className="w-3 h-3" /> إصلاحات متاحة
-                </p>
-                <p className="text-[9px] text-muted-foreground">
-                  "إصلاح تلقائي" يعدّل Width و RenderWidth و XOffset لجميع الحروف العربية بناءً على أبعاد البكسل الفعلية ونوع الشكل (معزول/بداية/وسط/نهاية).
-                </p>
-                <Button size="sm" className="w-full h-7 gap-1 text-xs" onClick={handleAutoFix}>
-                  <Wrench className="w-3.5 h-3.5" /> تطبيق الإصلاح التلقائي
-                </Button>
+                {hasMissingArabic && !hasFixableMetrics ? (
+                  <>
+                    <p className="text-[10px] font-semibold text-yellow-600 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" /> الحروف العربية غير موجودة
+                    </p>
+                    <p className="text-[9px] text-muted-foreground">
+                      يجب أولاً إضافة الحروف العربية من تبويب <strong>"إضافة العربية"</strong> ثم العودة للفحص والإصلاح.
+                    </p>
+                  </>
+                ) : hasFixableMetrics ? (
+                  <>
+                    <p className="text-[10px] font-semibold text-primary flex items-center gap-1">
+                      <Zap className="w-3 h-3" /> إصلاحات متاحة
+                    </p>
+                    <p className="text-[9px] text-muted-foreground">
+                      "إصلاح تلقائي" يعدّل Width و RenderWidth و XOffset لجميع الحروف العربية بناءً على أبعاد البكسل الفعلية ونوع الشكل (معزول/بداية/وسط/نهاية).
+                    </p>
+                    <Button size="sm" className="w-full h-7 gap-1 text-xs" onClick={handleAutoFix}>
+                      <Wrench className="w-3.5 h-3.5" /> تطبيق الإصلاح التلقائي
+                    </Button>
+                  </>
+                ) : (
+                  <p className="text-[10px] text-muted-foreground text-center py-1">
+                    لا توجد إصلاحات تلقائية متاحة حالياً
+                  </p>
+                )}
               </div>
             )}
           </>
