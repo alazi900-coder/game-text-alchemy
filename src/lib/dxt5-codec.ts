@@ -208,11 +208,91 @@ export function buildDDSHeader(width: number, height: number): Uint8Array {
   return header;
 }
 
+/**
+ * Build a DDS header with mipmaps for NLG font archives.
+ * Original LM2HD textures use 9 mipmaps (1024→4).
+ */
+export function buildDDSHeaderWithMipmaps(width: number, height: number, mipCount: number = 9): Uint8Array {
+  const header = new Uint8Array(128);
+  const view = new DataView(header.buffer);
+  header[0] = 0x44; header[1] = 0x44; header[2] = 0x53; header[3] = 0x20;
+  view.setUint32(4, 124, true);
+  view.setUint32(8, 0x000A1007, true); // flags
+  view.setUint32(12, height, true);
+  view.setUint32(16, width, true);
+  const linearSize = Math.max(1, Math.floor((width + 3) / 4)) * Math.max(1, Math.floor((height + 3) / 4)) * 16;
+  view.setUint32(20, linearSize, true);
+  view.setUint32(24, 0, true);
+  view.setUint32(28, mipCount, true);
+  view.setUint32(76, 32, true);
+  view.setUint32(80, 0x4, true);
+  header[84] = 0x44; header[85] = 0x58; header[86] = 0x54; header[87] = 0x35;
+  // Caps: TEXTURE | COMPLEX | MIPMAP
+  view.setUint32(108, 0x401008, true);
+  // Caps2
+  view.setUint32(112, 0, true);
+  return header;
+}
+
+/**
+ * Generate all mipmap levels for DXT5 from a source RGBA.
+ * Returns concatenated DXT5 data for all mip levels.
+ */
+export function encodeDXT5WithMipmaps(rgba: Uint8Array, width: number, height: number, mipCount: number = 9): Uint8Array {
+  const chunks: Uint8Array[] = [];
+  let w = width, h = height;
+  let currentRGBA = rgba;
+  
+  for (let m = 0; m < mipCount; m++) {
+    const dxt5 = encodeDXT5(currentRGBA, w, h);
+    chunks.push(dxt5);
+    
+    if (m < mipCount - 1) {
+      // Downsample 2x
+      const nw = Math.max(1, w >> 1), nh = Math.max(1, h >> 1);
+      const downsampled = new Uint8Array(nw * nh * 4);
+      for (let y = 0; y < nh; y++) {
+        for (let x = 0; x < nw; x++) {
+          const sx = x * 2, sy = y * 2;
+          let r = 0, g = 0, b = 0, a = 0, count = 0;
+          for (let dy = 0; dy < 2 && sy + dy < h; dy++) {
+            for (let dx = 0; dx < 2 && sx + dx < w; dx++) {
+              const si = ((sy + dy) * w + (sx + dx)) * 4;
+              r += currentRGBA[si]; g += currentRGBA[si + 1];
+              b += currentRGBA[si + 2]; a += currentRGBA[si + 3];
+              count++;
+            }
+          }
+          const di = (y * nw + x) * 4;
+          downsampled[di] = (r / count) | 0;
+          downsampled[di + 1] = (g / count) | 0;
+          downsampled[di + 2] = (b / count) | 0;
+          downsampled[di + 3] = (a / count) | 0;
+        }
+      }
+      currentRGBA = downsampled;
+      w = nw; h = nh;
+    }
+  }
+  
+  const totalSize = chunks.reduce((s, c) => s + c.length, 0);
+  const result = new Uint8Array(totalSize);
+  let offset = 0;
+  for (const chunk of chunks) {
+    result.set(chunk, offset);
+    offset += chunk.length;
+  }
+  return result;
+}
+
 /** Default texture size for LM2HD font atlases */
 export const TEX_SIZE = 1024;
 
 /** DXT5 mip0 data size for a 1024x1024 texture */
 export const DXT5_MIP0_SIZE = TEX_SIZE * TEX_SIZE; // 1048576
+
+/** Full DDS size with 9 mipmaps for 1024x1024 DXT5 + header + alignment */
+export const DDS_FULL_SIZE_WITH_MIPS = 1398272; // matches original LM2HD
 
 /**
  * Scan a binary buffer for DDS magic ('DDS ') positions.
