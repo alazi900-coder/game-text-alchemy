@@ -41,6 +41,8 @@ import FontDefInspector from "@/components/font-editor/FontDefInspector";
 import GlyphMetricsStats from "@/components/font-editor/GlyphMetricsStats";
 import FontDefExporter from "@/components/font-editor/FontDefExporter";
 import GlyphBatchEditor from "@/components/font-editor/GlyphBatchEditor";
+import FontDiagnosticPanel from "@/components/font-editor/FontDiagnosticPanel";
+import FontQualityEnhancer from "@/components/font-editor/FontQualityEnhancer";
 import JSZip from "jszip";
 
 /* ─── types ─── */
