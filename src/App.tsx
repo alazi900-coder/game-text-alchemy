@@ -22,6 +22,7 @@ const BundleExtractor = lazy(() => import("./pages/BundleExtractor"));
 const LuigiMansion = lazy(() => import("./pages/LuigiMansion"));
 const NlocProcess = lazy(() => import("./pages/NlocProcess"));
 const FontEditor = lazy(() => import("./pages/FontEditor"));
+const SongsOfConquest = lazy(() => import("./pages/SongsOfConquest"));
 
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-background">
@@ -57,6 +58,7 @@ const App = () => (
                 <Route path="/luigis-mansion/process" element={<ErrorBoundary fallbackTitle="خطأ في المعالجة"><NlocProcess /></ErrorBoundary>} />
                 <Route path="/luigis-mansion/fonts" element={<ErrorBoundary fallbackTitle="خطأ في محرر الخطوط"><FontEditor /></ErrorBoundary>} />
                 <Route path="/cobalt" element={<ErrorBoundary fallbackTitle="خطأ في المحرر"><Editor /></ErrorBoundary>} />
+                <Route path="/songs-of-conquest" element={<ErrorBoundary fallbackTitle="خطأ في محرر Songs of Conquest"><SongsOfConquest /></ErrorBoundary>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>
