@@ -9,6 +9,7 @@ import type { ExtractedEntry, EditorState } from "@/components/editor/types";
 import JSZip from "jszip";
 import heroBgFe from "@/assets/fe-hero-bg.jpg";
 import heroBgLm from "@/assets/lm2-hero-bg.jpg";
+import heroBgSoc from "@/assets/soc-hero-bg.jpg";
 
 interface CobaltParsedEntry { label: string; text: string; lineIndex: number; lineCount: number; }
 interface CobaltParsedFile { name: string; entries: CobaltParsedEntry[]; rawLines: string[]; hasLabels: boolean; }
@@ -95,6 +96,17 @@ const games = [
     accent: "from-[hsl(120,70%,50%)] to-[hsl(270,70%,60%)]",
     border: "border-[hsl(120,50%,40%)]/30",
     bg: "bg-[hsl(120,50%,40%)]/10",
+  },
+  {
+    id: "songs-of-conquest",
+    title: "Songs of Conquest",
+    titleAr: "أغاني الفتح",
+    desc: "ملفات JSON — نظام Modding رسمي للغات",
+    image: heroBgSoc,
+    href: "/songs-of-conquest",
+    accent: "from-[hsl(35,80%,50%)] to-[hsl(0,70%,50%)]",
+    border: "border-[hsl(35,60%,40%)]/30",
+    bg: "bg-[hsl(35,60%,40%)]/10",
   },
 ];
 
