@@ -90,7 +90,9 @@ const ConsistencyCheckPanel = React.lazy(() => import("@/components/editor/Consi
 import ToolHelpDialog, { ToolType } from "@/components/editor/ToolHelpDialog";
 import { countUniqueMsbtFiles } from "@/lib/msbt-key-normalizer";
 
-type GameId = "fire-emblem";
+import socHeroBg from "@/assets/soc-hero-bg.jpg";
+
+type GameId = "fire-emblem" | "songs-of-conquest";
 
 interface GameConfig {
   id: GameId;
@@ -111,6 +113,15 @@ const GAME_CONFIGS: Record<GameId, GameConfig> = {
     processPath: "/fire-emblem/process",
     fileLabel: "ملفات MSBT",
     fileFormat: "MSBT",
+  },
+  "songs-of-conquest": {
+    id: "songs-of-conquest",
+    title: "Songs of Conquest",
+    emoji: "🏰",
+    heroBg: socHeroBg,
+    processPath: "/songs-of-conquest",
+    fileLabel: "مفاتيح JSON",
+    fileFormat: "JSON",
   },
 };
 
@@ -231,7 +242,32 @@ const Editor = () => {
       await editor.handleDropImport(e.dataTransfer);
     }
   }, [editor.handleDropImport]);
-  // Lazy-compute counts only when explicitly needed (not on every render)
+  // SOC-specific Arabic.json export
+  const handleExportSocArabicJson = React.useCallback(() => {
+    if (!editor.state) return;
+    const output: Record<string, unknown> = {
+      type: "language",
+      name: "Arabic",
+      code: "ar",
+      nativeName: "العربية",
+      keys: editor.state.entries.map(e => {
+        const key = `${e.msbtFile}:${e.index}`;
+        const translated = editor.state!.translations[key]?.trim();
+        return { [e.label]: translated || e.original };
+      }),
+    };
+    const json = JSON.stringify(output, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "Arabic.json";
+    a.click();
+    URL.revokeObjectURL(url);
+    import("@/hooks/use-toast").then(({ toast }) => toast({ title: "تم تصدير Arabic.json ✅" }));
+  }, [editor.state]);
+
+
   const [showToolPanels, setShowToolPanels] = React.useState(false);
 
   // Per-file translation counts for file filter dropdowns
@@ -1423,6 +1459,13 @@ const Editor = () => {
                   <DropdownMenuItem onClick={editor.handleImportXLIFF}><Upload className="w-4 h-4" /> استيراد XLIFF 📥</DropdownMenuItem>
                   <DropdownMenuItem onClick={editor.handleImportTMX}><Upload className="w-4 h-4" /> استيراد TMX 📥</DropdownMenuItem>
                   <DropdownMenuSeparator />
+                  {gameType === "songs-of-conquest" && (
+                    <>
+                      <DropdownMenuLabel className="text-xs">🏰 Songs of Conquest</DropdownMenuLabel>
+                      <DropdownMenuItem onClick={handleExportSocArabicJson}><FileDown className="w-4 h-4" /> تصدير Arabic.json (للعبة) 🎮</DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
                   <DropdownMenuLabel className="text-xs">🎮 Cobalt (FE Engage)</DropdownMenuLabel>
                   <DropdownMenuItem onClick={editor.handleExportCobalt}><FileDown className="w-4 h-4" /> تصدير Cobalt (.txt)</DropdownMenuItem>
                   <DropdownMenuItem onClick={editor.handleImportCobalt}><Upload className="w-4 h-4" /> استيراد Cobalt (.txt)</DropdownMenuItem>
@@ -1669,6 +1712,13 @@ const Editor = () => {
                   <DropdownMenuItem onClick={editor.handleImportXLIFF}><Upload className="w-4 h-4" /> استيراد XLIFF 📥</DropdownMenuItem>
                   <DropdownMenuItem onClick={editor.handleImportTMX}><Upload className="w-4 h-4" /> استيراد TMX 📥</DropdownMenuItem>
                   <DropdownMenuSeparator />
+                  {gameType === "songs-of-conquest" && (
+                    <>
+                      <DropdownMenuLabel className="text-xs">🏰 Songs of Conquest</DropdownMenuLabel>
+                      <DropdownMenuItem onClick={handleExportSocArabicJson}><FileDown className="w-4 h-4" /> تصدير Arabic.json (للعبة) 🎮</DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
                   <DropdownMenuLabel className="text-xs">🎮 Cobalt (FE Engage)</DropdownMenuLabel>
                   <DropdownMenuItem onClick={editor.handleExportCobalt}><FileDown className="w-4 h-4" /> تصدير Cobalt (.txt)</DropdownMenuItem>
                   <DropdownMenuItem onClick={editor.handleImportCobalt}><Upload className="w-4 h-4" /> استيراد Cobalt (.txt)</DropdownMenuItem>
