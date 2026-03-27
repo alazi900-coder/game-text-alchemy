@@ -2094,7 +2094,7 @@ const Editor = () => {
           open={editor.showBuildConfirm}
           onOpenChange={editor.setShowBuildConfirm}
           preview={editor.buildPreview}
-          onConfirm={editor.handleBuild}
+          onConfirm={gameType === "songs-of-conquest" ? () => { editor.setShowBuildConfirm(false); handleExportSocArabicJson(); } : editor.handleBuild}
           building={editor.building}
         />
         {/* Cobalt build choice dialog */}
