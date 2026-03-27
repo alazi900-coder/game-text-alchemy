@@ -245,17 +245,34 @@ const Editor = () => {
   // SOC-specific Arabic.json export
   const handleExportSocArabicJson = React.useCallback(() => {
     if (!editor.state) return;
+
+    const translations = editor.state.translations || {};
+
+    let translatedCount = 0;
+    const keys = editor.state.entries.map((e) => {
+      const entryKey = `${e.msbtFile}:${e.index}`;
+
+      // Primary key used by the shared editor
+      let translated = translations[entryKey]?.trim();
+
+      // Fallbacks for legacy/imported SOC maps keyed by label instead of entry key
+      if (!translated) translated = translations[e.label]?.trim();
+      if (!translated) translated = translations[`${e.label}:${e.index}`]?.trim();
+
+      const finalText = translated || e.original;
+      if (translated && finalText.trim() !== e.original.trim()) translatedCount++;
+
+      return { [e.label]: finalText };
+    });
+
     const output: Record<string, unknown> = {
       type: "language",
       name: "Arabic",
       code: "ar",
       nativeName: "العربية",
-      keys: editor.state.entries.map(e => {
-        const key = `${e.msbtFile}:${e.index}`;
-        const translated = editor.state!.translations[key]?.trim();
-        return { [e.label]: translated || e.original };
-      }),
+      keys,
     };
+
     const json = JSON.stringify(output, null, 2);
     const blob = new Blob([json], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -264,7 +281,18 @@ const Editor = () => {
     a.download = "Arabic.json";
     a.click();
     URL.revokeObjectURL(url);
-    import("@/hooks/use-toast").then(({ toast }) => toast({ title: "تم تصدير Arabic.json ✅" }));
+
+    import("@/hooks/use-toast").then(({ toast }) => {
+      if (translatedCount === 0) {
+        toast({
+          title: "⚠️ تم التصدير لكن بدون ترجمات مطابقة",
+          description: "افتح المحرر وتأكد أن النصوص المترجمة ظاهرة داخل الحقول قبل التصدير.",
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: `تم تصدير Arabic.json ✅ (${translatedCount} نص مترجم)` });
+      }
+    });
   }, [editor.state]);
 
 
