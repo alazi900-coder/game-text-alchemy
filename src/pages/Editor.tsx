@@ -1471,6 +1471,8 @@ const Editor = () => {
                   <DropdownMenuItem onClick={editor.handleImportCobalt}><Upload className="w-4 h-4" /> استيراد Cobalt (.txt)</DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={editor.handleImportLegacyJson}><Upload className="w-4 h-4" /> استيراد JSON قديم 🔄</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
 
               {/* Bundled Translations — مستقل */}
               <DropdownMenu>
@@ -1722,6 +1724,11 @@ const Editor = () => {
                   <DropdownMenuItem onClick={editor.handleImportCobalt}><Upload className="w-4 h-4" /> استيراد Cobalt (.txt)</DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={editor.handleImportLegacyJson}><Upload className="w-4 h-4" /> استيراد JSON قديم 🔄</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+
+              {/* Bundled Translations — مستقل */}
+              <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="font-body border-accent/50 gap-1.5">
                     {editor.loadingBundled ? <Loader2 className="w-4 h-4 animate-spin" /> : <Package className="w-4 h-4" />} ترجمات مدمجة{editor.bundledCount > 0 && <span className="bg-accent text-accent-foreground rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none">{editor.bundledCount}</span>}
