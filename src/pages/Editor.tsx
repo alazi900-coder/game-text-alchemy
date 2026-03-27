@@ -247,7 +247,6 @@ const Editor = () => {
     if (!editor.state) return;
 
     const translations = editor.state.translations || {};
-    const translatedByEntryKey = new Set(editor.state.entries.map(e => `${e.msbtFile}:${e.index}`));
 
     let translatedCount = 0;
     const keys = editor.state.entries.map((e) => {
