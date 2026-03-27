@@ -1459,13 +1459,18 @@ const Editor = () => {
                   <DropdownMenuItem onClick={editor.handleImportXLIFF}><Upload className="w-4 h-4" /> استيراد XLIFF 📥</DropdownMenuItem>
                   <DropdownMenuItem onClick={editor.handleImportTMX}><Upload className="w-4 h-4" /> استيراد TMX 📥</DropdownMenuItem>
                   <DropdownMenuSeparator />
+                  {gameType === "songs-of-conquest" && (
+                    <>
+                      <DropdownMenuLabel className="text-xs">🏰 Songs of Conquest</DropdownMenuLabel>
+                      <DropdownMenuItem onClick={handleExportSocArabicJson}><FileDown className="w-4 h-4" /> تصدير Arabic.json (للعبة) 🎮</DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
                   <DropdownMenuLabel className="text-xs">🎮 Cobalt (FE Engage)</DropdownMenuLabel>
                   <DropdownMenuItem onClick={editor.handleExportCobalt}><FileDown className="w-4 h-4" /> تصدير Cobalt (.txt)</DropdownMenuItem>
                   <DropdownMenuItem onClick={editor.handleImportCobalt}><Upload className="w-4 h-4" /> استيراد Cobalt (.txt)</DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={editor.handleImportLegacyJson}><Upload className="w-4 h-4" /> استيراد JSON قديم 🔄</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
 
               {/* Bundled Translations — مستقل */}
               <DropdownMenu>
@@ -1705,16 +1710,18 @@ const Editor = () => {
                   <DropdownMenuItem onClick={editor.handleImportXLIFF}><Upload className="w-4 h-4" /> استيراد XLIFF 📥</DropdownMenuItem>
                   <DropdownMenuItem onClick={editor.handleImportTMX}><Upload className="w-4 h-4" /> استيراد TMX 📥</DropdownMenuItem>
                   <DropdownMenuSeparator />
+                  {gameType === "songs-of-conquest" && (
+                    <>
+                      <DropdownMenuLabel className="text-xs">🏰 Songs of Conquest</DropdownMenuLabel>
+                      <DropdownMenuItem onClick={handleExportSocArabicJson}><FileDown className="w-4 h-4" /> تصدير Arabic.json (للعبة) 🎮</DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
                   <DropdownMenuLabel className="text-xs">🎮 Cobalt (FE Engage)</DropdownMenuLabel>
                   <DropdownMenuItem onClick={editor.handleExportCobalt}><FileDown className="w-4 h-4" /> تصدير Cobalt (.txt)</DropdownMenuItem>
                   <DropdownMenuItem onClick={editor.handleImportCobalt}><Upload className="w-4 h-4" /> استيراد Cobalt (.txt)</DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={editor.handleImportLegacyJson}><Upload className="w-4 h-4" /> استيراد JSON قديم 🔄</DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              {/* Bundled Translations — مستقل */}
-              <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="font-body border-accent/50 gap-1.5">
                     {editor.loadingBundled ? <Loader2 className="w-4 h-4 animate-spin" /> : <Package className="w-4 h-4" />} ترجمات مدمجة{editor.bundledCount > 0 && <span className="bg-accent text-accent-foreground rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none">{editor.bundledCount}</span>}
