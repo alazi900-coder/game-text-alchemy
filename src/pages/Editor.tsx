@@ -90,7 +90,9 @@ const ConsistencyCheckPanel = React.lazy(() => import("@/components/editor/Consi
 import ToolHelpDialog, { ToolType } from "@/components/editor/ToolHelpDialog";
 import { countUniqueMsbtFiles } from "@/lib/msbt-key-normalizer";
 
-type GameId = "fire-emblem";
+import socHeroBg from "@/assets/soc-hero-bg.jpg";
+
+type GameId = "fire-emblem" | "songs-of-conquest";
 
 interface GameConfig {
   id: GameId;
@@ -111,6 +113,15 @@ const GAME_CONFIGS: Record<GameId, GameConfig> = {
     processPath: "/fire-emblem/process",
     fileLabel: "ملفات MSBT",
     fileFormat: "MSBT",
+  },
+  "songs-of-conquest": {
+    id: "songs-of-conquest",
+    title: "Songs of Conquest",
+    emoji: "🏰",
+    heroBg: socHeroBg,
+    processPath: "/songs-of-conquest",
+    fileLabel: "مفاتيح JSON",
+    fileFormat: "JSON",
   },
 };
 
