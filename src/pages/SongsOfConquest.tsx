@@ -184,11 +184,11 @@ export default function SongsOfConquest() {
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <div className="flex gap-3">
               <Badge variant="outline" className="shrink-0">1</Badge>
-              <p>افتح مجلد اللعبة على جهازك أو السويتش</p>
+              <p>حمّل ملفات اللغة من <a href="https://drive.google.com/drive/folders/1IFMjp5T3UbgOxrpV07PkPNXYoD0mrbsH" target="_blank" rel="noopener" className="text-primary underline">أمثلة المودات الرسمية</a> أو من مجلد اللعبة</p>
             </div>
             <div className="flex gap-3">
               <Badge variant="outline" className="shrink-0">2</Badge>
-              <p>ابحث عن ملفات اللغة بصيغة <code className="text-xs bg-muted px-1 rounded">.json</code> — عادة في مجلد <code className="text-xs bg-muted px-1 rounded">Languages/</code> أو <code className="text-xs bg-muted px-1 rounded">Mods/</code></p>
+              <p>الملف يجب أن يحتوي <code className="text-xs bg-muted px-1 rounded">"type": "language"</code> و <code className="text-xs bg-muted px-1 rounded">"keys"</code> بصيغة مصفوفة</p>
             </div>
             <div className="flex gap-3">
               <Badge variant="outline" className="shrink-0">3</Badge>
@@ -196,7 +196,33 @@ export default function SongsOfConquest() {
             </div>
             <div className="flex gap-3">
               <Badge variant="outline" className="shrink-0">4</Badge>
-              <p>بعد الترجمة، صدّر ملف <code className="text-xs bg-muted px-1 rounded">Arabic.json</code> من المحرر وضعه في مجلد اللعبة</p>
+              <p>بعد الترجمة، صدّر <code className="text-xs bg-muted px-1 rounded">Arabic.json</code> وضعه في مجلد المودات</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Tags reference */}
+        <Card className="w-full max-w-lg">
+          <CardHeader>
+            <CardTitle className="text-base">وسوم خاصة باللعبة (لا تترجمها)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-xs text-muted-foreground font-mono">
+            <p className="text-sm font-sans mb-2">هذه الوسوم تُستبدل تلقائيًا في اللعبة — احتفظ بها كما هي:</p>
+            <div className="grid grid-cols-2 gap-1">
+              <span className="text-primary">{"{wielder-name}"}</span><span>اسم البطل الكامل</span>
+              <span className="text-primary">{"{wielder-short-name}"}</span><span>الاسم المختصر</span>
+              <span className="text-primary">{"{wielder-title}"}</span><span>لقب البطل</span>
+              <span className="text-primary">{"{wielder-race}"}</span><span>العرق</span>
+              <span className="text-primary">{"{wielder-faction}"}</span><span>الفصيل</span>
+            </div>
+            <p className="text-sm font-sans mt-3 mb-1">وسوم التنسيق:</p>
+            <div className="grid grid-cols-2 gap-1">
+              <span className="text-primary">{"<hl>نص</hl>"}</span><span>تمييز برتقالي</span>
+              <span className="text-primary">{"<positive>نص</positive>"}</span><span>أخضر (إيجابي)</span>
+              <span className="text-primary">{"<negative>نص</negative>"}</span><span>أحمر (سلبي)</span>
+              <span className="text-primary">{"<b>نص</b>"}</span><span>غامق</span>
+              <span className="text-primary">{"<i>نص</i>"}</span><span>مائل</span>
+              <span className="text-primary">{"<br>"}</span><span>سطر جديد</span>
             </div>
           </CardContent>
         </Card>
