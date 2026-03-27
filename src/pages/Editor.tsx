@@ -242,7 +242,32 @@ const Editor = () => {
       await editor.handleDropImport(e.dataTransfer);
     }
   }, [editor.handleDropImport]);
-  // Lazy-compute counts only when explicitly needed (not on every render)
+  // SOC-specific Arabic.json export
+  const handleExportSocArabicJson = React.useCallback(() => {
+    if (!editor.state) return;
+    const output: Record<string, unknown> = {
+      type: "language",
+      name: "Arabic",
+      code: "ar",
+      nativeName: "العربية",
+      keys: editor.state.entries.map(e => {
+        const key = `${e.msbtFile}:${e.index}`;
+        const translated = editor.state!.translations[key]?.trim();
+        return { [e.label]: translated || e.original };
+      }),
+    };
+    const json = JSON.stringify(output, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "Arabic.json";
+    a.click();
+    URL.revokeObjectURL(url);
+    import("@/hooks/use-toast").then(({ toast }) => toast({ title: "تم تصدير Arabic.json ✅" }));
+  }, [editor.state]);
+
+
   const [showToolPanels, setShowToolPanels] = React.useState(false);
 
   // Per-file translation counts for file filter dropdowns
