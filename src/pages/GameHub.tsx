@@ -10,6 +10,7 @@ import JSZip from "jszip";
 import heroBgFe from "@/assets/fe-hero-bg.jpg";
 import heroBgLm from "@/assets/lm2-hero-bg.jpg";
 import heroBgSoc from "@/assets/soc-hero-bg.jpg";
+import heroBgYgo from "@/assets/ygo-hero-bg.jpg";
 
 interface CobaltParsedEntry { label: string; text: string; lineIndex: number; lineCount: number; }
 interface CobaltParsedFile { name: string; entries: CobaltParsedEntry[]; rawLines: string[]; hasLabels: boolean; }
