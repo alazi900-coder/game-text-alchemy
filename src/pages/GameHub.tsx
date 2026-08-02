@@ -108,6 +108,17 @@ const games = [
     border: "border-[hsl(35,60%,40%)]/30",
     bg: "bg-[hsl(35,60%,40%)]/10",
   },
+  {
+    id: "yugioh-tagforce",
+    title: "Yu-Gi-Oh! ARC-V Tag Force Special",
+    titleAr: "يوغي يو آرك-في تاغ فورس",
+    desc: "ملفات نصوص ثنائية (PSP) — كروت، حوارات، واجهة",
+    image: heroBgYgo,
+    href: "/yugioh-tagforce",
+    accent: "from-[hsl(280,80%,60%)] to-[hsl(45,90%,55%)]",
+    border: "border-[hsl(280,60%,50%)]/30",
+    bg: "bg-[hsl(280,60%,50%)]/10",
+  },
 ];
 
 export default function GameHub() {

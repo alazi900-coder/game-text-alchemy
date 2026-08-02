@@ -106,7 +106,7 @@ export default function YugiohTagForce() {
         }
 
         const { data, written, truncated } = rebuildTagForceBinary(await file.arrayBuffer(), strings, byOffset);
-        const url = URL.createObjectURL(new Blob([data], { type: "application/octet-stream" }));
+        const url = URL.createObjectURL(new Blob([data.slice().buffer as ArrayBuffer], { type: "application/octet-stream" }));
         const a = document.createElement("a");
         a.href = url;
         a.download = file.name.replace(/(\.[^.]+)?$/, "_ar$1");
