@@ -153,9 +153,9 @@ export default function YugiohTagForce() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground font-body">
-              ارفع ملف النصوص المستخرج من اللعبة (‎.bin‎ أو أي ملف ثنائي) أو ملف ‎.txt‎ بصيغة <code>offset=text</code>.
+              ارفع مورد النصوص المفكوك والمستخرج من نسخة اللعبة بعد تطبيق الباتش، أو ملف ‎.txt‎ بصيغة <code>offset=text</code>. لا ترفع ملف ‎XDELTA‎ نفسه.
             </p>
-            <input ref={fileRef} type="file" className="hidden" onChange={handleFile} />
+            <input ref={fileRef} type="file" accept=".bin,.dat,.txt,.csv,.json" className="hidden" onChange={handleFile} />
             <Button onClick={() => fileRef.current?.click()} disabled={loading} className="w-full font-body">
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} اختر ملف النصوص
             </Button>
@@ -182,7 +182,7 @@ export default function YugiohTagForce() {
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />} بناء الملف المعرّب
             </Button>
             <p className="text-xs text-muted-foreground font-body">
-              ملاحظة: ملفات ‎.xdelta‎ مضغوطة ولا يمكن قراءة نصوصها مباشرة — طبّق الباتش على اللعبة أولاً ثم استخرج ملف النصوص منها.
+              ملف ‎XDELTA‎ ليس أرشيفاً؛ إنه فرق ثنائي لا يعمل دون ملف اللعبة الأصلي المطابق. طبّقه أولاً، ثم استخرج مورد النصوص من الناتج.
             </p>
           </CardContent>
         </Card>

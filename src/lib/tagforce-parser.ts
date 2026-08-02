@@ -1,9 +1,9 @@
 /**
  * Yu-Gi-Oh! ARC-V Tag Force Special (PSP) text support.
  *
- * The game stores its texts as null-terminated strings inside binary files
- * (DATA.BIN / *.bin blobs extracted from the ISO/CPK, or files produced by an
- * xdelta patch). We locate readable strings, remember their absolute offset and
+ * This module only accepts already extracted, uncompressed text resources.
+ * XDELTA/VCDIFF patches are deltas, not archives, and cannot be decoded without
+ * the exact original game image. We locate readable strings, remember their absolute offset and
  * the exact byte budget available, so a translation can be written back
  * in-place without shifting any pointer.
  */
@@ -17,6 +17,38 @@ export interface TagForceString {
 }
 
 const MIN_LEN = 4;
+
+export class UnsupportedTagForceFileError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "UnsupportedTagForceFileError";
+  }
+}
+
+function hasBytes(data: Uint8Array, offset: number, bytes: number[]): boolean {
+  return bytes.every((byte, index) => data[offset + index] === byte);
+}
+
+/** Reject containers that a byte-run scanner must never treat as game text. */
+function assertExtractedTextResource(data: Uint8Array): void {
+  // RFC 3284 VCDIFF magic: D6 C3 C4 00. XDELTA3 emits this container.
+  if (data.length >= 4 && hasBytes(data, 0, [0xd6, 0xc3, 0xc4, 0x00])) {
+    throw new UnsupportedTagForceFileError(
+      "هذا ملف XDELTA/VCDIFF وليس ملف نصوص. يجب تطبيق الباتش على نسخة اللعبة الأصلية المطابقة أولاً، ثم استخراج ملفات النصوص من صورة اللعبة الناتجة.",
+    );
+  }
+
+  // Common compressed/archive signatures. Scanning these produces false text.
+  const isZip = data.length >= 4 && hasBytes(data, 0, [0x50, 0x4b, 0x03, 0x04]);
+  const isGzip = data.length >= 2 && hasBytes(data, 0, [0x1f, 0x8b]);
+  const isSevenZip = data.length >= 6 && hasBytes(data, 0, [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c]);
+  const isIso = data.length > 0x8006 && new TextDecoder("ascii").decode(data.subarray(0x8001, 0x8006)) === "CD001";
+  if (isZip || isGzip || isSevenZip || isIso) {
+    throw new UnsupportedTagForceFileError(
+      "الملف حاوية أو ملف مضغوط وليس مورد نصوص مستخرجاً. استخرج محتوياته أولاً ثم اختر ملف النصوص الداخلي.",
+    );
+  }
+}
 
 function isPrintableAscii(b: number): boolean {
   return b === 0x09 || b === 0x0a || b === 0x0d || (b >= 0x20 && b <= 0x7e);
@@ -79,6 +111,7 @@ function looksLikeText(s: string): boolean {
  */
 export function parseTagForceBinary(buffer: ArrayBuffer): TagForceString[] {
   const data = new Uint8Array(buffer);
+  assertExtractedTextResource(data);
   const utf8 = new TextDecoder("utf-8", { fatal: true });
 
   const out: TagForceString[] = [];
