@@ -139,7 +139,7 @@ export default function YugiohTagForce() {
           <Badge variant="secondary" className="mb-3 font-body">PSP · Tag Force Special</Badge>
           <h1 className="text-3xl md:text-4xl font-display font-bold mb-3">Yu-Gi-Oh! ARC-V Tag Force Special</h1>
           <p className="text-muted-foreground font-body max-w-2xl">
-            استخراج نصوص اللعبة من الملفات الثنائية، ترجمتها في المحرر الرئيسي، ثم إعادة حقنها في نفس الملف بنفس الأحجام دون كسر المؤشرات.
+            استخراج نصوص اللعبة من الملفات الثنائية (يدعم فك ضغط Zlib تلقائياً)، ترجمتها في المحرر الرئيسي، ثم إعادة حقنها في نفس الملف بنفس الأحجام دون كسر المؤشرات.
           </p>
         </div>
       </section>
