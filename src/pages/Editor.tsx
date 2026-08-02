@@ -2136,7 +2136,7 @@ const Editor = () => {
             gameType === "songs-of-conquest"
               ? () => { editor.setShowBuildConfirm(false); handleExportSocArabicJson(); }
               : gameType === "yugioh-tagforce"
-                ? () => { editor.setShowBuildConfirm(false); navigate("/yugioh-tagforce"); }
+                ? () => { editor.setShowBuildConfirm(false); window.location.href = "/yugioh-tagforce"; }
                 : editor.handleBuild
           }
           building={editor.building}
