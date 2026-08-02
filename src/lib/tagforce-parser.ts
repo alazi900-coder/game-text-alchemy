@@ -80,12 +80,6 @@ function looksLikeText(s: string): boolean {
 export function parseTagForceBinary(buffer: ArrayBuffer): TagForceString[] {
   const data = new Uint8Array(buffer);
   const utf8 = new TextDecoder("utf-8", { fatal: true });
-  let sjis: TextDecoder | null = null;
-  try {
-    sjis = new TextDecoder("shift_jis");
-  } catch {
-    sjis = null;
-  }
 
   const out: TagForceString[] = [];
   const seen = new Set<string>();
