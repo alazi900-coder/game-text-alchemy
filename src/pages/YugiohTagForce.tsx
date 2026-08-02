@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, FileDown, Loader2, ArrowLeft, Package } from "lucide-react";
+import { Upload, FileDown, Loader2, ArrowLeft, Package, Info } from "lucide-react";
 import heroBg from "@/assets/ygo-hero-bg.jpg";
 import { idbGet, idbSet } from "@/lib/idb-storage";
 import type { ExtractedEntry } from "@/components/editor/types";
@@ -37,7 +37,7 @@ export default function YugiohTagForce() {
   const loadIntoEditor = useCallback(
     async (strings: TagForceString[], fileName: string) => {
       if (strings.length === 0) {
-        toast({ title: "لم يتم العثور على نصوص", description: "تأكد أن الملف يحتوي على نصوص اللعبة", variant: "destructive" });
+        toast({ title: "لم يتم العثور على نصوص", description: "تأكد أن الملف يحتوي على نصوص اللعبة (UTF-8 أو Shift-JIS)", variant: "destructive" });
         return;
       }
 
@@ -60,7 +60,7 @@ export default function YugiohTagForce() {
       await idbSet(IDB_FILENAME, fileName);
       setSavedCount(strings.length);
 
-      toast({ title: `تم استيراد ${strings.length} نص`, description: "جارٍ فتح المحرر..." });
+      toast({ title: `تم استخراج ${strings.length} نص`, description: "جارٍ فتح المحرر..." });
       navigate("/editor");
     },
     [navigate, toast],
@@ -73,10 +73,11 @@ export default function YugiohTagForce() {
       setLoading(true);
       try {
         const isText = /\.(txt|csv|json)$/i.test(file.name);
-        const strings = isText ? parseTagForceTxt(await file.text()) : parseTagForceBinary(await file.arrayBuffer());
+        const data = isText ? await file.text() : await file.arrayBuffer();
+        const strings = isText ? parseTagForceTxt(data as string) : parseTagForceBinary(data as ArrayBuffer);
         await loadIntoEditor(strings, file.name);
       } catch (err) {
-        toast({ title: "خطأ في القراءة", description: String(err), variant: "destructive" });
+        toast({ title: "خطأ في المعالجة", description: String(err), variant: "destructive" });
       } finally {
         setLoading(false);
         e.target.value = "";
@@ -85,7 +86,6 @@ export default function YugiohTagForce() {
     [loadIntoEditor, toast],
   );
 
-  /** Re-inject the translations saved in the editor back into the original binary */
   const handleRebuild = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -106,7 +106,7 @@ export default function YugiohTagForce() {
         }
 
         const { data, written, truncated } = rebuildTagForceBinary(await file.arrayBuffer(), strings, byOffset);
-        const url = URL.createObjectURL(new Blob([data.slice().buffer as ArrayBuffer], { type: "application/octet-stream" }));
+        const url = URL.createObjectURL(new Blob([data.buffer], { type: "application/octet-stream" }));
         const a = document.createElement("a");
         a.href = url;
         a.download = file.name.replace(/(\.[^.]+)?$/, "_ar$1");
@@ -115,7 +115,7 @@ export default function YugiohTagForce() {
 
         toast({
           title: `تم حقن ${written} نص`,
-          description: truncated > 0 ? `${truncated} نص تم اقتطاعه لتجاوز الحد المسموح` : "بدون اقتطاع ✓",
+          description: truncated > 0 ? `${truncated} نص تم اقتطاعه لتجاوز الحد المسموح` : "تم الحقن بنجاح ✓",
         });
       } catch (err) {
         toast({ title: "خطأ في البناء", description: String(err), variant: "destructive" });
@@ -130,7 +130,7 @@ export default function YugiohTagForce() {
   return (
     <main className="min-h-screen bg-background" dir="rtl">
       <section className="relative overflow-hidden border-b border-border">
-        <img src={heroBg} alt="ساحة نزال Yu-Gi-Oh" width={1536} height={768} className="absolute inset-0 w-full h-full object-cover opacity-30" />
+        <img src={heroBg} alt="Yu-Gi-Oh" width={1536} height={768} className="absolute inset-0 w-full h-full object-cover opacity-30" />
         <div className="absolute inset-0 bg-gradient-to-t from-background via-background/80 to-background/40" />
         <div className="relative container mx-auto px-4 py-12">
           <Link to="/" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground mb-6">
@@ -139,7 +139,7 @@ export default function YugiohTagForce() {
           <Badge variant="secondary" className="mb-3 font-body">PSP · Tag Force Special</Badge>
           <h1 className="text-3xl md:text-4xl font-display font-bold mb-3">Yu-Gi-Oh! ARC-V Tag Force Special</h1>
           <p className="text-muted-foreground font-body max-w-2xl">
-            استخراج نصوص اللعبة من الملفات الثنائية (يدعم فك ضغط Zlib تلقائياً)، ترجمتها في المحرر الرئيسي، ثم إعادة حقنها في نفس الملف بنفس الأحجام دون كسر المؤشرات.
+            أداة استخراج وحقن النصوص للملفات الثنائية. تدعم فك ضغط Zlib تلقائياً والتعرف على نصوص Shift-JIS اليابانية.
           </p>
         </div>
       </section>
@@ -148,16 +148,27 @@ export default function YugiohTagForce() {
         <Card>
           <CardHeader>
             <CardTitle className="font-display text-lg flex items-center gap-2">
-              <Upload className="w-5 h-5 text-primary" /> 1 — استيراد النصوص
+              <Upload className="w-5 h-5 text-primary" /> 1 — استيراد ونحت النصوص
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground font-body">
-              ارفع مورد النصوص المفكوك والمستخرج من نسخة اللعبة بعد تطبيق الباتش، أو ملف ‎.txt‎ بصيغة <code>offset=text</code>. لا ترفع ملف ‎XDELTA‎ نفسه.
+              ارفع ملف ‎.bin‎ أو ‎DATA.BIN‎. ستقوم الأداة بمسح الملف بحثاً عن النصوص القابلة للترجمة.
             </p>
-            <input ref={fileRef} type="file" accept=".bin,.dat,.txt,.csv,.json" className="hidden" onChange={handleFile} />
+            <div className="bg-muted/50 p-3 rounded-lg flex gap-3 text-xs text-muted-foreground border border-border">
+              <Info className="w-4 h-4 shrink-0 text-primary" />
+              <div>
+                <p className="font-bold mb-1">تلميحات المعالجة:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>يدعم فك الضغط التلقائي إذا وجد ترويسة Zlib.</li>
+                  <li>يدعم نصوص Shift-JIS و UTF-8.</li>
+                  <li>يتجاهل البيانات الثنائية غير النصية لتقليل "الضجيج".</li>
+                </ul>
+              </div>
+            </div>
+            <input ref={fileRef} type="file" className="hidden" onChange={handleFile} />
             <Button onClick={() => fileRef.current?.click()} disabled={loading} className="w-full font-body">
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} اختر ملف النصوص
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />} اختر ملف البيانات
             </Button>
             {savedCount > 0 && (
               <Button variant="outline" className="w-full font-body" onClick={() => navigate("/editor")}>
@@ -175,14 +186,14 @@ export default function YugiohTagForce() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-muted-foreground font-body">
-              بعد الترجمة، ارفع الملف الأصلي نفسه مرة أخرى ليُحقن فيه النص العربي ويُحمّل الملف المعرّب جاهزاً للاستخدام.
+              بعد الترجمة، ارفع الملف الأصلي نفسه مرة أخرى ليُحقن فيه النص العربي في نفس المواقع الأصلية.
             </p>
             <input ref={originalRef} type="file" className="hidden" onChange={handleRebuild} />
             <Button variant="secondary" onClick={() => originalRef.current?.click()} disabled={loading || savedCount === 0} className="w-full font-body">
               {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileDown className="w-4 h-4" />} بناء الملف المعرّب
             </Button>
-            <p className="text-xs text-muted-foreground font-body">
-              ملف ‎XDELTA‎ ليس أرشيفاً؛ إنه فرق ثنائي لا يعمل دون ملف اللعبة الأصلي المطابق. طبّقه أولاً، ثم استخرج مورد النصوص من الناتج.
+            <p className="text-xs text-muted-foreground font-body bg-orange-500/10 p-2 rounded border border-orange-500/20">
+              تنبيه: ملفات ‎.xdelta‎ هي ملفات "باتش" (فرق) وليست ملفات بيانات. طبّق الباتش على اللعبة أولاً، ثم ارفع ملف الـ BIN الناتج هنا.
             </p>
           </CardContent>
         </Card>
