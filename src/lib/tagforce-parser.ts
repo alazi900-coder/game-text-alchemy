@@ -1,3 +1,5 @@
+import pako from "pako";
+
 /**
  * Yu-Gi-Oh! ARC-V Tag Force Special (PSP) text support.
  *
@@ -18,68 +20,76 @@ export interface TagForceString {
 
 const MIN_LEN = 4;
 
-function isPrintableAscii(b: number): boolean {
-  return b === 0x09 || b === 0x0a || b === 0x0d || (b >= 0x20 && b <= 0x7e);
+/**
+ * Allow printable ASCII and non-control characters (which could be UTF-8 or Shift-JIS)
+ */
+function isPrintable(b: number): boolean {
+  // Allow common whitespace: TAB, LF, CR
+  if (b === 0x09 || b === 0x0a || b === 0x0d) return true;
+  // Reject control characters 0x00-0x1F and 0x7F
+  if (b < 0x20 || b === 0x7f) return false;
+  // Allow everything else (0x80-0xFF) as they might be part of Multi-byte encodings
+  return true;
 }
 
 const COMMON_WORDS = /\b(the|and|you|your|are|for|with|this|that|card|cards|deck|duel|monster|monsters|spell|trap|life|points|player|turn|attack|defense|effect|field|hand|graveyard|summon|will|can|not|from|have|has|when|then|all|one|two|new|game|save|load|menu|yes|no|ok|exit|start|select|option|options|settings|press|button|please|error|data|memory|stick|continue|next|back|first|second|end|phase|draw|battle|main|win|lose|damage|target|activate|destroy|special|normal|level|type|name|point|shop|pack|buy|sell|tag|force|arc|duelist|reward|story|mode|free|use|get|see|now|out|off|on|it|is|to|of|in|a|i)\b/i;
 
 /**
- * Heuristic: does the decoded chunk look like real, readable English game text?
- * The binaries are full of pointer tables, opcodes and card-id blobs that happen
- * to decode as printable bytes, so the filter has to be strict.
+ * Heuristic: does the decoded chunk look like real, readable game text?
+ * Binary files are full of pointer tables and opcodes that can decode as
+ * printable bytes, so we filter strictly.
  */
 function looksLikeText(s: string): boolean {
   const t = s.trim();
-  if (t.length < MIN_LEN || t.length > 512) return false;
+  if (t.length < MIN_LEN || t.length > 1024) return false;
 
-  // English-only: reject anything with non-ASCII (mojibake / CJK noise)
-  if (/[^\x09\x0a\x0d\x20-\x7e]/.test(t)) return false;
+  // Reject strings that are mostly numbers or punctuation (likely not text)
+  const letters = (t.match(/[\p{L}]/gu) || []).length;
+  if (letters / t.length < 0.4 && t.length > 10) return false;
 
-  const letters = (t.match(/[A-Za-z]/g) || []).length;
-  if (letters < 3) return false;
-  // must be mostly letters/spaces/punctuation, not symbol soup
-  if (letters / t.length < 0.6) return false;
+  // Reject repeated-character padding (e.g. "aaaaaa", "@@@@")
+  if (/(.)\1{5,}/.test(t)) return false;
 
-  // needs at least one vowel-bearing word
-  if (!/[AaEeIiOoUuYy]/.test(t)) return false;
+  // Reject common binary patterns: identifiers like "ASSET_01_BG" are often mixed with text
+  // but if it's ONLY uppercase/underscore/digits and long, it's likely an internal ID
+  if (t.length > 8 && /^[A-Z0-9_]+$/.test(t) && !COMMON_WORDS.test(t)) return false;
+  
+  // Reject common file paths/extensions if they are the ONLY thing
+  if (/\.(bin|dat|tex|gim|at3|png|pmf|prx|elf|txt|vag|res)$/i.test(t) && !t.includes(" ")) return false;
 
-  // reject long uppercase/underscore identifiers & paths (asset names, not text)
-  if (/^[A-Z0-9_./\\-]+$/.test(t)) return false;
-  if (/[\\/][A-Za-z0-9_.-]+\.(bin|dat|tex|gim|at3|png|pmf|prx|elf|txt)/i.test(t)) return false;
-  if (/^[a-z0-9_]+$/.test(t) && !/[aeiou]{1}/.test(t)) return false;
-
-  // reject repeated-character padding (e.g. "aaaaaa", "@@@@")
-  if (/(.)\1{4,}/.test(t)) return false;
-
-  const words = t.split(/\s+/).filter(Boolean);
-  const hasLongWord = words.some((w) => /^[A-Za-z][A-Za-z'’.,!?-]{2,}$/.test(w));
-  if (!hasLongWord) return false;
-
-  // single word must be a plausible word (has a vowel and mixed/normal casing)
-  if (words.length === 1) {
-    const w = words[0];
-    if (w.length < 3) return false;
-    if (!/^[A-Za-z][A-Za-z'’.,!?-]*$/.test(w)) return false;
-    if (!/[aeiouyAEIOUY]/.test(w)) return false;
-    // require it to look like a real word or a known keyword
-    if (!COMMON_WORDS.test(w) && !/^[A-Z]?[a-z]+$/.test(w)) return false;
-    return true;
+  // If it's pure ASCII, check for English-like structure or common words
+  if (/^[\x20-\x7e\s]+$/.test(t)) {
+    // English-specific heuristics
+    const words = t.split(/\s+/).filter(Boolean);
+    if (words.length === 1) {
+      const w = words[0];
+      if (w.length < 3) return false;
+      // Single word should have at least one vowel
+      if (!/[aeiouyAEIOUY]/.test(w) && !/^[A-Z0-9]+$/.test(w)) return false;
+    }
   }
 
-  // multi-word: accept sentences/labels containing at least one common word,
-  // or proper sentence-like punctuation
-  if (COMMON_WORDS.test(t)) return true;
-  return /[.!?:,"']/.test(t) && words.length >= 3;
+  return true;
 }
 
 /**
- * Extract null-terminated strings from a Tag Force binary file.
- * Tries UTF-8 first, falls back to Shift-JIS when the bytes are not valid UTF-8.
+ * Extract strings from binary. Supports Zlib decompression and Shift-JIS fallback.
  */
 export function parseTagForceBinary(buffer: ArrayBuffer): TagForceString[] {
-  const data = new Uint8Array(buffer);
+  let rawData = new Uint8Array(buffer);
+  
+  // --- Decompression Layer ---
+  // Detect Zlib (0x78 + 0x01/0x9C/0xDA)
+  if (rawData.length > 4 && rawData[0] === 0x78 && (rawData[1] === 0x01 || rawData[1] === 0x9C || rawData[1] === 0xDA)) {
+    try {
+      rawData = pako.inflate(rawData);
+    } catch (e) {
+      console.warn("Found Zlib header but decompression failed - reading as raw", e);
+    }
+  }
+
   const utf8 = new TextDecoder("utf-8", { fatal: true });
+  const sjis = new TextDecoder("shift-jis", { fatal: true });
 
   const out: TagForceString[] = [];
   const seen = new Set<string>();
@@ -88,18 +98,29 @@ export function parseTagForceBinary(buffer: ArrayBuffer): TagForceString[] {
   const flush = (end: number) => {
     if (start < 0) return;
     const len = end - start;
-    if (len >= MIN_LEN && len <= 512) {
-      const slice = data.subarray(start, end);
+    if (len >= MIN_LEN && len <= 1024) {
+      const slice = rawData.subarray(start, end);
       let text: string | null = null;
+      
+      // Try UTF-8 first
       try {
         text = utf8.decode(slice);
       } catch {
-        text = null;
+        // Fallback to Shift-JIS (Common for Japanese PSP games)
+        try {
+          text = sjis.decode(slice);
+        } catch {
+          text = null;
+        }
       }
+
       if (text && looksLikeText(text)) {
         const norm = text.trim();
-        if (!seen.has(norm + ":" + len)) {
-          seen.add(norm + ":" + len);
+        // Use normalized text + length as uniqueness key to allow same text at different offsets
+        // but avoid immediate duplicates from carver noise
+        const key = `${norm}:${len}`;
+        if (!seen.has(key)) {
+          seen.add(key);
           out.push({ offset: start, maxBytes: len, text });
         }
       }
@@ -107,28 +128,28 @@ export function parseTagForceBinary(buffer: ArrayBuffer): TagForceString[] {
     start = -1;
   };
 
-  for (let i = 0; i < data.length; i++) {
-    const b = data[i];
-    // English-only extraction: printable ASCII runs
-    if (isPrintableAscii(b)) {
+  for (let i = 0; i < rawData.length; i++) {
+    const b = rawData[i];
+    if (isPrintable(b)) {
       if (start < 0) start = i;
     } else {
       flush(i);
     }
   }
-  flush(data.length);
+  flush(rawData.length);
 
   return out;
 }
 
 /**
- * Parse a plain text dump: `offset=text`, `id=text` or one entry per line.
+ * Parse a plain text dump: `offset=text` or `id=text`.
  */
 export function parseTagForceTxt(raw: string): TagForceString[] {
   const out: TagForceString[] = [];
   const lines = raw.split(/\r?\n/);
   lines.forEach((line, i) => {
-    if (!line.trim() || line.startsWith("#") || line.startsWith("//")) return;
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("//")) return;
     const m = line.match(/^\s*(0x[0-9a-fA-F]+|\d+)\s*=\s*(.*)$/);
     if (m) {
       const text = m[2];
@@ -144,19 +165,20 @@ export function parseTagForceTxt(raw: string): TagForceString[] {
   return out;
 }
 
-/** Group strings into pseudo-files so the editor's category filters stay usable. */
 export function categorizeTagForce(s: TagForceString): string {
   const t = s.text;
   if (/\[[^\]]+\]/.test(t)) return "ygo-tags";
-  if (/effect|damage|monster|spell|trap|deck|card/i.test(t)) return "ygo-cards";
-  if (/menu|option|setting|save|load|exit|yes|no/i.test(t)) return "ygo-ui";
-  if (t.length > 60) return "ygo-dialogue";
+  if (/effect|damage|monster|spell|trap|deck|card|召唤|特殊|魔法|罠|カード/i.test(t)) return "ygo-cards";
+  if (/menu|option|setting|save|load|exit|yes|no|はい|いいえ|セーブ|ロード/i.test(t)) return "ygo-ui";
+  if (t.length > 60 || /[。！？…]$/.test(t)) return "ygo-dialogue";
   return "ygo-misc";
 }
 
 /**
- * Write translations back into the original binary, in place.
- * Strings are truncated to their byte budget and padded with 0x00.
+ * Write translations back into the original binary.
+ * NOTE: If the file was decompressed during import, re-injection into the 
+ * ORIGINAL (compressed) file is not possible without re-compression.
+ * This function currently writes to the provided buffer (uncompressed).
  */
 export function rebuildTagForceBinary(
   original: ArrayBuffer,
@@ -171,13 +193,22 @@ export function rebuildTagForceBinary(
   for (const s of strings) {
     const tr = translations[s.offset];
     if (!tr || !tr.trim() || tr === s.text) continue;
+    
+    // Check if the original string was Shift-JIS or UTF-8
+    // For simplicity, we write back UTF-8 if the game supports it, 
+    // but Tag Force often needs Shift-JIS for Japanese text.
+    // However, for an Arabic translation, UTF-8 is usually required 
+    // unless the game font was hacked to replace Shift-JIS chars.
     let bytes = enc.encode(tr);
     if (bytes.length > s.maxBytes) {
       bytes = bytes.subarray(0, s.maxBytes);
       truncated++;
     }
     out.set(bytes, s.offset);
-    for (let i = s.offset + bytes.length; i < s.offset + s.maxBytes; i++) out[i] = 0;
+    // Null-terminate the rest of the budget
+    for (let i = s.offset + bytes.length; i < s.offset + s.maxBytes; i++) {
+      out[i] = 0;
+    }
     written++;
   }
 
