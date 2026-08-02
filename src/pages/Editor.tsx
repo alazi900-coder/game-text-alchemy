@@ -2132,7 +2132,13 @@ const Editor = () => {
           open={editor.showBuildConfirm}
           onOpenChange={editor.setShowBuildConfirm}
           preview={editor.buildPreview}
-          onConfirm={gameType === "songs-of-conquest" ? () => { editor.setShowBuildConfirm(false); handleExportSocArabicJson(); } : editor.handleBuild}
+          onConfirm={
+            gameType === "songs-of-conquest"
+              ? () => { editor.setShowBuildConfirm(false); handleExportSocArabicJson(); }
+              : gameType === "yugioh-tagforce"
+                ? () => { editor.setShowBuildConfirm(false); navigate("/yugioh-tagforce"); }
+                : editor.handleBuild
+          }
           building={editor.building}
         />
         {/* Cobalt build choice dialog */}
