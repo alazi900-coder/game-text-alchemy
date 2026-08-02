@@ -23,6 +23,7 @@ const LuigiMansion = lazy(() => import("./pages/LuigiMansion"));
 const NlocProcess = lazy(() => import("./pages/NlocProcess"));
 const FontEditor = lazy(() => import("./pages/FontEditor"));
 const SongsOfConquest = lazy(() => import("./pages/SongsOfConquest"));
+const YugiohTagForce = lazy(() => import("./pages/YugiohTagForce"));
 
 const PageLoader = () => (
   <div className="min-h-screen flex items-center justify-center bg-background">
@@ -59,6 +60,7 @@ const App = () => (
                 <Route path="/luigis-mansion/fonts" element={<ErrorBoundary fallbackTitle="خطأ في محرر الخطوط"><FontEditor /></ErrorBoundary>} />
                 <Route path="/cobalt" element={<ErrorBoundary fallbackTitle="خطأ في المحرر"><Editor /></ErrorBoundary>} />
                 <Route path="/songs-of-conquest" element={<ErrorBoundary fallbackTitle="خطأ في محرر Songs of Conquest"><SongsOfConquest /></ErrorBoundary>} />
+                <Route path="/yugioh-tagforce" element={<ErrorBoundary fallbackTitle="خطأ في محرر Yu-Gi-Oh"><YugiohTagForce /></ErrorBoundary>} />
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </Suspense>

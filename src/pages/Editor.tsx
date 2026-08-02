@@ -91,8 +91,9 @@ import ToolHelpDialog, { ToolType } from "@/components/editor/ToolHelpDialog";
 import { countUniqueMsbtFiles } from "@/lib/msbt-key-normalizer";
 
 import socHeroBg from "@/assets/soc-hero-bg.jpg";
+import ygoHeroBg from "@/assets/ygo-hero-bg.jpg";
 
-type GameId = "fire-emblem" | "songs-of-conquest";
+type GameId = "fire-emblem" | "songs-of-conquest" | "yugioh-tagforce";
 
 interface GameConfig {
   id: GameId;
@@ -122,6 +123,15 @@ const GAME_CONFIGS: Record<GameId, GameConfig> = {
     processPath: "/songs-of-conquest",
     fileLabel: "مفاتيح JSON",
     fileFormat: "JSON",
+  },
+  "yugioh-tagforce": {
+    id: "yugioh-tagforce",
+    title: "Yu-Gi-Oh! ARC-V Tag Force Special",
+    emoji: "🃏",
+    heroBg: ygoHeroBg,
+    processPath: "/yugioh-tagforce",
+    fileLabel: "نصوص ثنائية",
+    fileFormat: "BIN",
   },
 };
 
@@ -2122,7 +2132,13 @@ const Editor = () => {
           open={editor.showBuildConfirm}
           onOpenChange={editor.setShowBuildConfirm}
           preview={editor.buildPreview}
-          onConfirm={gameType === "songs-of-conquest" ? () => { editor.setShowBuildConfirm(false); handleExportSocArabicJson(); } : editor.handleBuild}
+          onConfirm={
+            gameType === "songs-of-conquest"
+              ? () => { editor.setShowBuildConfirm(false); handleExportSocArabicJson(); }
+              : gameType === "yugioh-tagforce"
+                ? () => { editor.setShowBuildConfirm(false); window.location.href = "/yugioh-tagforce"; }
+                : editor.handleBuild
+          }
           building={editor.building}
         />
         {/* Cobalt build choice dialog */}

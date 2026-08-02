@@ -10,6 +10,7 @@ import JSZip from "jszip";
 import heroBgFe from "@/assets/fe-hero-bg.jpg";
 import heroBgLm from "@/assets/lm2-hero-bg.jpg";
 import heroBgSoc from "@/assets/soc-hero-bg.jpg";
+import heroBgYgo from "@/assets/ygo-hero-bg.jpg";
 
 interface CobaltParsedEntry { label: string; text: string; lineIndex: number; lineCount: number; }
 interface CobaltParsedFile { name: string; entries: CobaltParsedEntry[]; rawLines: string[]; hasLabels: boolean; }
@@ -107,6 +108,17 @@ const games = [
     accent: "from-[hsl(35,80%,50%)] to-[hsl(0,70%,50%)]",
     border: "border-[hsl(35,60%,40%)]/30",
     bg: "bg-[hsl(35,60%,40%)]/10",
+  },
+  {
+    id: "yugioh-tagforce",
+    title: "Yu-Gi-Oh! ARC-V Tag Force Special",
+    titleAr: "يوغي يو آرك-في تاغ فورس",
+    desc: "ملفات نصوص ثنائية (PSP) — كروت، حوارات، واجهة",
+    image: heroBgYgo,
+    href: "/yugioh-tagforce",
+    accent: "from-[hsl(280,80%,60%)] to-[hsl(45,90%,55%)]",
+    border: "border-[hsl(280,60%,50%)]/30",
+    bg: "bg-[hsl(280,60%,50%)]/10",
   },
 ];
 
