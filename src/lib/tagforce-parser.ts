@@ -16,17 +16,61 @@ export interface TagForceString {
   text: string;
 }
 
-const MIN_LEN = 3;
+const MIN_LEN = 4;
 
 function isPrintableAscii(b: number): boolean {
   return b === 0x09 || b === 0x0a || b === 0x0d || (b >= 0x20 && b <= 0x7e);
 }
 
-/** Heuristic: does the decoded chunk look like real game text? */
+const COMMON_WORDS = /\b(the|and|you|your|are|for|with|this|that|card|cards|deck|duel|monster|monsters|spell|trap|life|points|player|turn|attack|defense|effect|field|hand|graveyard|summon|will|can|not|from|have|has|when|then|all|one|two|new|game|save|load|menu|yes|no|ok|exit|start|select|option|options|settings|press|button|please|error|data|memory|stick|continue|next|back|first|second|end|phase|draw|battle|main|win|lose|damage|target|activate|destroy|special|normal|level|type|name|point|shop|pack|buy|sell|tag|force|arc|duelist|reward|story|mode|free|use|get|see|now|out|off|on|it|is|to|of|in|a|i)\b/i;
+
+/**
+ * Heuristic: does the decoded chunk look like real, readable English game text?
+ * The binaries are full of pointer tables, opcodes and card-id blobs that happen
+ * to decode as printable bytes, so the filter has to be strict.
+ */
 function looksLikeText(s: string): boolean {
-  if (s.trim().length < MIN_LEN) return false;
-  const letters = s.replace(/[^A-Za-z\u3000-\u9fff\uff00-\uffef]/g, "").length;
-  return letters / s.length >= 0.4;
+  const t = s.trim();
+  if (t.length < MIN_LEN || t.length > 512) return false;
+
+  // English-only: reject anything with non-ASCII (mojibake / CJK noise)
+  if (/[^\x09\x0a\x0d\x20-\x7e]/.test(t)) return false;
+
+  const letters = (t.match(/[A-Za-z]/g) || []).length;
+  if (letters < 3) return false;
+  // must be mostly letters/spaces/punctuation, not symbol soup
+  if (letters / t.length < 0.6) return false;
+
+  // needs at least one vowel-bearing word
+  if (!/[AaEeIiOoUuYy]/.test(t)) return false;
+
+  // reject long uppercase/underscore identifiers & paths (asset names, not text)
+  if (/^[A-Z0-9_./\\-]+$/.test(t)) return false;
+  if (/[\\/][A-Za-z0-9_.-]+\.(bin|dat|tex|gim|at3|png|pmf|prx|elf|txt)/i.test(t)) return false;
+  if (/^[a-z0-9_]+$/.test(t) && !/[aeiou]{1}/.test(t)) return false;
+
+  // reject repeated-character padding (e.g. "aaaaaa", "@@@@")
+  if (/(.)\1{4,}/.test(t)) return false;
+
+  const words = t.split(/\s+/).filter(Boolean);
+  const hasLongWord = words.some((w) => /^[A-Za-z][A-Za-z'’.,!?-]{2,}$/.test(w));
+  if (!hasLongWord) return false;
+
+  // single word must be a plausible word (has a vowel and mixed/normal casing)
+  if (words.length === 1) {
+    const w = words[0];
+    if (w.length < 3) return false;
+    if (!/^[A-Za-z][A-Za-z'’.,!?-]*$/.test(w)) return false;
+    if (!/[aeiouyAEIOUY]/.test(w)) return false;
+    // require it to look like a real word or a known keyword
+    if (!COMMON_WORDS.test(w) && !/^[A-Z]?[a-z]+$/.test(w)) return false;
+    return true;
+  }
+
+  // multi-word: accept sentences/labels containing at least one common word,
+  // or proper sentence-like punctuation
+  if (COMMON_WORDS.test(t)) return true;
+  return /[.!?:,"']/.test(t) && words.length >= 3;
 }
 
 /**
@@ -36,29 +80,28 @@ function looksLikeText(s: string): boolean {
 export function parseTagForceBinary(buffer: ArrayBuffer): TagForceString[] {
   const data = new Uint8Array(buffer);
   const utf8 = new TextDecoder("utf-8", { fatal: true });
-  let sjis: TextDecoder | null = null;
-  try {
-    sjis = new TextDecoder("shift_jis");
-  } catch {
-    sjis = null;
-  }
 
   const out: TagForceString[] = [];
+  const seen = new Set<string>();
   let start = -1;
 
   const flush = (end: number) => {
     if (start < 0) return;
     const len = end - start;
-    if (len >= MIN_LEN) {
+    if (len >= MIN_LEN && len <= 512) {
       const slice = data.subarray(start, end);
       let text: string | null = null;
       try {
         text = utf8.decode(slice);
       } catch {
-        text = sjis ? sjis.decode(slice) : null;
+        text = null;
       }
       if (text && looksLikeText(text)) {
-        out.push({ offset: start, maxBytes: len, text });
+        const norm = text.trim();
+        if (!seen.has(norm + ":" + len)) {
+          seen.add(norm + ":" + len);
+          out.push({ offset: start, maxBytes: len, text });
+        }
       }
     }
     start = -1;
@@ -66,8 +109,8 @@ export function parseTagForceBinary(buffer: ArrayBuffer): TagForceString[] {
 
   for (let i = 0; i < data.length; i++) {
     const b = data[i];
-    // ASCII printable or high bytes (UTF-8 / Shift-JIS lead bytes)
-    if (isPrintableAscii(b) || b >= 0x80) {
+    // English-only extraction: printable ASCII runs
+    if (isPrintableAscii(b)) {
       if (start < 0) start = i;
     } else {
       flush(i);
